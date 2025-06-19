@@ -33,6 +33,11 @@ A modern digital signage platform for managing screens, content, and playlists.
 
 ## Environment Variables
 
-```env
+\`\`\`env
 DATABASE_URL=your_neon_database_url
 JWT_SECRET=your_jwt_secret
+\`\`\`
+
+## License
+
+MIT License
