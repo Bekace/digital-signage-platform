@@ -12,82 +12,115 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Token and password are required" }, { status: 400 })
     }
 
-    console.log("🔍 Searching for token:", token.substring(0, 10) + "...")
-
-    // First, let's see what users exist and their reset token status
-    try {
-      const allUsers = await sql`SELECT id, email, reset_token, reset_token_expires FROM users LIMIT 5`
-      console.log("📋 Sample users in database:", allUsers.map(u => ({
-        id: u.id,
-        email: u.email,
-        hasResetToken: !!u.reset_token,
-        tokenExpires: u.reset_token_expires
-      })))
-    } catch (debugError) {
-      console.log("⚠️ Debug query failed:", debugError.message)
+    if (password.length < 8) {
+      return NextResponse.json({ error: "Password must be at least 8 characters long" }, { status: 400 })
     }
 
-    // Check if the specific token exists (without time check first)
+    console.log("🔍 Looking for reset token:", token.substring(0, 10) + "...")
+
+    // Step 1: Make sure columns exist
     try {
-      const tokenCheck = await sql`
-        SELECT id, email, reset_token, reset_token_expires
+      await sql`
+        ALTER TABLE users 
+        ADD COLUMN IF NOT EXISTS reset_token VARCHAR(255),
+        ADD COLUMN IF NOT EXISTS reset_token_expires TIMESTAMP
+      `
+      console.log("✅ Columns ensured")
+    } catch (alterError) {
+      console.log("⚠️ Column alter:", alterError.message)
+    }
+
+    // Step 2: Find user with this token (simple query first)
+    let user
+    try {
+      const users = await sql`
+        SELECT id, email, reset_token, reset_token_expires::text as expires_text
         FROM users 
         WHERE reset_token = ${token}
       `
-      console.log("🎯 Users with this exact token:", tokenCheck.length)
-      
-      if (tokenCheck.length > 0) {
-        const user = tokenCheck[0]
-        console.log("📅 Token expires at:", user.reset_token_expires)
-        console.log("🕐 Current time:", new Date().toISOString())
-        
-        // Check if token is expired
-        const isExpired = new Date(user.reset_token_expires) < new Date()
-        console.log("⏰ Token expired?", isExpired)
-        
-        if (isExpired) {
-          return NextResponse.json({ error: "Reset token has expired" }, { status: 400 })
-        }
-        
-        // Token is valid, update password
-        console.log("✅ Updating password for user:", user.id)
-        
-        await sql`
-          UPDATE users 
-          SET password = ${password},
-              reset_token = NULL,
-              reset_token_expires = NULL
-          WHERE id = ${user.id}
-        `
-        
-        console.log("✅ Password updated successfully")
-        return NextResponse.json({ message: "Password reset successfully" })
-        
-      } else {
-        return NextResponse.json({ error: "Reset token not found" }, { status: 400 })
+
+      console.log("📊 Users found with token:", users.length)
+
+      if (users.length === 0) {
+        return NextResponse.json({ error: "Invalid reset token" }, { status: 400 })
       }
-      
-    } catch (queryError) {
-      console.error("❌ Query error:", queryError)
-      return NextResponse.json({ 
-        error: "Database query failed", 
-        details: queryError.message 
-      }, { status: 500 })
+
+      user = users[0]
+      console.log("👤 Found user:", user.id, "expires:", user.expires_text)
+    } catch (findError) {
+      console.error("❌ Find user error:", findError.message)
+      return NextResponse.json(
+        {
+          error: "Database find error",
+          details: findError.message,
+        },
+        { status: 500 },
+      )
     }
 
+    // Step 3: Check if token is expired
+    try {
+      const expiresAt = new Date(user.expires_text)
+      const now = new Date()
+
+      console.log("⏰ Token expires:", expiresAt.toISOString())
+      console.log("⏰ Current time:", now.toISOString())
+
+      if (expiresAt < now) {
+        return NextResponse.json({ error: "Reset token has expired" }, { status: 400 })
+      }
+
+      console.log("✅ Token is still valid")
+    } catch (timeError) {
+      console.error("❌ Time check error:", timeError.message)
+      return NextResponse.json(
+        {
+          error: "Time validation error",
+          details: timeError.message,
+        },
+        { status: 500 },
+      )
+    }
+
+    // Step 4: Update password
+    try {
+      await sql`
+        UPDATE users 
+        SET password = ${password},
+            reset_token = NULL,
+            reset_token_expires = NULL
+        WHERE id = ${user.id}
+      `
+
+      console.log("✅ Password updated for user:", user.id)
+
+      return NextResponse.json({ message: "Password reset successfully" })
+    } catch (updateError) {
+      console.error("❌ Update error:", updateError.message)
+      return NextResponse.json(
+        {
+          error: "Password update failed",
+          details: updateError.message,
+        },
+        { status: 500 },
+      )
+    }
   } catch (error) {
     console.error("❌ Unexpected error:", error)
-    return NextResponse.json({
-      error: "Internal server error",
-      details: error.message,
-    }, { status: 500 })
+    return NextResponse.json(
+      {
+        error: "Internal server error",
+        details: error.message,
+      },
+      { status: 500 },
+    )
   }
 }
 
 export async function GET() {
   return NextResponse.json({
     message: "Reset password endpoint is working",
-    method: "POST required", 
+    method: "POST required",
     status: "OK",
   })
 }
