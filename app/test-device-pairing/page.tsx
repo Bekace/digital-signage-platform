@@ -510,7 +510,8 @@ function GenerateCodeSection({ onTestResult }) {
 
     try {
       const code = Math.floor(100000 + Math.random() * 900000).toString()
-      const expiresAt = new Date(Date.now() + 30 * 1000).toISOString()
+      const now = Date.now()
+      const expiresAt = new Date(now + 30 * 1000).toISOString()
 
       setCode(code)
       setExpiresAt(expiresAt)
@@ -524,6 +525,8 @@ function GenerateCodeSection({ onTestResult }) {
       console.log("Short code generated:", {
         code,
         expiresAt,
+        currentTime: new Date(currentTime).toISOString(),
+        expirationTime: new Date(expirationTime).toISOString(),
         initialRemaining,
         secondsRemaining: initialRemaining,
       })
