@@ -15,11 +15,11 @@ import { useToast } from "@/hooks/use-toast"
 interface UserProfile {
   id: string
   email: string
-  first_name: string
-  last_name: string
+  firstName: string
+  lastName: string
   company?: string
   plan: string
-  created_at: string
+  createdAt: string
 }
 
 export default function SettingsPage() {
@@ -42,7 +42,7 @@ export default function SettingsPage() {
       const response = await fetch("/api/user/profile")
       const data = await response.json()
 
-      if (data.success) {
+      if (data.success && data.user) {
         setUser(data.user)
       } else {
         toast({
@@ -140,16 +140,16 @@ export default function SettingsPage() {
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label htmlFor="firstName">First Name</Label>
-                    <Input id="firstName" defaultValue={user.first_name} />
+                    <Input id="firstName" defaultValue={user.firstName || ""} />
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="lastName">Last Name</Label>
-                    <Input id="lastName" defaultValue={user.last_name} />
+                    <Input id="lastName" defaultValue={user.lastName || ""} />
                   </div>
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="email">Email</Label>
-                  <Input id="email" type="email" defaultValue={user.email} />
+                  <Input id="email" type="email" defaultValue={user.email || ""} />
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="company">Company</Label>
@@ -157,7 +157,7 @@ export default function SettingsPage() {
                 </div>
                 <div className="space-y-2">
                   <Label>Account Created</Label>
-                  <Input value={formatDate(user.created_at)} disabled />
+                  <Input value={formatDate(user.createdAt)} disabled />
                 </div>
                 <div className="space-y-2">
                   <Label>User ID</Label>
@@ -198,7 +198,7 @@ export default function SettingsPage() {
                     <div className="flex justify-between">
                       <span>Account Holder</span>
                       <span>
-                        {user.first_name} {user.last_name}
+                        {user.firstName} {user.lastName}
                       </span>
                     </div>
                     <div className="flex justify-between">
@@ -211,7 +211,7 @@ export default function SettingsPage() {
                     </div>
                     <div className="flex justify-between">
                       <span>Member Since</span>
-                      <span>{formatDate(user.created_at)}</span>
+                      <span>{formatDate(user.createdAt)}</span>
                     </div>
                   </div>
                 </div>

@@ -25,11 +25,11 @@ interface DashboardLayoutProps {
 interface UserProfile {
   id: string
   email: string
-  first_name: string
-  last_name: string
+  firstName: string
+  lastName: string
   company?: string
   plan: string
-  created_at: string
+  createdAt: string
 }
 
 export function DashboardLayout({ children }: DashboardLayoutProps) {
@@ -39,6 +39,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [user, setUser] = useState<UserProfile | null>(null)
   const [isLoggingOut, setIsLoggingOut] = useState(false)
+  const [isLoading, setIsLoading] = useState(true)
 
   // Fetch user profile on mount
   useEffect(() => {
@@ -47,18 +48,22 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
 
   const fetchUserProfile = async () => {
     try {
+      setIsLoading(true)
       const response = await fetch("/api/user/profile")
       const data = await response.json()
 
-      if (data.success) {
+      if (data.success && data.user) {
         setUser(data.user)
       } else {
+        console.error("Authentication failed:", data.message)
         // If not authenticated, redirect to login
         router.push("/login")
       }
     } catch (error) {
       console.error("Failed to fetch user profile:", error)
       router.push("/login")
+    } finally {
+      setIsLoading(false)
     }
   }
 
@@ -92,8 +97,32 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
     }
   }
 
-  const userDisplayName = user ? `${user.first_name} ${user.last_name}` : "Loading..."
-  const userInitials = user ? `${user.first_name[0]}${user.last_name[0]}`.toUpperCase() : "??"
+  // Safe getters for user data
+  const getUserDisplayName = () => {
+    if (!user || !user.firstName || !user.lastName) return "Loading..."
+    return `${user.firstName} ${user.lastName}`
+  }
+
+  const getUserInitials = () => {
+    if (!user || !user.firstName || !user.lastName) return "??"
+    return `${user.firstName.charAt(0)}${user.lastName.charAt(0)}`.toUpperCase()
+  }
+
+  const getUserEmail = () => {
+    return user?.email || "Loading..."
+  }
+
+  // Show loading state while fetching user data
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
+          <p className="text-gray-600">Loading...</p>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -130,11 +159,11 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
             <div className="border-t p-4">
               <div className="flex items-center mb-4">
                 <div className="w-8 h-8 bg-primary rounded-full flex items-center justify-center">
-                  <span className="text-xs font-medium text-primary-foreground">{userInitials}</span>
+                  <span className="text-xs font-medium text-primary-foreground">{getUserInitials()}</span>
                 </div>
                 <div className="ml-3 min-w-0 flex-1">
-                  <p className="text-sm font-medium truncate">{userDisplayName}</p>
-                  <p className="text-xs text-gray-500 truncate">{user?.email}</p>
+                  <p className="text-sm font-medium truncate">{getUserDisplayName()}</p>
+                  <p className="text-xs text-gray-500 truncate">{getUserEmail()}</p>
                 </div>
               </div>
               <Button variant="ghost" className="w-full justify-start" onClick={handleLogout} disabled={isLoggingOut}>
@@ -177,11 +206,11 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
           <div className="border-t p-4">
             <div className="flex items-center mb-4">
               <div className="w-8 h-8 bg-primary rounded-full flex items-center justify-center">
-                <span className="text-xs font-medium text-primary-foreground">{userInitials}</span>
+                <span className="text-xs font-medium text-primary-foreground">{getUserInitials()}</span>
               </div>
               <div className="ml-3 min-w-0 flex-1">
-                <p className="text-sm font-medium truncate">{userDisplayName}</p>
-                <p className="text-xs text-gray-500 truncate">{user?.email}</p>
+                <p className="text-sm font-medium truncate">{getUserDisplayName()}</p>
+                <p className="text-xs text-gray-500 truncate">{getUserEmail()}</p>
               </div>
             </div>
             <Button variant="ghost" className="w-full justify-start" onClick={handleLogout} disabled={isLoggingOut}>
@@ -205,9 +234,9 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
             <div className="flex items-center gap-x-4 lg:gap-x-6">
               <div className="hidden lg:flex lg:items-center lg:gap-x-2">
                 <div className="w-8 h-8 bg-primary rounded-full flex items-center justify-center">
-                  <span className="text-xs font-medium text-primary-foreground">{userInitials}</span>
+                  <span className="text-xs font-medium text-primary-foreground">{getUserInitials()}</span>
                 </div>
-                <span className="text-sm font-medium">{userDisplayName}</span>
+                <span className="text-sm font-medium">{getUserDisplayName()}</span>
               </div>
             </div>
           </div>
