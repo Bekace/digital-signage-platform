@@ -30,8 +30,7 @@ export async function POST(request: NextRequest) {
 
     // Check if code exists and is valid
     const codeResult = await sql`
-      SELECT user_id, screen_name, device_type, location
-      FROM device_codes 
+      SELECT user_id FROM device_codes 
       WHERE code = ${deviceCode} 
       AND expires_at > NOW() 
       AND used = FALSE
@@ -47,7 +46,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const codeData = codeResult[0]
+    const userId = codeResult[0].user_id
 
     // Mark code as used
     await sql`UPDATE device_codes SET used = TRUE WHERE code = ${deviceCode}`
@@ -55,13 +54,12 @@ export async function POST(request: NextRequest) {
     // Generate device credentials
     const deviceId = "device_" + Math.random().toString(36).substr(2, 9)
     const apiKey = "api_" + Math.random().toString(36).substr(2, 16)
-    const screenName =
-      codeData.screen_name || `${deviceType.charAt(0).toUpperCase() + deviceType.slice(1)} Screen ${deviceId.slice(-4)}`
+    const screenName = `${deviceType.charAt(0).toUpperCase() + deviceType.slice(1)} Screen ${deviceId.slice(-4)}`
 
     // Insert device into database
     await sql`
-      INSERT INTO devices (device_id, user_id, screen_name, device_type, platform, api_key, status, location) 
-      VALUES (${deviceId}, ${codeData.user_id}, ${screenName}, ${codeData.device_type || deviceType}, ${platform}, ${apiKey}, 'online', ${codeData.location})
+      INSERT INTO devices (device_id, user_id, screen_name, device_type, platform, api_key, status) 
+      VALUES (${deviceId}, ${userId}, ${screenName}, ${deviceType}, ${platform}, ${apiKey}, 'online')
     `
 
     return NextResponse.json({
