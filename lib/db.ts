@@ -15,14 +15,12 @@ export function getDb() {
 export async function query(text: string, params: any[] = []) {
   const sql = getDb()
 
-  // Convert parameterized query to Neon format
-  let processedQuery = text
-  if (params.length > 0) {
-    params.forEach((param, index) => {
-      processedQuery = processedQuery.replace(`$${index + 1}`, `'${param}'`)
-    })
+  // For Neon, we use template literals instead of parameterized queries
+  try {
+    const result = await sql(text, params)
+    return { rows: result }
+  } catch (error) {
+    console.error("Database query error:", error)
+    throw error
   }
-
-  const result = await sql(processedQuery)
-  return { rows: result }
 }
