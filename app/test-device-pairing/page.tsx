@@ -413,7 +413,7 @@ export default function TestDevicePairingPage() {
 
 function GenerateCodeSection({ onTestResult }) {
   const [code, setCode] = useState("")
-  const [expiresAt, setExpiresAt] = useState<Date | null>(null)
+  const [expiresAt, setExpiresAt] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
 
@@ -423,7 +423,8 @@ function GenerateCodeSection({ onTestResult }) {
   useEffect(() => {
     const interval = setInterval(() => {
       if (expiresAt) {
-        const remaining = Math.max(0, Math.floor((expiresAt.getTime() - Date.now()) / 1000))
+        const expirationTime = new Date(expiresAt).getTime()
+        const remaining = Math.max(0, Math.floor((expirationTime - Date.now()) / 1000))
         setTimeRemaining(remaining)
 
         if (remaining === 0 && code) {
@@ -464,7 +465,7 @@ function GenerateCodeSection({ onTestResult }) {
 
       if (data.success) {
         setCode(data.code)
-        setExpiresAt(new Date(data.expiresAt))
+        setExpiresAt(data.expiresAt) // Already a string from API
         onTestResult("Code Generation", true, "6-digit code generated successfully", {
           code: data.code,
           expiresAt: data.expiresAt,
@@ -493,7 +494,7 @@ function GenerateCodeSection({ onTestResult }) {
       const expiresAt = new Date(Date.now() + 30 * 1000) // 30 seconds
 
       setCode(code)
-      setExpiresAt(expiresAt)
+      setExpiresAt(expiresAt.toISOString()) // Convert to string
 
       onTestResult("Short Code Generation", true, "Generated code with 30-second expiration for testing", {
         code,
