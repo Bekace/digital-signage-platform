@@ -3,6 +3,7 @@ import { getDb } from "@/lib/db"
 
 export async function POST(request: NextRequest) {
   try {
+    const { screenName, deviceType, location } = await request.json()
     const sql = getDb()
 
     // For demo, we'll use a simple user ID
@@ -14,10 +15,10 @@ export async function POST(request: NextRequest) {
     // Code expires in 10 minutes
     const expiresAt = new Date(Date.now() + 10 * 60 * 1000)
 
-    // Store code in database
+    // Store code in database with screen info
     await sql`
-      INSERT INTO device_codes (code, user_id, expires_at) 
-      VALUES (${code}, ${userId}, ${expiresAt.toISOString()})
+      INSERT INTO device_codes (code, user_id, expires_at, screen_name, device_type, location) 
+      VALUES (${code}, ${userId}, ${expiresAt.toISOString()}, ${screenName}, ${deviceType}, ${location || null})
     `
 
     return NextResponse.json({

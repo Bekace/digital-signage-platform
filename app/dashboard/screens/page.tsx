@@ -35,6 +35,7 @@ export default function ScreensPage() {
 
       if (data.success) {
         setDevices(data.devices)
+        setError("")
       } else {
         setError(data.message || "Failed to fetch devices")
       }
@@ -51,6 +52,11 @@ export default function ScreensPage() {
 
   const handleRefresh = () => {
     setLoading(true)
+    fetchDevices()
+  }
+
+  const handleScreenAdded = () => {
+    // Refresh the devices list when a new screen is added
     fetchDevices()
   }
 
@@ -221,7 +227,7 @@ export default function ScreensPage() {
           </div>
         )}
 
-        <AddScreenDialog open={showAddDialog} onOpenChange={setShowAddDialog} />
+        <AddScreenDialog open={showAddDialog} onOpenChange={setShowAddDialog} onScreenAdded={handleScreenAdded} />
       </div>
     </DashboardLayout>
   )
