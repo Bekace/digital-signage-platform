@@ -1,5 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { getDb } from "@/lib/db"
+import bcrypt from "bcryptjs"
 
 export async function POST(request: NextRequest) {
   try {
@@ -36,8 +37,8 @@ export async function POST(request: NextRequest) {
 
     const user = result[0]
 
-    // For demo purposes, accept the demo password
-    const isValidPassword = password === "password123"
+    // Verify password
+    const isValidPassword = await bcrypt.compare(password, user.password_hash)
 
     if (!isValidPassword) {
       return NextResponse.json(
@@ -49,8 +50,8 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Generate a simple token (in production, use JWT)
-    const token = `token_${user.id}_${Date.now()}`
+    // Generate session token
+    const token = `token_${user.id}_${Date.now()}_${Math.random().toString(36).substring(2)}`
 
     return NextResponse.json({
       success: true,

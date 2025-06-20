@@ -5,7 +5,7 @@ import type React from "react"
 import { useState } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { Monitor } from "lucide-react"
+import { Monitor, Eye, EyeOff, CheckCircle, XCircle } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -26,15 +26,30 @@ export default function SignUpPage() {
   })
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
+  const [showPassword, setShowPassword] = useState(false)
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false)
   const router = useRouter()
+
+  // Password validation
+  const passwordValidation = {
+    length: formData.password.length >= 6,
+    match: formData.password === formData.confirmPassword && formData.confirmPassword.length > 0,
+  }
+
+  const isFormValid =
+    formData.firstName.trim() &&
+    formData.lastName.trim() &&
+    formData.email.trim() &&
+    passwordValidation.length &&
+    passwordValidation.match
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoading(true)
     setError("")
 
-    if (formData.password !== formData.confirmPassword) {
-      setError("Passwords do not match")
+    if (!isFormValid) {
+      setError("Please fill in all required fields correctly")
       setLoading(false)
       return
     }
@@ -94,6 +109,7 @@ export default function SignUpPage() {
           <CardContent>
             {error && (
               <Alert className="mb-4" variant="destructive">
+                <XCircle className="h-4 w-4" />
                 <AlertDescription>{error}</AlertDescription>
               </Alert>
             )}
@@ -101,7 +117,7 @@ export default function SignUpPage() {
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor="firstName">First name</Label>
+                  <Label htmlFor="firstName">First name *</Label>
                   <Input
                     id="firstName"
                     value={formData.firstName}
@@ -111,7 +127,7 @@ export default function SignUpPage() {
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="lastName">Last name</Label>
+                  <Label htmlFor="lastName">Last name *</Label>
                   <Input
                     id="lastName"
                     value={formData.lastName}
@@ -121,8 +137,9 @@ export default function SignUpPage() {
                   />
                 </div>
               </div>
+
               <div className="space-y-2">
-                <Label htmlFor="email">Email</Label>
+                <Label htmlFor="email">Email *</Label>
                 <Input
                   id="email"
                   type="email"
@@ -132,6 +149,7 @@ export default function SignUpPage() {
                   required
                 />
               </div>
+
               <div className="space-y-2">
                 <Label htmlFor="company">Company name</Label>
                 <Input
@@ -141,25 +159,71 @@ export default function SignUpPage() {
                   placeholder="Acme Inc."
                 />
               </div>
+
               <div className="space-y-2">
-                <Label htmlFor="password">Password</Label>
-                <Input
-                  id="password"
-                  type="password"
-                  value={formData.password}
-                  onChange={(e) => setFormData((prev) => ({ ...prev, password: e.target.value }))}
-                  required
-                />
+                <Label htmlFor="password">Password *</Label>
+                <div className="relative">
+                  <Input
+                    id="password"
+                    type={showPassword ? "text" : "password"}
+                    value={formData.password}
+                    onChange={(e) => setFormData((prev) => ({ ...prev, password: e.target.value }))}
+                    required
+                  />
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
+                    onClick={() => setShowPassword(!showPassword)}
+                  >
+                    {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </Button>
+                </div>
+                <div className="flex items-center space-x-2 text-sm">
+                  {passwordValidation.length ? (
+                    <CheckCircle className="h-4 w-4 text-green-500" />
+                  ) : (
+                    <XCircle className="h-4 w-4 text-gray-400" />
+                  )}
+                  <span className={passwordValidation.length ? "text-green-600" : "text-gray-500"}>
+                    At least 6 characters
+                  </span>
+                </div>
               </div>
+
               <div className="space-y-2">
-                <Label htmlFor="confirmPassword">Confirm password</Label>
-                <Input
-                  id="confirmPassword"
-                  type="password"
-                  value={formData.confirmPassword}
-                  onChange={(e) => setFormData((prev) => ({ ...prev, confirmPassword: e.target.value }))}
-                  required
-                />
+                <Label htmlFor="confirmPassword">Confirm password *</Label>
+                <div className="relative">
+                  <Input
+                    id="confirmPassword"
+                    type={showConfirmPassword ? "text" : "password"}
+                    value={formData.confirmPassword}
+                    onChange={(e) => setFormData((prev) => ({ ...prev, confirmPassword: e.target.value }))}
+                    required
+                  />
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
+                    onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                  >
+                    {showConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </Button>
+                </div>
+                {formData.confirmPassword && (
+                  <div className="flex items-center space-x-2 text-sm">
+                    {passwordValidation.match ? (
+                      <CheckCircle className="h-4 w-4 text-green-500" />
+                    ) : (
+                      <XCircle className="h-4 w-4 text-red-500" />
+                    )}
+                    <span className={passwordValidation.match ? "text-green-600" : "text-red-600"}>
+                      Passwords match
+                    </span>
+                  </div>
+                )}
               </div>
 
               <div className="space-y-3">
@@ -185,7 +249,7 @@ export default function SignUpPage() {
                 </RadioGroup>
               </div>
 
-              <Button type="submit" className="w-full" size="lg" disabled={loading}>
+              <Button type="submit" className="w-full" size="lg" disabled={loading || !isFormValid}>
                 {loading ? "Creating Account..." : "Create Account & Start Free Trial"}
               </Button>
             </form>
