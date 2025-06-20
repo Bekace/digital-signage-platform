@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { User, CreditCard, Bell, Save } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
@@ -10,14 +10,105 @@ import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { DashboardLayout } from "@/components/dashboard-layout"
+import { useToast } from "@/hooks/use-toast"
+
+interface UserProfile {
+  id: string
+  email: string
+  first_name: string
+  last_name: string
+  company?: string
+  plan: string
+  created_at: string
+}
 
 export default function SettingsPage() {
+  const { toast } = useToast()
+  const [user, setUser] = useState<UserProfile | null>(null)
+  const [loading, setLoading] = useState(true)
   const [notifications, setNotifications] = useState({
     screenOffline: true,
     playlistUpdates: true,
     billingAlerts: true,
     systemMaintenance: false,
   })
+
+  useEffect(() => {
+    fetchUserProfile()
+  }, [])
+
+  const fetchUserProfile = async () => {
+    try {
+      const response = await fetch("/api/user/profile")
+      const data = await response.json()
+
+      if (data.success) {
+        setUser(data.user)
+      } else {
+        toast({
+          title: "Error",
+          description: "Failed to load user profile",
+          variant: "destructive",
+        })
+      }
+    } catch (error) {
+      console.error("Failed to fetch user profile:", error)
+      toast({
+        title: "Error",
+        description: "Failed to load user profile",
+        variant: "destructive",
+      })
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const formatDate = (dateString: string) => {
+    return new Date(dateString).toLocaleDateString("en-US", {
+      year: "numeric",
+      month: "long",
+      day: "numeric",
+    })
+  }
+
+  const getPlanDisplayName = (plan: string) => {
+    switch (plan) {
+      case "monthly":
+        return "Monthly Plan"
+      case "annual":
+        return "Annual Plan"
+      case "free":
+        return "Free Plan"
+      default:
+        return "Unknown Plan"
+    }
+  }
+
+  if (loading) {
+    return (
+      <DashboardLayout>
+        <div className="space-y-6">
+          <div>
+            <h1 className="text-3xl font-bold">Settings</h1>
+            <p className="text-gray-600">Loading your account settings...</p>
+          </div>
+        </div>
+      </DashboardLayout>
+    )
+  }
+
+  if (!user) {
+    return (
+      <DashboardLayout>
+        <div className="space-y-6">
+          <div>
+            <h1 className="text-3xl font-bold">Settings</h1>
+            <p className="text-gray-600">Failed to load user data</p>
+          </div>
+        </div>
+      </DashboardLayout>
+    )
+  }
 
   return (
     <DashboardLayout>
@@ -49,24 +140,28 @@ export default function SettingsPage() {
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label htmlFor="firstName">First Name</Label>
-                    <Input id="firstName" defaultValue="John" />
+                    <Input id="firstName" defaultValue={user.first_name} />
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="lastName">Last Name</Label>
-                    <Input id="lastName" defaultValue="Doe" />
+                    <Input id="lastName" defaultValue={user.last_name} />
                   </div>
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="email">Email</Label>
-                  <Input id="email" type="email" defaultValue="john@example.com" />
+                  <Input id="email" type="email" defaultValue={user.email} />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="phone">Phone Number</Label>
-                  <Input id="phone" defaultValue="+1 (555) 123-4567" />
+                  <Label htmlFor="company">Company</Label>
+                  <Input id="company" defaultValue={user.company || ""} placeholder="Enter your company name" />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="timezone">Timezone</Label>
-                  <Input id="timezone" defaultValue="UTC-5 (Eastern Time)" />
+                  <Label>Account Created</Label>
+                  <Input value={formatDate(user.created_at)} disabled />
+                </div>
+                <div className="space-y-2">
+                  <Label>User ID</Label>
+                  <Input value={user.id} disabled className="font-mono text-xs" />
                 </div>
                 <Button>
                   <Save className="h-4 w-4 mr-2" />
@@ -89,11 +184,35 @@ export default function SettingsPage() {
                 <div className="flex justify-between items-center p-4 border rounded-lg">
                   <div>
                     <h3 className="font-semibold">Current Plan</h3>
-                    <p className="text-sm text-gray-600">Monthly subscription</p>
+                    <p className="text-sm text-gray-600">{getPlanDisplayName(user.plan)}</p>
                   </div>
                   <div className="text-right">
                     <div className="text-2xl font-bold">$180/month</div>
                     <div className="text-sm text-gray-600">12 screens × $15</div>
+                  </div>
+                </div>
+
+                <div className="space-y-4">
+                  <h3 className="font-semibold">Account Information</h3>
+                  <div className="space-y-2">
+                    <div className="flex justify-between">
+                      <span>Account Holder</span>
+                      <span>
+                        {user.first_name} {user.last_name}
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>Email</span>
+                      <span>{user.email}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>Plan Type</span>
+                      <span>{getPlanDisplayName(user.plan)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>Member Since</span>
+                      <span>{formatDate(user.created_at)}</span>
+                    </div>
                   </div>
                 </div>
 
@@ -112,22 +231,6 @@ export default function SettingsPage() {
                       <span>Total Monthly Cost</span>
                       <span>$180</span>
                     </div>
-                  </div>
-                </div>
-
-                <div className="space-y-4">
-                  <h3 className="font-semibold">Payment Method</h3>
-                  <div className="flex items-center justify-between p-4 border rounded-lg">
-                    <div className="flex items-center space-x-3">
-                      <div className="w-8 h-5 bg-blue-600 rounded"></div>
-                      <div>
-                        <p className="font-medium">•••• •••• •••• 4242</p>
-                        <p className="text-sm text-gray-600">Expires 12/25</p>
-                      </div>
-                    </div>
-                    <Button variant="outline" size="sm">
-                      Update
-                    </Button>
                   </div>
                 </div>
 
@@ -234,15 +337,15 @@ export default function SettingsPage() {
               <CardContent className="space-y-4">
                 <div className="space-y-2">
                   <Label htmlFor="companyName">Company Name</Label>
-                  <Input id="companyName" defaultValue="Acme Corporation" />
+                  <Input id="companyName" defaultValue={user.company || ""} placeholder="Enter company name" />
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="companyAddress">Address</Label>
-                  <Input id="companyAddress" defaultValue="123 Business St, City, State 12345" />
+                  <Input id="companyAddress" placeholder="123 Business St, City, State 12345" />
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="companyPhone">Phone</Label>
-                  <Input id="companyPhone" defaultValue="+1 (555) 123-4567" />
+                  <Input id="companyPhone" placeholder="+1 (555) 123-4567" />
                 </div>
                 <Button>
                   <Save className="h-4 w-4 mr-2" />

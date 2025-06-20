@@ -1,14 +1,14 @@
 "use client"
 
 import type React from "react"
-
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import Link from "next/link"
-import { usePathname } from "next/navigation"
-import { Monitor, LayoutDashboard, ImageIcon, Play, Settings, Menu, LogOut, User } from "lucide-react"
+import { usePathname, useRouter } from "next/navigation"
+import { Monitor, LayoutDashboard, ImageIcon, Play, Settings, Menu, LogOut } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { Sheet, SheetContent } from "@/components/ui/sheet"
+import { useToast } from "@/hooks/use-toast"
 
 const navigation = [
   { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
@@ -22,9 +22,78 @@ interface DashboardLayoutProps {
   children: React.ReactNode
 }
 
+interface UserProfile {
+  id: string
+  email: string
+  first_name: string
+  last_name: string
+  company?: string
+  plan: string
+  created_at: string
+}
+
 export function DashboardLayout({ children }: DashboardLayoutProps) {
   const pathname = usePathname()
+  const router = useRouter()
+  const { toast } = useToast()
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [user, setUser] = useState<UserProfile | null>(null)
+  const [isLoggingOut, setIsLoggingOut] = useState(false)
+
+  // Fetch user profile on mount
+  useEffect(() => {
+    fetchUserProfile()
+  }, [])
+
+  const fetchUserProfile = async () => {
+    try {
+      const response = await fetch("/api/user/profile")
+      const data = await response.json()
+
+      if (data.success) {
+        setUser(data.user)
+      } else {
+        // If not authenticated, redirect to login
+        router.push("/login")
+      }
+    } catch (error) {
+      console.error("Failed to fetch user profile:", error)
+      router.push("/login")
+    }
+  }
+
+  const handleLogout = async () => {
+    setIsLoggingOut(true)
+    try {
+      const response = await fetch("/api/auth/logout", {
+        method: "POST",
+      })
+
+      const data = await response.json()
+
+      if (data.success) {
+        toast({
+          title: "Logged out successfully",
+          description: "You have been signed out of your account.",
+        })
+        router.push("/login")
+      } else {
+        throw new Error(data.message)
+      }
+    } catch (error) {
+      console.error("Logout error:", error)
+      toast({
+        title: "Logout failed",
+        description: "There was an error signing you out. Please try again.",
+        variant: "destructive",
+      })
+    } finally {
+      setIsLoggingOut(false)
+    }
+  }
+
+  const userDisplayName = user ? `${user.first_name} ${user.last_name}` : "Loading..."
+  const userInitials = user ? `${user.first_name[0]}${user.last_name[0]}`.toUpperCase() : "??"
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -59,9 +128,18 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
               })}
             </nav>
             <div className="border-t p-4">
-              <Button variant="ghost" className="w-full justify-start">
+              <div className="flex items-center mb-4">
+                <div className="w-8 h-8 bg-primary rounded-full flex items-center justify-center">
+                  <span className="text-xs font-medium text-primary-foreground">{userInitials}</span>
+                </div>
+                <div className="ml-3 min-w-0 flex-1">
+                  <p className="text-sm font-medium truncate">{userDisplayName}</p>
+                  <p className="text-xs text-gray-500 truncate">{user?.email}</p>
+                </div>
+              </div>
+              <Button variant="ghost" className="w-full justify-start" onClick={handleLogout} disabled={isLoggingOut}>
                 <LogOut className="h-4 w-4 mr-3" />
-                Sign Out
+                {isLoggingOut ? "Signing out..." : "Sign Out"}
               </Button>
             </div>
           </div>
@@ -99,16 +177,16 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
           <div className="border-t p-4">
             <div className="flex items-center mb-4">
               <div className="w-8 h-8 bg-primary rounded-full flex items-center justify-center">
-                <User className="h-4 w-4 text-primary-foreground" />
+                <span className="text-xs font-medium text-primary-foreground">{userInitials}</span>
               </div>
-              <div className="ml-3">
-                <p className="text-sm font-medium">Demo User</p>
-                <p className="text-xs text-gray-500">demo@signagecloud.com</p>
+              <div className="ml-3 min-w-0 flex-1">
+                <p className="text-sm font-medium truncate">{userDisplayName}</p>
+                <p className="text-xs text-gray-500 truncate">{user?.email}</p>
               </div>
             </div>
-            <Button variant="ghost" className="w-full justify-start">
+            <Button variant="ghost" className="w-full justify-start" onClick={handleLogout} disabled={isLoggingOut}>
               <LogOut className="h-4 w-4 mr-3" />
-              Sign Out
+              {isLoggingOut ? "Signing out..." : "Sign Out"}
             </Button>
           </div>
         </div>
@@ -125,9 +203,12 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
           <div className="flex flex-1 gap-x-4 self-stretch lg:gap-x-6">
             <div className="flex flex-1"></div>
             <div className="flex items-center gap-x-4 lg:gap-x-6">
-              <Button variant="ghost" size="sm">
-                <User className="h-5 w-5" />
-              </Button>
+              <div className="hidden lg:flex lg:items-center lg:gap-x-2">
+                <div className="w-8 h-8 bg-primary rounded-full flex items-center justify-center">
+                  <span className="text-xs font-medium text-primary-foreground">{userInitials}</span>
+                </div>
+                <span className="text-sm font-medium">{userDisplayName}</span>
+              </div>
             </div>
           </div>
         </div>
