@@ -7,63 +7,103 @@ export async function POST(request: NextRequest) {
   try {
     console.log("=== RESET PASSWORD START ===")
 
-    // Test database connection first
-    try {
-      const dbTest = await sql`SELECT 1 as test`
-      console.log("Database connection OK:", dbTest)
-    } catch (dbError) {
-      console.error("Database connection failed:", dbError)
-      return NextResponse.json({ error: "Database connection failed" }, { status: 500 })
-    }
-
     const body = await request.json()
-    console.log("Request body received:", Object.keys(body))
-
     const { token, password } = body
 
     if (!token || !password) {
-      console.log("Missing required fields")
       return NextResponse.json({ error: "Token and password are required" }, { status: 400 })
     }
 
     if (password.length < 8) {
-      console.log("Password too short")
       return NextResponse.json({ error: "Password must be at least 8 characters long" }, { status: 400 })
     }
 
     // Check if bcrypt is available
+    let bcrypt
     try {
-      const bcrypt = require("bcryptjs")
+      bcrypt = require("bcryptjs")
       console.log("bcrypt loaded successfully")
-
-      // Hash the password
-      const hashedPassword = await bcrypt.hash(password, 12)
-      console.log("Password hashed successfully")
-
-      // For now, let's just return success without database operations
-      return NextResponse.json({
-        message: "Password reset test successful",
-        hashedLength: hashedPassword.length,
-      })
     } catch (bcryptError) {
-      console.error("bcrypt error:", bcryptError)
-      return NextResponse.json({ error: "Password hashing failed" }, { status: 500 })
+      console.error("bcrypt import failed:", bcryptError)
+      return NextResponse.json({ error: "Password hashing unavailable" }, { status: 500 })
     }
-  } catch (error) {
-    console.error("=== RESET PASSWORD ERROR ===")
-    console.error("Error type:", typeof error)
-    console.error("Error message:", error?.message)
-    console.error("Error stack:", error?.stack)
-    console.error("Error name:", error?.name)
-    console.error("Full error:", error)
 
+    // Check if user table has reset token columns
+    try {
+      const columns = await sql`
+        SELECT column_name 
+        FROM information_schema.columns 
+        WHERE table_name = 'users' 
+        AND column_name IN ('reset_token', 'reset_token_expires')
+      `
+      console.log("Reset token columns found:", columns.length)
+
+      if (columns.length < 2) {
+        console.log("Missing reset token columns, adding them...")
+        await sql`
+          ALTER TABLE users 
+          ADD COLUMN IF NOT EXISTS reset_token VARCHAR(255),
+          ADD COLUMN IF NOT EXISTS reset_token_expires TIMESTAMP
+        `
+        console.log("Reset token columns added")
+      }
+    } catch (columnError) {
+      console.error("Column check/add error:", columnError)
+      return NextResponse.json({ error: "Database schema error" }, { status: 500 })
+    }
+
+    // Find user with valid reset token
+    console.log("Looking for user with reset token...")
+    const users = await sql`
+      SELECT id, email, reset_token, reset_token_expires
+      FROM users 
+      WHERE reset_token = ${token} 
+      AND reset_token_expires > CURRENT_TIMESTAMP
+    `
+
+    console.log("Users found with valid token:", users.length)
+
+    if (users.length === 0) {
+      return NextResponse.json({ error: "Invalid or expired reset token" }, { status: 400 })
+    }
+
+    const user = users[0]
+    console.log("Valid token found for user:", user.id)
+
+    // Hash new password
+    console.log("Hashing new password...")
+    const hashedPassword = await bcrypt.hash(password, 12)
+    console.log("Password hashed successfully")
+
+    // Update user password and clear reset token
+    console.log("Updating user password...")
+    await sql`
+      UPDATE users 
+      SET password = ${hashedPassword},
+          reset_token = NULL,
+          reset_token_expires = NULL
+      WHERE id = ${user.id}
+    `
+    console.log("Password updated successfully")
+
+    return NextResponse.json({ message: "Password reset successfully" })
+  } catch (error) {
+    console.error("Reset password error:", error)
     return NextResponse.json(
       {
         error: "Internal server error",
-        details: error?.message || "Unknown error",
-        type: typeof error,
+        details: process.env.NODE_ENV === "development" ? error.message : undefined,
       },
       { status: 500 },
     )
   }
+}
+
+// Add GET method for testing
+export async function GET() {
+  return NextResponse.json({
+    message: "Reset password endpoint is working",
+    method: "POST required",
+    status: "OK",
+  })
 }
