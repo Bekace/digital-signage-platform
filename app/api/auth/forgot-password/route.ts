@@ -20,7 +20,11 @@ export async function POST(request: NextRequest) {
     if (users.length === 0) {
       console.log("❌ User not found")
       // Return success anyway for security (don't reveal if email exists)
-      return NextResponse.json({ message: "If an account exists, a reset link has been sent" })
+      return NextResponse.json({
+        message: "If an account exists, a reset link has been sent",
+        // For testing - show that no user was found
+        debug: "No user found with this email",
+      })
     }
 
     const user = users[0]
@@ -58,14 +62,12 @@ export async function POST(request: NextRequest) {
     const resetLink = `${process.env.NEXT_PUBLIC_APP_URL || "https://britelitedigital.com"}/reset-password?token=${resetToken}`
     console.log("🔗 Reset link:", resetLink)
 
-    // For now, just log the reset link (since we don't have email setup)
-    console.log("📧 EMAIL WOULD BE SENT TO:", email)
-    console.log("📧 RESET LINK:", resetLink)
-
+    // For now, return the reset link for testing
     return NextResponse.json({
-      message: "If an account exists, a reset link has been sent",
-      // For testing only - remove in production
-      resetLink: process.env.NODE_ENV === "development" ? resetLink : undefined,
+      message: "Reset link generated successfully!",
+      resetLink: resetLink,
+      instructions: "Click the reset link below to reset your password:",
+      expiresIn: "1 hour",
     })
   } catch (error) {
     console.error("❌ Forgot password error:", error)
