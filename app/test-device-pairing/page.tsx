@@ -515,9 +515,23 @@ function GenerateCodeSection({ onTestResult }) {
       setCode(code)
       setExpiresAt(expiresAt)
 
+      // Calculate initial time remaining for 30-second code
+      const expirationTime = new Date(expiresAt).getTime()
+      const currentTime = Date.now()
+      const initialRemaining = Math.max(0, Math.floor((expirationTime - currentTime) / 1000))
+      setTimeRemaining(initialRemaining)
+
+      console.log("Short code generated:", {
+        code,
+        expiresAt,
+        initialRemaining,
+        secondsRemaining: initialRemaining,
+      })
+
       onTestResult("Short Code Generation", true, "Generated code with 30-second expiration for testing", {
         code,
         expiresAt,
+        secondsRemaining: initialRemaining,
       })
     } catch (error) {
       const errorMsg = "Failed to generate short-lived code"
