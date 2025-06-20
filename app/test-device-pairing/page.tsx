@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -34,8 +34,8 @@ export default function TestDevicePairingPage() {
   const [deviceInfo, setDeviceInfo] = useState(null)
   const [testResults, setTestResults] = useState([])
 
-  // Add test result
-  const addTestResult = (test, success, message, details = null) => {
+  // Memoize the addTestResult function to prevent infinite loops
+  const addTestResult = useCallback((test, success, message, details = null) => {
     const result = {
       id: Date.now(),
       timestamp: new Date().toLocaleTimeString(),
@@ -45,7 +45,7 @@ export default function TestDevicePairingPage() {
       details,
     }
     setTestResults((prev) => [result, ...prev].slice(0, 10)) // Keep last 10 results
-  }
+  }, [])
 
   // Simulate device registration
   const handleDeviceRegistration = async () => {
@@ -413,40 +413,35 @@ export default function TestDevicePairingPage() {
 
 function GenerateCodeSection({ onTestResult }) {
   const [code, setCode] = useState("")
-  const [expiresAt, setExpiresAt] = useState<string | null>(null)
+  const [expiresAt, setExpiresAt] = useState("")
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
-
-  // Real-time countdown
   const [timeRemaining, setTimeRemaining] = useState(0)
 
-  useEffect(() => {
-    const interval = setInterval(() => {
-      if (expiresAt) {
-        const expirationTime = new Date(expiresAt).getTime()
-        const remaining = Math.max(0, Math.floor((expirationTime - Date.now()) / 1000))
-        setTimeRemaining(remaining)
+  // Memoize the expiration check to prevent infinite loops
+  const checkExpiration = useCallback(() => {
+    if (expiresAt && code) {
+      const expirationTime = new Date(expiresAt).getTime()
+      const remaining = Math.max(0, Math.floor((expirationTime - Date.now()) / 1000))
+      setTimeRemaining(remaining)
 
-        if (remaining === 0 && code) {
-          onTestResult("Code Expiration", true, "Code expired automatically after 10 minutes", {
-            expiredCode: code,
-          })
-        }
+      // Only call onTestResult when code actually expires (not on every update)
+      if (remaining === 0 && timeRemaining > 0) {
+        onTestResult("Code Expiration", true, "⏰ Code expired automatically after countdown!", {
+          expiredCode: code,
+          expiredAt: new Date().toISOString(),
+        })
       }
-    }, 1000)
-
-    return () => clearInterval(interval)
-  }, [expiresAt, code, onTestResult])
-
-  useEffect(() => {
-    if (timeRemaining === 0 && code && expiresAt) {
-      // Add a more dramatic expiration effect
-      onTestResult("Code Expiration", true, "⏰ Code expired automatically after countdown!", {
-        expiredCode: code,
-        expiredAt: new Date().toISOString(),
-      })
     }
-  }, [timeRemaining, code, expiresAt, onTestResult])
+  }, [expiresAt, code, onTestResult, timeRemaining])
+
+  // Timer effect with proper cleanup
+  useEffect(() => {
+    if (!expiresAt || !code) return
+
+    const interval = setInterval(checkExpiration, 1000)
+    return () => clearInterval(interval)
+  }, [expiresAt, code, checkExpiration])
 
   const generateCode = async () => {
     setLoading(true)
@@ -465,7 +460,7 @@ function GenerateCodeSection({ onTestResult }) {
 
       if (data.success) {
         setCode(data.code)
-        setExpiresAt(data.expiresAt) // Already a string from API
+        setExpiresAt(data.expiresAt)
         onTestResult("Code Generation", true, "6-digit code generated successfully", {
           code: data.code,
           expiresAt: data.expiresAt,
@@ -483,22 +478,20 @@ function GenerateCodeSection({ onTestResult }) {
     }
   }
 
-  // Generate short-lived code for testing expiration
-  const generateShortCode = async () => {
+  const generateShortCode = () => {
     setLoading(true)
     setError("")
 
     try {
-      // Simulate a code that expires in 30 seconds for testing
       const code = Math.floor(100000 + Math.random() * 900000).toString()
-      const expiresAt = new Date(Date.now() + 30 * 1000) // 30 seconds
+      const expiresAt = new Date(Date.now() + 30 * 1000).toISOString()
 
       setCode(code)
-      setExpiresAt(expiresAt.toISOString()) // Convert to string
+      setExpiresAt(expiresAt)
 
       onTestResult("Short Code Generation", true, "Generated code with 30-second expiration for testing", {
         code,
-        expiresAt: expiresAt.toISOString(),
+        expiresAt,
       })
     } catch (error) {
       const errorMsg = "Failed to generate short-lived code"
@@ -601,7 +594,7 @@ function GenerateCodeSection({ onTestResult }) {
             variant="outline"
             onClick={() => {
               setCode("")
-              setExpiresAt(null)
+              setExpiresAt("")
               setTimeRemaining(0)
             }}
             className="w-full"
@@ -654,7 +647,6 @@ function ErrorTestingSection({ onTestResult }) {
       name: "Expired Code",
       description: "Test registration with an expired code",
       test: async () => {
-        // Use a code that would definitely be expired
         const expiredCode = "999999"
         try {
           const response = await fetch("/api/devices/register", {
@@ -677,11 +669,7 @@ function ErrorTestingSection({ onTestResult }) {
       name: "Missing Fields",
       description: "Test registration with missing required fields",
       test: async () => {
-        const testCases = [
-          { deviceCode: "123456" }, // Missing deviceType and platform
-          { deviceType: "firestick" }, // Missing deviceCode and platform
-          { platform: "android-tv" }, // Missing deviceCode and deviceType
-        ]
+        const testCases = [{ deviceCode: "123456" }, { deviceType: "firestick" }, { platform: "android-tv" }]
 
         for (const testCase of testCases) {
           try {
@@ -702,7 +690,6 @@ function ErrorTestingSection({ onTestResult }) {
       name: "Duplicate Registration",
       description: "Test using the same code twice",
       test: async () => {
-        // This would need a valid code that was already used
         onTestResult("Duplicate Registration", true, "Test scenario: Would test code reuse prevention")
       },
     },
@@ -723,7 +710,6 @@ function ErrorTestingSection({ onTestResult }) {
     setLoading(true)
     for (const scenario of testScenarios) {
       await scenario.test()
-      // Small delay between tests
       await new Promise((resolve) => setTimeout(resolve, 500))
     }
     setLoading(false)
