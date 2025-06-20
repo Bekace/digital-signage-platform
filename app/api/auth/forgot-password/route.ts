@@ -1,8 +1,10 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { neon } from "@neondatabase/serverless"
+import { Resend } from "resend"
 import crypto from "crypto"
 
 const sql = neon(process.env.DATABASE_URL!)
+const resend = new Resend(process.env.RESEND_API_KEY)
 
 export async function POST(request: NextRequest) {
   try {
@@ -38,16 +40,43 @@ export async function POST(request: NextRequest) {
       VALUES (${user.id}, ${resetToken}, ${expiresAt})
     `
 
-    // In a real app, you would send an email here
-    // For demo purposes, we'll log the reset link
-    const resetUrl = `${process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"}/reset-password?token=${resetToken}`
+    const resetUrl = `${process.env.NEXT_PUBLIC_APP_URL}/reset-password?token=${resetToken}`
 
-    console.log("Password Reset Link:", resetUrl)
-    console.log("User:", user.email, user.first_name, user.last_name)
+    // Send email with Resend
+    try {
+      await resend.emails.send({
+        from: "Digital Signage <noreply@yourdomain.com>",
+        to: [email],
+        subject: "Reset Your Password",
+        html: `
+          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+            <h2>Reset Your Password</h2>
+            <p>Hi ${user.first_name},</p>
+            <p>You requested to reset your password. Click the button below to create a new password:</p>
+            <div style="text-align: center; margin: 30px 0;">
+              <a href="${resetUrl}" 
+                 style="background-color: #007bff; color: white; padding: 12px 24px; text-decoration: none; border-radius: 5px; display: inline-block;">
+                Reset Password
+              </a>
+            </div>
+            <p>Or copy and paste this link in your browser:</p>
+            <p style="word-break: break-all; color: #666;">${resetUrl}</p>
+            <p>This link will expire in 1 hour.</p>
+            <p>If you didn't request this, please ignore this email.</p>
+            <hr style="margin: 30px 0; border: none; border-top: 1px solid #eee;">
+            <p style="color: #666; font-size: 12px;">Digital Signage Platform</p>
+          </div>
+        `,
+      })
+
+      console.log("Password reset email sent to:", email)
+    } catch (emailError) {
+      console.error("Email sending failed:", emailError)
+      // Still return success to not reveal if email exists
+    }
 
     return NextResponse.json({
       message: "If an account with that email exists, we have sent a password reset link.",
-      resetUrl, // Remove this in production
     })
   } catch (error) {
     console.error("Forgot password error:", error)
