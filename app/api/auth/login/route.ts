@@ -1,6 +1,5 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { neon } from "@neondatabase/serverless"
-import crypto from "crypto"
 import jwt from "jsonwebtoken"
 
 const sql = neon(process.env.DATABASE_URL!)
@@ -21,7 +20,7 @@ export async function POST(request: NextRequest) {
 
     // Get user from database
     const result = await sql`
-      SELECT id, email, password, first_name, last_name, company, plan, created_at
+      SELECT id, email, password_hash, first_name, last_name, company, plan, created_at
       FROM users 
       WHERE email = ${email.toLowerCase()}
     `
@@ -38,20 +37,8 @@ export async function POST(request: NextRequest) {
 
     const user = result[0]
 
-    // Verify password - handle both old and new formats
-    let isValidPassword = false
-
-    if (user.password.includes(":")) {
-      // New format: salt:hash (from password reset)
-      const [salt, hash] = user.password.split(":")
-      const testHash = crypto.pbkdf2Sync(password, salt, 10000, 64, "sha512").toString("hex")
-      isValidPassword = hash === testHash
-    } else {
-      // Old format: plain text (for demo users)
-      isValidPassword = user.password === password
-    }
-
-    if (!isValidPassword) {
+    // Simple password check (for demo - in production you'd use bcrypt)
+    if (user.password_hash !== password) {
       return NextResponse.json(
         {
           success: false,

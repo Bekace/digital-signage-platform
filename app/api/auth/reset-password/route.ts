@@ -42,71 +42,20 @@ export async function POST(request: NextRequest) {
 
     console.log("✅ Token is valid, updating password...")
 
-    // Try the UPDATE step by step
-    try {
-      // First, let's see the current user data
-      const beforeUpdate = await sql`
-        SELECT id, email, password, reset_token 
-        FROM users 
-        WHERE id = ${user.id}
-      `
-      console.log("📋 Before update:", {
-        id: beforeUpdate[0]?.id,
-        email: beforeUpdate[0]?.email,
-        hasPassword: !!beforeUpdate[0]?.password,
-        hasResetToken: !!beforeUpdate[0]?.reset_token,
-      })
+    // Update password using the correct column name
+    await sql`
+      UPDATE users 
+      SET password_hash = ${password},
+          reset_token = NULL,
+          reset_token_expires = NULL
+      WHERE id = ${user.id}
+    `
 
-      // Try a simple update first - just the password
-      const updateResult = await sql`
-        UPDATE users 
-        SET password = ${password}
-        WHERE id = ${user.id}
-      `
-      console.log("✅ Password updated, affected rows:", updateResult.length)
+    console.log("✅ Password updated successfully")
 
-      // Now clear the reset token
-      await sql`
-        UPDATE users 
-        SET reset_token = NULL,
-            reset_token_expires = NULL
-        WHERE id = ${user.id}
-      `
-      console.log("✅ Reset token cleared")
-
-      // Verify the update worked
-      const afterUpdate = await sql`
-        SELECT id, email, password, reset_token 
-        FROM users 
-        WHERE id = ${user.id}
-      `
-      console.log("📋 After update:", {
-        id: afterUpdate[0]?.id,
-        email: afterUpdate[0]?.email,
-        passwordChanged: afterUpdate[0]?.password === password,
-        resetTokenCleared: !afterUpdate[0]?.reset_token,
-      })
-
-      return NextResponse.json({ message: "Password reset successfully" })
-    } catch (updateError) {
-      console.error("❌ Update error details:", {
-        message: updateError.message,
-        code: updateError.code,
-        detail: updateError.detail,
-        hint: updateError.hint,
-      })
-
-      return NextResponse.json(
-        {
-          error: "Password update failed",
-          details: updateError.message,
-          code: updateError.code,
-        },
-        { status: 500 },
-      )
-    }
+    return NextResponse.json({ message: "Password reset successfully" })
   } catch (error) {
-    console.error("❌ Unexpected error:", error)
+    console.error("❌ Reset password error:", error)
     return NextResponse.json(
       {
         error: "Internal server error",
