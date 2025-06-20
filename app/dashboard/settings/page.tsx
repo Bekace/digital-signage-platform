@@ -42,6 +42,13 @@ export default function SettingsPage() {
   })
   const [companySaving, setCompanySaving] = useState(false)
 
+  const [passwordData, setPasswordData] = useState({
+    currentPassword: "",
+    newPassword: "",
+    confirmPassword: "",
+  })
+  const [passwordSaving, setPasswordSaving] = useState(false)
+
   useEffect(() => {
     fetchUserProfile()
   }, [])
@@ -151,6 +158,90 @@ export default function SettingsPage() {
       })
     } finally {
       setCompanySaving(false)
+    }
+  }
+
+  const changePassword = async () => {
+    // Validation
+    if (!passwordData.currentPassword || !passwordData.newPassword || !passwordData.confirmPassword) {
+      toast({
+        title: "Error",
+        description: "All password fields are required",
+        variant: "destructive",
+      })
+      return
+    }
+
+    if (passwordData.newPassword.length < 8) {
+      toast({
+        title: "Error",
+        description: "New password must be at least 8 characters long",
+        variant: "destructive",
+      })
+      return
+    }
+
+    if (passwordData.newPassword !== passwordData.confirmPassword) {
+      toast({
+        title: "Error",
+        description: "New passwords do not match",
+        variant: "destructive",
+      })
+      return
+    }
+
+    if (passwordData.currentPassword === passwordData.newPassword) {
+      toast({
+        title: "Error",
+        description: "New password must be different from current password",
+        variant: "destructive",
+      })
+      return
+    }
+
+    setPasswordSaving(true)
+
+    try {
+      const response = await fetch("/api/user/password", {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          currentPassword: passwordData.currentPassword,
+          newPassword: passwordData.newPassword,
+        }),
+      })
+
+      const data = await response.json()
+
+      if (data.success) {
+        toast({
+          title: "Success",
+          description: "Password updated successfully",
+        })
+        // Clear form
+        setPasswordData({
+          currentPassword: "",
+          newPassword: "",
+          confirmPassword: "",
+        })
+      } else {
+        toast({
+          title: "Error",
+          description: data.message || "Failed to update password",
+          variant: "destructive",
+        })
+      }
+    } catch (error) {
+      console.error("Failed to change password:", error)
+      toast({
+        title: "Error",
+        description: "Failed to update password",
+        variant: "destructive",
+      })
+    } finally {
+      setPasswordSaving(false)
     }
   }
 
@@ -382,18 +473,69 @@ export default function SettingsPage() {
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="space-y-2">
-                  <Label htmlFor="currentPassword">Current Password</Label>
-                  <Input id="currentPassword" type="password" />
+                  <Label htmlFor="currentPassword">Current Password *</Label>
+                  <Input
+                    id="currentPassword"
+                    type="password"
+                    value={passwordData.currentPassword}
+                    onChange={(e) => setPasswordData((prev) => ({ ...prev, currentPassword: e.target.value }))}
+                    placeholder="Enter your current password"
+                  />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="newPassword">New Password</Label>
-                  <Input id="newPassword" type="password" />
+                  <Label htmlFor="newPassword">New Password *</Label>
+                  <Input
+                    id="newPassword"
+                    type="password"
+                    value={passwordData.newPassword}
+                    onChange={(e) => setPasswordData((prev) => ({ ...prev, newPassword: e.target.value }))}
+                    placeholder="Enter new password (min 8 characters)"
+                    minLength={8}
+                  />
+                  {passwordData.newPassword && passwordData.newPassword.length < 8 && (
+                    <p className="text-sm text-red-600">Password must be at least 8 characters long</p>
+                  )}
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="confirmPassword">Confirm New Password</Label>
-                  <Input id="confirmPassword" type="password" />
+                  <Label htmlFor="confirmPassword">Confirm New Password *</Label>
+                  <Input
+                    id="confirmPassword"
+                    type="password"
+                    value={passwordData.confirmPassword}
+                    onChange={(e) => setPasswordData((prev) => ({ ...prev, confirmPassword: e.target.value }))}
+                    placeholder="Confirm your new password"
+                  />
+                  {passwordData.confirmPassword && passwordData.newPassword !== passwordData.confirmPassword && (
+                    <p className="text-sm text-red-600">Passwords do not match</p>
+                  )}
                 </div>
-                <Button>Update Password</Button>
+
+                <div className="pt-4 border-t">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h4 className="font-medium">Password Requirements</h4>
+                      <ul className="text-sm text-gray-600 mt-1 space-y-1">
+                        <li>• At least 8 characters long</li>
+                        <li>• Different from current password</li>
+                        <li>• Must match confirmation</li>
+                      </ul>
+                    </div>
+                  </div>
+                </div>
+
+                <Button onClick={changePassword} disabled={passwordSaving} className="w-full">
+                  {passwordSaving ? (
+                    <>
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                      Updating Password...
+                    </>
+                  ) : (
+                    <>
+                      <Save className="h-4 w-4 mr-2" />
+                      Update Password
+                    </>
+                  )}
+                </Button>
               </CardContent>
             </Card>
           </TabsContent>
