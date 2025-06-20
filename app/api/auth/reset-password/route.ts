@@ -1,5 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { neon } from "@neondatabase/serverless"
+import crypto from "crypto"
 
 const sql = neon(process.env.DATABASE_URL!)
 
@@ -16,16 +17,6 @@ export async function POST(request: NextRequest) {
 
     if (password.length < 8) {
       return NextResponse.json({ error: "Password must be at least 8 characters long" }, { status: 400 })
-    }
-
-    // Check if bcrypt is available
-    let bcrypt
-    try {
-      bcrypt = require("bcryptjs")
-      console.log("bcrypt loaded successfully")
-    } catch (bcryptError) {
-      console.error("bcrypt import failed:", bcryptError)
-      return NextResponse.json({ error: "Password hashing unavailable" }, { status: 500 })
     }
 
     // Check if user table has reset token columns
@@ -70,16 +61,18 @@ export async function POST(request: NextRequest) {
     const user = users[0]
     console.log("Valid token found for user:", user.id)
 
-    // Hash new password
+    // Simple password hashing using Node.js crypto (no external dependencies)
     console.log("Hashing new password...")
-    const hashedPassword = await bcrypt.hash(password, 12)
+    const salt = crypto.randomBytes(16).toString("hex")
+    const hashedPassword = crypto.pbkdf2Sync(password, salt, 10000, 64, "sha512").toString("hex")
+    const finalPassword = `${salt}:${hashedPassword}`
     console.log("Password hashed successfully")
 
     // Update user password and clear reset token
     console.log("Updating user password...")
     await sql`
       UPDATE users 
-      SET password = ${hashedPassword},
+      SET password = ${finalPassword},
           reset_token = NULL,
           reset_token_expires = NULL
       WHERE id = ${user.id}
