@@ -422,7 +422,17 @@ function GenerateCodeSection({ onTestResult }) {
   const checkExpiration = useCallback(() => {
     if (expiresAt && code) {
       const expirationTime = new Date(expiresAt).getTime()
-      const remaining = Math.max(0, Math.floor((expirationTime - Date.now()) / 1000))
+      const currentTime = Date.now()
+      const remaining = Math.max(0, Math.floor((expirationTime - currentTime) / 1000))
+
+      console.log("Debug timing:", {
+        expiresAt,
+        expirationTime,
+        currentTime,
+        remaining,
+        isExpired: remaining === 0,
+      })
+
       setTimeRemaining(remaining)
 
       // Only call onTestResult when code actually expires (not on every update)
@@ -461,9 +471,25 @@ function GenerateCodeSection({ onTestResult }) {
       if (data.success) {
         setCode(data.code)
         setExpiresAt(data.expiresAt)
+
+        // Calculate initial time remaining
+        const expirationTime = new Date(data.expiresAt).getTime()
+        const currentTime = Date.now()
+        const initialRemaining = Math.max(0, Math.floor((expirationTime - currentTime) / 1000))
+        setTimeRemaining(initialRemaining)
+
+        console.log("Code generated:", {
+          code: data.code,
+          expiresAt: data.expiresAt,
+          serverTime: data.serverTime,
+          initialRemaining,
+          minutesRemaining: Math.floor(initialRemaining / 60),
+        })
+
         onTestResult("Code Generation", true, "6-digit code generated successfully", {
           code: data.code,
           expiresAt: data.expiresAt,
+          minutesRemaining: Math.floor(initialRemaining / 60),
         })
       } else {
         setError(data.message || "Failed to generate code")
