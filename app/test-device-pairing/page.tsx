@@ -51,8 +51,8 @@ export default function TestDevicePairingPage() {
 
   // Simulate device registration
   const handleDeviceRegistration = async () => {
-    if (!deviceCode || deviceCode.length !== 6) {
-      setError("Please enter a valid 6-digit code")
+    if (!deviceCode || deviceCode.length < 6) {
+      setError("Please enter a valid device code")
       addTestResult("Device Registration", false, "Invalid code format")
       return
     }
@@ -304,17 +304,18 @@ export default function TestDevicePairingPage() {
                       </div>
 
                       <div className="space-y-2">
-                        <Label htmlFor="deviceCode">6-Digit Code</Label>
+                        <Label htmlFor="deviceCode">Device Code</Label>
                         <Input
                           id="deviceCode"
                           value={deviceCode}
                           onChange={(e) => {
-                            const value = e.target.value.replace(/\D/g, "").slice(0, 6)
+                            // Allow alphanumeric codes, remove spaces and convert to uppercase
+                            const value = e.target.value.replace(/\s/g, "").toUpperCase()
                             setDeviceCode(value)
                           }}
-                          placeholder="123456"
-                          className="text-center text-2xl font-mono tracking-wider"
-                          maxLength={6}
+                          placeholder="Enter code (e.g., 123456 or ABC123DEF456)"
+                          className="text-center text-lg font-mono tracking-wider"
+                          maxLength={15}
                         />
                       </div>
 
@@ -331,7 +332,7 @@ export default function TestDevicePairingPage() {
                         </Button>
                         <Button
                           onClick={handleDeviceRegistration}
-                          disabled={loading || deviceCode.length !== 6}
+                          disabled={loading || deviceCode.length < 6}
                           className="flex-1"
                         >
                           {loading ? (

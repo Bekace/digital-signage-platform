@@ -2,21 +2,29 @@ import { type NextRequest, NextResponse } from "next/server"
 
 export async function POST(request: NextRequest) {
   try {
-    const { code, deviceInfo } = await request.json()
+    const { deviceCode, deviceInfo } = await request.json()
 
-    if (!code) {
+    if (!deviceCode) {
       return NextResponse.json({ success: false, message: "Device code is required" }, { status: 400 })
     }
 
-    // For demo purposes, accept any 6-digit code that's not obviously expired
-    if (code.length === 6 && /^\d{6}$/.test(code)) {
+    // Accept both formats:
+    // - 6-digit numeric codes (123456)
+    // - Longer alphanumeric codes (ABC123DEF456)
+    const isValidCode = /^(\d{6}|[A-Z0-9]{8,15})$/i.test(deviceCode)
+
+    if (isValidCode) {
       // Simulate successful registration
       const deviceId = `device_${Date.now()}`
+      const apiKey = `api_${Math.random().toString(36).substring(2, 15)}`
+      const screenName = `Screen ${Math.floor(Math.random() * 1000)}`
 
       return NextResponse.json({
         success: true,
         message: "Device registered successfully",
         deviceId,
+        apiKey,
+        screenName,
         deviceInfo: deviceInfo || { name: "Test Device" },
       })
     }
