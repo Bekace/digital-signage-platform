@@ -11,10 +11,18 @@ export async function GET() {
 
     return NextResponse.json({
       success: true,
-      user,
+      user: {
+        id: user.id,
+        email: user.email,
+        firstName: user.first_name,
+        lastName: user.last_name,
+        company: user.company,
+        plan: user.plan,
+        createdAt: user.created_at,
+      },
     })
   } catch (error) {
     console.error("Profile fetch error:", error)
-    return NextResponse.json({ success: false, message: "Failed to fetch profile" }, { status: 500 })
+    return NextResponse.json({ success: false, message: "Internal server error" }, { status: 500 })
   }
 }

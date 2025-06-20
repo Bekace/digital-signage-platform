@@ -1,8 +1,6 @@
 import { cookies } from "next/headers"
-import { neon } from "@neondatabase/serverless"
+import { getDb } from "@/lib/db"
 import jwt from "jsonwebtoken"
-
-const sql = neon(process.env.DATABASE_URL!)
 
 export interface User {
   id: string
@@ -20,11 +18,15 @@ export async function getCurrentUser(): Promise<User | null> {
     const token = cookieStore.get("auth-token")?.value
 
     if (!token) {
+      console.log("No auth token found")
       return null
     }
 
     // Verify JWT token
-    const decoded = jwt.verify(token, process.env.JWT_SECRET!) as { userId: string }
+    const decoded = jwt.verify(token, process.env.JWT_SECRET!) as { userId: string; email: string }
+    console.log("Token decoded:", { userId: decoded.userId })
+
+    const sql = getDb()
 
     // Get user from database
     const users = await sql`
@@ -35,9 +37,11 @@ export async function getCurrentUser(): Promise<User | null> {
     `
 
     if (users.length === 0) {
+      console.log("User not found in database")
       return null
     }
 
+    console.log("User found:", users[0].email)
     return users[0] as User
   } catch (error) {
     console.error("Error getting current user:", error)

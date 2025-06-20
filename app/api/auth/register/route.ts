@@ -1,71 +1,98 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { getDb } from "@/lib/db"
 import bcrypt from "bcryptjs"
+import jwt from "jsonwebtoken"
 
 export async function POST(request: NextRequest) {
   try {
-    const { firstName, lastName, email, company, password, plan } = await request.json()
+    const { email, password, firstName, lastName, company } = await request.json()
 
     // Validation
-    if (!firstName || !lastName || !email || !password) {
-      return NextResponse.json({ success: false, message: "All required fields must be filled" }, { status: 400 })
-    }
-
-    if (password.length < 8) {
+    if (!email || !password || !firstName || !lastName) {
       return NextResponse.json(
-        { success: false, message: "Password must be at least 8 characters long" },
+        {
+          success: false,
+          message: "All required fields must be filled",
+        },
         { status: 400 },
       )
     }
 
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
-    if (!emailRegex.test(email)) {
-      return NextResponse.json({ success: false, message: "Please enter a valid email address" }, { status: 400 })
+    if (password.length < 8) {
+      return NextResponse.json(
+        {
+          success: false,
+          message: "Password must be at least 8 characters long",
+        },
+        { status: 400 },
+      )
     }
 
     const sql = getDb()
 
     // Check if user already exists
-    const existingUser = await sql`
+    const existingUsers = await sql`
       SELECT id FROM users WHERE email = ${email.toLowerCase()}
     `
 
-    if (existingUser.length > 0) {
+    if (existingUsers.length > 0) {
       return NextResponse.json(
-        { success: false, message: "An account with this email already exists" },
-        { status: 400 },
+        {
+          success: false,
+          message: "An account with this email already exists",
+        },
+        { status: 409 },
       )
     }
 
     // Hash password
-    const passwordHash = await bcrypt.hash(password, 12)
+    const saltRounds = 12
+    const passwordHash = await bcrypt.hash(password, saltRounds)
 
     // Create user
-    const result = await sql`
+    const newUsers = await sql`
       INSERT INTO users (email, password_hash, first_name, last_name, company, plan)
-      VALUES (${email.toLowerCase()}, ${passwordHash}, ${firstName}, ${lastName}, ${company || null}, ${plan || "monthly"})
-      RETURNING id, email, first_name, last_name, company, created_at
+      VALUES (${email.toLowerCase()}, ${passwordHash}, ${firstName}, ${lastName}, ${company || null}, 'free')
+      RETURNING id, email, first_name, last_name, company, plan, created_at
     `
 
-    const newUser = result[0]
+    const user = newUsers[0]
 
-    // Generate session token
-    const token = `token_${newUser.id}_${Date.now()}_${Math.random().toString(36).substring(2)}`
+    // Create JWT token
+    const token = jwt.sign({ userId: user.id, email: user.email }, process.env.JWT_SECRET!, { expiresIn: "7d" })
 
-    return NextResponse.json({
+    // Create response with cookie
+    const response = NextResponse.json({
       success: true,
       message: "Account created successfully",
-      token: token,
       user: {
-        id: newUser.id,
-        email: newUser.email,
-        firstName: newUser.first_name,
-        lastName: newUser.last_name,
-        company: newUser.company,
+        id: user.id,
+        email: user.email,
+        firstName: user.first_name,
+        lastName: user.last_name,
+        company: user.company,
+        plan: user.plan,
       },
     })
+
+    // Set HTTP-only cookie
+    response.cookies.set("auth-token", token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "lax",
+      maxAge: 60 * 60 * 24 * 7, // 7 days
+      path: "/",
+    })
+
+    return response
   } catch (error) {
     console.error("Registration error:", error)
-    return NextResponse.json({ success: false, message: "Internal server error" }, { status: 500 })
+    return NextResponse.json(
+      {
+        success: false,
+        message: "Internal server error",
+      },
+      { status: 500 },
+    )
   }
 }

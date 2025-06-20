@@ -1,6 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { getDb } from "@/lib/db"
 import bcrypt from "bcryptjs"
+import jwt from "jsonwebtoken"
 
 export async function POST(request: NextRequest) {
   try {
@@ -20,7 +21,7 @@ export async function POST(request: NextRequest) {
 
     // Get user from database
     const result = await sql`
-      SELECT id, email, password_hash, first_name, last_name, company 
+      SELECT id, email, password_hash, first_name, last_name, company, plan, created_at
       FROM users 
       WHERE email = ${email.toLowerCase()}
     `
@@ -50,21 +51,33 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Generate session token
-    const token = `token_${user.id}_${Date.now()}_${Math.random().toString(36).substring(2)}`
+    // Create JWT token
+    const token = jwt.sign({ userId: user.id, email: user.email }, process.env.JWT_SECRET!, { expiresIn: "7d" })
 
-    return NextResponse.json({
+    // Create response
+    const response = NextResponse.json({
       success: true,
       message: "Login successful",
-      token: token,
       user: {
         id: user.id,
         email: user.email,
         firstName: user.first_name,
         lastName: user.last_name,
         company: user.company,
+        plan: user.plan,
       },
     })
+
+    // Set HTTP-only cookie
+    response.cookies.set("auth-token", token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "lax",
+      maxAge: 60 * 60 * 24 * 7, // 7 days
+      path: "/",
+    })
+
+    return response
   } catch (error) {
     console.error("Login error:", error)
     return NextResponse.json(
