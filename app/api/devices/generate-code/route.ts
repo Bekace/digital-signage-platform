@@ -5,24 +5,16 @@ export async function POST(request: NextRequest) {
     // Generate 6-digit code
     const code = Math.floor(100000 + Math.random() * 900000).toString()
 
-    // Code expires in 10 minutes from NOW
-    const expiresAt = new Date(Date.now() + 10 * 60 * 1000)
-
-    console.log("Generated code:", code)
-    console.log("Current time:", new Date().toISOString())
-    console.log("Expires at:", expiresAt.toISOString())
-    console.log("Time until expiration (minutes):", (expiresAt.getTime() - Date.now()) / (1000 * 60))
+    // Code expires in 10 minutes from NOW - add extra buffer
+    const now = new Date()
+    const expiresAt = new Date(now.getTime() + 11 * 60 * 1000) // 11 minutes to account for any timing issues
 
     return NextResponse.json({
       success: true,
       code: code,
       expiresAt: expiresAt.toISOString(),
       message: "Device code generated successfully",
-      debug: {
-        currentTime: new Date().toISOString(),
-        expirationTime: expiresAt.toISOString(),
-        minutesUntilExpiration: Math.round((expiresAt.getTime() - Date.now()) / (1000 * 60)),
-      },
+      serverTime: now.toISOString(), // Include server time for comparison
     })
   } catch (error) {
     console.error("Generate code error:", error)
