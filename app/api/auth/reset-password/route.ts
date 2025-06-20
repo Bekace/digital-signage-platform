@@ -16,91 +16,91 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Password must be at least 8 characters long" }, { status: 400 })
     }
 
-    console.log("🔍 Looking for reset token:", token.substring(0, 10) + "...")
+    console.log("🔍 Looking for reset token...")
 
-    // Step 1: Make sure columns exist
-    try {
-      await sql`
-        ALTER TABLE users 
-        ADD COLUMN IF NOT EXISTS reset_token VARCHAR(255),
-        ADD COLUMN IF NOT EXISTS reset_token_expires TIMESTAMP
-      `
-      console.log("✅ Columns ensured")
-    } catch (alterError) {
-      console.log("⚠️ Column alter:", alterError.message)
+    // Find user with this token
+    const users = await sql`
+      SELECT id, email, reset_token, reset_token_expires
+      FROM users 
+      WHERE reset_token = ${token}
+    `
+
+    if (users.length === 0) {
+      return NextResponse.json({ error: "Invalid reset token" }, { status: 400 })
     }
 
-    // Step 2: Find user with this token (simple query first)
-    let user
+    const user = users[0]
+    console.log("👤 Found user ID:", user.id)
+
+    // Check if token is expired
+    const expiresAt = new Date(user.reset_token_expires)
+    const now = new Date()
+
+    if (expiresAt < now) {
+      return NextResponse.json({ error: "Reset token has expired" }, { status: 400 })
+    }
+
+    console.log("✅ Token is valid, updating password...")
+
+    // Try the UPDATE step by step
     try {
-      const users = await sql`
-        SELECT id, email, reset_token, reset_token_expires::text as expires_text
+      // First, let's see the current user data
+      const beforeUpdate = await sql`
+        SELECT id, email, password, reset_token 
         FROM users 
-        WHERE reset_token = ${token}
+        WHERE id = ${user.id}
       `
+      console.log("📋 Before update:", {
+        id: beforeUpdate[0]?.id,
+        email: beforeUpdate[0]?.email,
+        hasPassword: !!beforeUpdate[0]?.password,
+        hasResetToken: !!beforeUpdate[0]?.reset_token,
+      })
 
-      console.log("📊 Users found with token:", users.length)
+      // Try a simple update first - just the password
+      const updateResult = await sql`
+        UPDATE users 
+        SET password = ${password}
+        WHERE id = ${user.id}
+      `
+      console.log("✅ Password updated, affected rows:", updateResult.length)
 
-      if (users.length === 0) {
-        return NextResponse.json({ error: "Invalid reset token" }, { status: 400 })
-      }
-
-      user = users[0]
-      console.log("👤 Found user:", user.id, "expires:", user.expires_text)
-    } catch (findError) {
-      console.error("❌ Find user error:", findError.message)
-      return NextResponse.json(
-        {
-          error: "Database find error",
-          details: findError.message,
-        },
-        { status: 500 },
-      )
-    }
-
-    // Step 3: Check if token is expired
-    try {
-      const expiresAt = new Date(user.expires_text)
-      const now = new Date()
-
-      console.log("⏰ Token expires:", expiresAt.toISOString())
-      console.log("⏰ Current time:", now.toISOString())
-
-      if (expiresAt < now) {
-        return NextResponse.json({ error: "Reset token has expired" }, { status: 400 })
-      }
-
-      console.log("✅ Token is still valid")
-    } catch (timeError) {
-      console.error("❌ Time check error:", timeError.message)
-      return NextResponse.json(
-        {
-          error: "Time validation error",
-          details: timeError.message,
-        },
-        { status: 500 },
-      )
-    }
-
-    // Step 4: Update password
-    try {
+      // Now clear the reset token
       await sql`
         UPDATE users 
-        SET password = ${password},
-            reset_token = NULL,
+        SET reset_token = NULL,
             reset_token_expires = NULL
         WHERE id = ${user.id}
       `
+      console.log("✅ Reset token cleared")
 
-      console.log("✅ Password updated for user:", user.id)
+      // Verify the update worked
+      const afterUpdate = await sql`
+        SELECT id, email, password, reset_token 
+        FROM users 
+        WHERE id = ${user.id}
+      `
+      console.log("📋 After update:", {
+        id: afterUpdate[0]?.id,
+        email: afterUpdate[0]?.email,
+        passwordChanged: afterUpdate[0]?.password === password,
+        resetTokenCleared: !afterUpdate[0]?.reset_token,
+      })
 
       return NextResponse.json({ message: "Password reset successfully" })
     } catch (updateError) {
-      console.error("❌ Update error:", updateError.message)
+      console.error("❌ Update error details:", {
+        message: updateError.message,
+        code: updateError.code,
+        detail: updateError.detail,
+        hint: updateError.hint,
+      })
+
       return NextResponse.json(
         {
           error: "Password update failed",
           details: updateError.message,
+          code: updateError.code,
         },
         { status: 500 },
       )
