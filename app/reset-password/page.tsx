@@ -10,6 +10,7 @@ import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Eye, EyeOff, Lock } from "lucide-react"
+import Link from "next/link"
 
 export default function ResetPasswordPage() {
   const router = useRouter()
@@ -79,6 +80,13 @@ export default function ResetPasswordPage() {
             <Alert variant="destructive">
               <AlertDescription>Invalid or missing reset token</AlertDescription>
             </Alert>
+            <div className="mt-4 text-center">
+              <Link href="/login">
+                <Button variant="outline" className="w-full">
+                  Back to Login
+                </Button>
+              </Link>
+            </div>
           </CardContent>
         </Card>
       </div>
@@ -93,6 +101,13 @@ export default function ResetPasswordPage() {
             <Alert>
               <AlertDescription>Password reset successfully! Redirecting to login...</AlertDescription>
             </Alert>
+            <div className="mt-4 text-center">
+              <Link href="/login">
+                <Button variant="outline" className="w-full">
+                  Go to Login Now
+                </Button>
+              </Link>
+            </div>
           </CardContent>
         </Card>
       </div>
@@ -175,6 +190,12 @@ export default function ResetPasswordPage() {
             <Button type="submit" className="w-full" disabled={isLoading}>
               {isLoading ? "Resetting Password..." : "Reset Password"}
             </Button>
+
+            <div className="text-center">
+              <Link href="/login" className="text-sm text-gray-600 hover:text-gray-900">
+                Back to Login
+              </Link>
+            </div>
           </form>
         </CardContent>
       </Card>
