@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 import { getCurrentUser } from "@/lib/auth"
+import { getDb } from "@/lib/db"
 
 export async function GET() {
   try {
@@ -9,16 +10,36 @@ export async function GET() {
       return NextResponse.json({ success: false, message: "Not authenticated" }, { status: 401 })
     }
 
+    const sql = getDb()
+
+    // Get complete user profile including company info
+    const users = await sql`
+      SELECT 
+        id, email, first_name, last_name, company, 
+        company_address, company_phone, plan, created_at
+      FROM users 
+      WHERE id = ${user.id}
+      LIMIT 1
+    `
+
+    if (users.length === 0) {
+      return NextResponse.json({ success: false, message: "User not found" }, { status: 404 })
+    }
+
+    const userData = users[0]
+
     return NextResponse.json({
       success: true,
       user: {
-        id: user.id,
-        email: user.email,
-        firstName: user.first_name,
-        lastName: user.last_name,
-        company: user.company,
-        plan: user.plan,
-        createdAt: user.created_at,
+        id: userData.id,
+        email: userData.email,
+        firstName: userData.first_name,
+        lastName: userData.last_name,
+        company: userData.company,
+        companyAddress: userData.company_address,
+        companyPhone: userData.company_phone,
+        plan: userData.plan,
+        createdAt: userData.created_at,
       },
     })
   } catch (error) {

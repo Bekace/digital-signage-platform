@@ -20,6 +20,8 @@ interface UserProfile {
   company?: string
   plan: string
   createdAt: string
+  companyAddress?: string
+  companyPhone?: string
 }
 
 export default function SettingsPage() {
@@ -33,6 +35,13 @@ export default function SettingsPage() {
     systemMaintenance: false,
   })
 
+  const [companyData, setCompanyData] = useState({
+    companyName: "",
+    companyAddress: "",
+    companyPhone: "",
+  })
+  const [companySaving, setCompanySaving] = useState(false)
+
   useEffect(() => {
     fetchUserProfile()
   }, [])
@@ -44,6 +53,11 @@ export default function SettingsPage() {
 
       if (data.success && data.user) {
         setUser(data.user)
+        setCompanyData({
+          companyName: data.user.company || "",
+          companyAddress: data.user.companyAddress || "",
+          companyPhone: data.user.companyPhone || "",
+        })
       } else {
         toast({
           title: "Error",
@@ -81,6 +95,62 @@ export default function SettingsPage() {
         return "Free Plan"
       default:
         return "Unknown Plan"
+    }
+  }
+
+  const saveCompanyInfo = async () => {
+    if (!companyData.companyName.trim()) {
+      toast({
+        title: "Error",
+        description: "Company name is required",
+        variant: "destructive",
+      })
+      return
+    }
+
+    setCompanySaving(true)
+
+    try {
+      const response = await fetch("/api/user/company", {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(companyData),
+      })
+
+      const data = await response.json()
+
+      if (data.success) {
+        toast({
+          title: "Success",
+          description: "Company information updated successfully",
+        })
+        // Update user state with new company info
+        if (user) {
+          setUser({
+            ...user,
+            company: data.data.companyName,
+            companyAddress: data.data.companyAddress,
+            companyPhone: data.data.companyPhone,
+          })
+        }
+      } else {
+        toast({
+          title: "Error",
+          description: data.message || "Failed to update company information",
+          variant: "destructive",
+        })
+      }
+    } catch (error) {
+      console.error("Failed to save company info:", error)
+      toast({
+        title: "Error",
+        description: "Failed to update company information",
+        variant: "destructive",
+      })
+    } finally {
+      setCompanySaving(false)
     }
   }
 
@@ -336,20 +406,47 @@ export default function SettingsPage() {
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="space-y-2">
-                  <Label htmlFor="companyName">Company Name</Label>
-                  <Input id="companyName" defaultValue={user.company || ""} placeholder="Enter company name" />
+                  <Label htmlFor="companyName">Company Name *</Label>
+                  <Input
+                    id="companyName"
+                    value={companyData.companyName}
+                    onChange={(e) => setCompanyData((prev) => ({ ...prev, companyName: e.target.value }))}
+                    placeholder="Enter company name"
+                    maxLength={100}
+                  />
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="companyAddress">Address</Label>
-                  <Input id="companyAddress" placeholder="123 Business St, City, State 12345" />
+                  <Input
+                    id="companyAddress"
+                    value={companyData.companyAddress}
+                    onChange={(e) => setCompanyData((prev) => ({ ...prev, companyAddress: e.target.value }))}
+                    placeholder="123 Business St, City, State 12345"
+                    maxLength={200}
+                  />
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="companyPhone">Phone</Label>
-                  <Input id="companyPhone" placeholder="+1 (555) 123-4567" />
+                  <Input
+                    id="companyPhone"
+                    value={companyData.companyPhone}
+                    onChange={(e) => setCompanyData((prev) => ({ ...prev, companyPhone: e.target.value }))}
+                    placeholder="+1 (555) 123-4567"
+                    maxLength={20}
+                  />
                 </div>
-                <Button>
-                  <Save className="h-4 w-4 mr-2" />
-                  Save Company Info
+                <Button onClick={saveCompanyInfo} disabled={companySaving}>
+                  {companySaving ? (
+                    <>
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                      Saving...
+                    </>
+                  ) : (
+                    <>
+                      <Save className="h-4 w-4 mr-2" />
+                      Save Company Info
+                    </>
+                  )}
                 </Button>
               </CardContent>
             </Card>
