@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { User, CreditCard, Bell, Save } from "lucide-react"
+import { User, CreditCard, Bell, Save, Eye, EyeOff } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -48,6 +48,11 @@ export default function SettingsPage() {
     confirmPassword: "",
   })
   const [passwordSaving, setPasswordSaving] = useState(false)
+  const [showPasswords, setShowPasswords] = useState({
+    current: false,
+    new: false,
+    confirm: false,
+  })
 
   useEffect(() => {
     fetchUserProfile()
@@ -220,11 +225,16 @@ export default function SettingsPage() {
           title: "Success",
           description: "Password updated successfully",
         })
-        // Clear form
+        // Clear form and hide passwords
         setPasswordData({
           currentPassword: "",
           newPassword: "",
           confirmPassword: "",
+        })
+        setShowPasswords({
+          current: false,
+          new: false,
+          confirm: false,
         })
       } else {
         toast({
@@ -243,6 +253,13 @@ export default function SettingsPage() {
     } finally {
       setPasswordSaving(false)
     }
+  }
+
+  const togglePasswordVisibility = (field: "current" | "new" | "confirm") => {
+    setShowPasswords((prev) => ({
+      ...prev,
+      [field]: !prev[field],
+    }))
   }
 
   if (loading) {
@@ -474,37 +491,85 @@ export default function SettingsPage() {
               <CardContent className="space-y-4">
                 <div className="space-y-2">
                   <Label htmlFor="currentPassword">Current Password *</Label>
-                  <Input
-                    id="currentPassword"
-                    type="password"
-                    value={passwordData.currentPassword}
-                    onChange={(e) => setPasswordData((prev) => ({ ...prev, currentPassword: e.target.value }))}
-                    placeholder="Enter your current password"
-                  />
+                  <div className="relative">
+                    <Input
+                      id="currentPassword"
+                      type={showPasswords.current ? "text" : "password"}
+                      value={passwordData.currentPassword}
+                      onChange={(e) => setPasswordData((prev) => ({ ...prev, currentPassword: e.target.value }))}
+                      placeholder="Enter your current password"
+                      className="pr-10"
+                    />
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
+                      onClick={() => togglePasswordVisibility("current")}
+                    >
+                      {showPasswords.current ? (
+                        <EyeOff className="h-4 w-4 text-gray-500" />
+                      ) : (
+                        <Eye className="h-4 w-4 text-gray-500" />
+                      )}
+                    </Button>
+                  </div>
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="newPassword">New Password *</Label>
-                  <Input
-                    id="newPassword"
-                    type="password"
-                    value={passwordData.newPassword}
-                    onChange={(e) => setPasswordData((prev) => ({ ...prev, newPassword: e.target.value }))}
-                    placeholder="Enter new password (min 8 characters)"
-                    minLength={8}
-                  />
+                  <div className="relative">
+                    <Input
+                      id="newPassword"
+                      type={showPasswords.new ? "text" : "password"}
+                      value={passwordData.newPassword}
+                      onChange={(e) => setPasswordData((prev) => ({ ...prev, newPassword: e.target.value }))}
+                      placeholder="Enter new password (min 8 characters)"
+                      minLength={8}
+                      className="pr-10"
+                    />
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
+                      onClick={() => togglePasswordVisibility("new")}
+                    >
+                      {showPasswords.new ? (
+                        <EyeOff className="h-4 w-4 text-gray-500" />
+                      ) : (
+                        <Eye className="h-4 w-4 text-gray-500" />
+                      )}
+                    </Button>
+                  </div>
                   {passwordData.newPassword && passwordData.newPassword.length < 8 && (
                     <p className="text-sm text-red-600">Password must be at least 8 characters long</p>
                   )}
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="confirmPassword">Confirm New Password *</Label>
-                  <Input
-                    id="confirmPassword"
-                    type="password"
-                    value={passwordData.confirmPassword}
-                    onChange={(e) => setPasswordData((prev) => ({ ...prev, confirmPassword: e.target.value }))}
-                    placeholder="Confirm your new password"
-                  />
+                  <div className="relative">
+                    <Input
+                      id="confirmPassword"
+                      type={showPasswords.confirm ? "text" : "password"}
+                      value={passwordData.confirmPassword}
+                      onChange={(e) => setPasswordData((prev) => ({ ...prev, confirmPassword: e.target.value }))}
+                      placeholder="Confirm your new password"
+                      className="pr-10"
+                    />
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
+                      onClick={() => togglePasswordVisibility("confirm")}
+                    >
+                      {showPasswords.confirm ? (
+                        <EyeOff className="h-4 w-4 text-gray-500" />
+                      ) : (
+                        <Eye className="h-4 w-4 text-gray-500" />
+                      )}
+                    </Button>
+                  </div>
                   {passwordData.confirmPassword && passwordData.newPassword !== passwordData.confirmPassword && (
                     <p className="text-sm text-red-600">Passwords do not match</p>
                   )}
