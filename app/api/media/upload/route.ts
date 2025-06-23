@@ -14,6 +14,8 @@ const ALLOWED_TYPES = [
   "application/pdf",
 ]
 
+const ALLOWED_EXTENSIONS = [".jpg", ".jpeg", ".png", ".gif", ".webp", ".mp4", ".webm", ".pdf"]
+
 export async function POST(request: NextRequest) {
   try {
     console.log("🔍 Starting file upload...")
@@ -30,14 +32,74 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "No file provided" }, { status: 400 })
     }
 
-    console.log("✅ File received:", { name: file.name, size: file.size, type: file.type })
+    // Debug: Show detailed file info
+    console.log("📁 File details:", {
+      name: file.name,
+      size: file.size,
+      type: file.type,
+      lastModified: file.lastModified,
+    })
 
-    // Validate file type
-    if (!ALLOWED_TYPES.includes(file.type)) {
+    // Get file extension
+    const fileExtension = file.name.toLowerCase().substring(file.name.lastIndexOf("."))
+    console.log("📎 File extension:", fileExtension)
+
+    // Validate by MIME type OR file extension (more flexible)
+    const isValidMimeType = ALLOWED_TYPES.includes(file.type)
+    const isValidExtension = ALLOWED_EXTENSIONS.includes(fileExtension)
+
+    if (!isValidMimeType && !isValidExtension) {
+      console.log("❌ File validation failed:", {
+        mimeType: file.type,
+        extension: fileExtension,
+        allowedTypes: ALLOWED_TYPES,
+        allowedExtensions: ALLOWED_EXTENSIONS,
+      })
+
       return NextResponse.json(
-        { error: `File type ${file.type} not supported. Allowed: ${ALLOWED_TYPES.join(", ")}` },
+        {
+          error: `File not supported`,
+          details: {
+            detected_mime_type: file.type,
+            detected_extension: fileExtension,
+            filename: file.name,
+            allowed_types: ALLOWED_TYPES,
+            allowed_extensions: ALLOWED_EXTENSIONS,
+          },
+        },
         { status: 400 },
       )
+    }
+
+    // If MIME type is wrong but extension is right, fix it
+    let correctedMimeType = file.type
+    if (!isValidMimeType && isValidExtension) {
+      console.log("🔧 Correcting MIME type based on extension")
+      switch (fileExtension) {
+        case ".jpg":
+        case ".jpeg":
+          correctedMimeType = "image/jpeg"
+          break
+        case ".png":
+          correctedMimeType = "image/png"
+          break
+        case ".gif":
+          correctedMimeType = "image/gif"
+          break
+        case ".webp":
+          correctedMimeType = "image/webp"
+          break
+        case ".mp4":
+          correctedMimeType = "video/mp4"
+          break
+        case ".webm":
+          correctedMimeType = "video/webm"
+          break
+        case ".pdf":
+          correctedMimeType = "application/pdf"
+          break
+      }
+      console.log("✅ MIME type corrected:", file.type, "→", correctedMimeType)
     }
 
     // Validate file size
@@ -104,16 +166,18 @@ export async function POST(request: NextRequest) {
 
     console.log("🔍 Saving to database...")
 
-    // Insert with only required columns
+    // Insert with corrected MIME type
     const mediaResult = await sql`
       INSERT INTO media_files (
-        user_id, filename, original_name, file_type, file_size, storage_url, created_at
+        user_id, filename, original_name, file_type, file_size, 
+        mime_type, storage_url, created_at
       ) VALUES (
         ${user.id}, 
         ${uniqueFilename}, 
         ${file.name}, 
-        ${getFileType(file.type)}, 
-        ${file.size}, 
+        ${getFileType(correctedMimeType)}, 
+        ${file.size},
+        ${correctedMimeType},
         ${mockUrl}, 
         NOW()
       )
@@ -137,6 +201,11 @@ export async function POST(request: NextRequest) {
       success: true,
       file: mediaResult[0],
       message: "File uploaded successfully (demo mode)",
+      debug: {
+        original_mime_type: file.type,
+        corrected_mime_type: correctedMimeType,
+        file_extension: fileExtension,
+      },
     })
   } catch (error) {
     console.error("❌ Upload error:", error)
