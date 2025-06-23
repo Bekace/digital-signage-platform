@@ -11,10 +11,7 @@ const ALLOWED_TYPES = [
   "image/webp",
   "video/mp4",
   "video/webm",
-  "video/quicktime",
   "application/pdf",
-  // Add text/plain for testing
-  "text/plain",
 ]
 
 export async function POST(request: NextRequest) {
@@ -23,55 +20,37 @@ export async function POST(request: NextRequest) {
 
     const user = await getCurrentUser()
     if (!user) {
-      console.log("❌ No user authenticated")
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
-    console.log("✅ User authenticated:", user.email)
 
     const formData = await request.formData()
     const file = formData.get("file") as File
 
     if (!file) {
-      console.log("❌ No file in request")
       return NextResponse.json({ error: "No file provided" }, { status: 400 })
     }
 
-    console.log("✅ File received:", {
-      name: file.name,
-      size: file.size,
-      type: file.type,
-    })
+    console.log("✅ File received:", { name: file.name, size: file.size, type: file.type })
 
     // Validate file type
     if (!ALLOWED_TYPES.includes(file.type)) {
-      console.log("❌ Invalid file type:", file.type)
       return NextResponse.json(
-        {
-          error: `File type ${file.type} not supported`,
-          allowed_types: ALLOWED_TYPES,
-        },
+        { error: `File type ${file.type} not supported. Allowed: ${ALLOWED_TYPES.join(", ")}` },
         { status: 400 },
       )
     }
 
     // Validate file size
     if (file.size > MAX_FILE_SIZE) {
-      console.log("❌ File too large:", file.size)
       return NextResponse.json(
-        {
-          error: `File too large. Max size: ${MAX_FILE_SIZE / 1024 / 1024}MB`,
-        },
+        { error: `File too large. Maximum size: ${MAX_FILE_SIZE / 1024 / 1024}MB` },
         { status: 400 },
       )
     }
 
-    console.log("✅ File validation passed")
-
     const sql = getDb()
-    console.log("✅ Database connection established")
 
-    // Get user's current usage (with proper error handling)
-    console.log("🔍 Checking user plan...")
+    // Check user's current usage
     const userResult = await sql`
       SELECT plan_type, media_files_count, storage_used_bytes
       FROM users 
@@ -79,19 +58,15 @@ export async function POST(request: NextRequest) {
     `
 
     if (userResult.length === 0) {
-      console.log("❌ User not found in database")
       return NextResponse.json({ error: "User not found" }, { status: 404 })
     }
 
     const userData = userResult[0]
-    console.log("✅ User data:", userData)
-
-    // Simple plan limit check
     const currentFiles = userData.media_files_count || 0
     const currentStorage = userData.storage_used_bytes || 0
 
+    // Check free plan limits
     if (currentFiles >= 5) {
-      console.log("❌ File limit exceeded:", currentFiles)
       return NextResponse.json(
         {
           error: "Upload limit exceeded",
@@ -103,7 +78,6 @@ export async function POST(request: NextRequest) {
     }
 
     if (currentStorage + file.size > MAX_FILE_SIZE) {
-      console.log("❌ Storage limit exceeded")
       return NextResponse.json(
         {
           error: "Storage limit exceeded",
@@ -114,16 +88,13 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    console.log("✅ Plan limits check passed")
-
-    // Create mock storage URL for now
+    // Create mock storage URL (we'll add real Vercel Blob later)
     const timestamp = Date.now()
-    const uniqueFilename = `${user.id}/${timestamp}-${file.name}`
-    const mockUrl = `/uploads/${timestamp}-${file.name.replace(/[^a-zA-Z0-9.-]/g, "_")}`
+    const sanitizedName = file.name.replace(/[^a-zA-Z0-9.-]/g, "_")
+    const uniqueFilename = `${user.id}/${timestamp}-${sanitizedName}`
+    const mockUrl = `/uploads/${timestamp}-${sanitizedName}`
 
-    console.log("🔍 Saving to database...")
-
-    // Determine file type
+    // Determine file type category
     const getFileType = (mimeType: string): string => {
       if (mimeType.startsWith("image/")) return "image"
       if (mimeType.startsWith("video/")) return "video"
@@ -131,25 +102,25 @@ export async function POST(request: NextRequest) {
       return "other"
     }
 
-    // Save to database
+    console.log("🔍 Saving to database...")
+
+    // Insert with only required columns
     const mediaResult = await sql`
       INSERT INTO media_files (
-        user_id, filename, original_name, file_type, file_size, 
-        mime_type, storage_url, created_at
+        user_id, filename, original_name, file_type, file_size, storage_url, created_at
       ) VALUES (
         ${user.id}, 
         ${uniqueFilename}, 
         ${file.name}, 
         ${getFileType(file.type)}, 
         ${file.size}, 
-        ${file.type}, 
         ${mockUrl}, 
         NOW()
       )
       RETURNING *
     `
 
-    console.log("✅ Media file saved:", mediaResult[0])
+    console.log("✅ Media file saved")
 
     // Update user's usage counters
     await sql`
@@ -165,7 +136,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       success: true,
       file: mediaResult[0],
-      message: "File uploaded successfully (demo mode - no actual file storage yet)",
+      message: "File uploaded successfully (demo mode)",
     })
   } catch (error) {
     console.error("❌ Upload error:", error)
@@ -178,3 +149,4 @@ export async function POST(request: NextRequest) {
     )
   }
 }
+</merged_code>
