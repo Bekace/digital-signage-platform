@@ -113,9 +113,11 @@ export async function POST(request: NextRequest) {
 
     const userData = userResult[0]
     const currentFiles = userData.media_files_count || 0
-    const currentStorage = userData.storage_used_bytes || 0
+
+    // Convert storage values to numbers to avoid string concatenation
+    const currentStorage = Number.parseInt(userData.storage_used_bytes) || 0
     const maxFiles = userData.max_media_files || 5
-    const maxStorage = userData.max_storage_bytes || 104857600 // 100MB default
+    const maxStorage = Number.parseInt(userData.max_storage_bytes) || 104857600 // 100MB default
 
     console.log("📊 Usage check:", {
       currentFiles,
@@ -212,12 +214,12 @@ export async function POST(request: NextRequest) {
 
     console.log("✅ Media file saved")
 
-    // Update user's usage counters
+    // Update user's usage counters (ensure we're adding numbers, not concatenating strings)
     await sql`
       UPDATE users 
       SET 
         media_files_count = COALESCE(media_files_count, 0) + 1,
-        storage_used_bytes = COALESCE(storage_used_bytes, 0) + ${file.size}
+        storage_used_bytes = COALESCE(storage_used_bytes::bigint, 0) + ${file.size}
       WHERE id = ${user.id}
     `
 
