@@ -1,4 +1,5 @@
 import { type NextRequest, NextResponse } from "next/server"
+import { put } from "@vercel/blob"
 import { getCurrentUser } from "@/lib/auth"
 import { getDb } from "@/lib/db"
 
@@ -88,7 +89,7 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Validate file size (per file limit)
+    // Validate file size
     if (file.size > MAX_FILE_SIZE) {
       return NextResponse.json(
         { error: `File too large. Maximum size per file: ${MAX_FILE_SIZE / 1024 / 1024}MB` },
@@ -113,70 +114,46 @@ export async function POST(request: NextRequest) {
 
     const userData = userResult[0]
     const currentFiles = userData.media_files_count || 0
-
-    // Convert storage values to numbers to avoid string concatenation
     const currentStorage = Number.parseInt(userData.storage_used_bytes) || 0
     const maxFiles = userData.max_media_files || 5
-    const maxStorage = Number.parseInt(userData.max_storage_bytes) || 104857600 // 100MB default
+    const maxStorage = Number.parseInt(userData.max_storage_bytes) || 104857600
 
-    console.log("📊 Usage check:", {
-      currentFiles,
-      maxFiles,
-      currentStorage,
-      maxStorage,
-      fileSize: file.size,
-      newTotal: currentStorage + file.size,
-    })
-
-    // Check file count limit
+    // Check limits
     if (currentFiles >= maxFiles) {
       return NextResponse.json(
         {
           error: "Upload limit exceeded",
           message: `${userData.plan_type} plan allows ${maxFiles} media files. Upgrade to upload more.`,
           upgrade_required: true,
-          debug: {
-            current_files: currentFiles,
-            max_files: maxFiles,
-            plan_type: userData.plan_type,
-          },
         },
         { status: 403 },
       )
     }
 
-    // Check storage limit (use plan's storage limit, not per-file limit)
     if (currentStorage + file.size > maxStorage) {
       const maxStorageMB = Math.round(maxStorage / 1024 / 1024)
-      const currentStorageMB = Math.round(currentStorage / 1024 / 1024)
-      const fileSizeMB = Math.round(file.size / 1024 / 1024)
-
       return NextResponse.json(
         {
           error: "Storage limit exceeded",
           message: `${userData.plan_type} plan allows ${maxStorageMB}MB total storage. Upgrade for more space.`,
           upgrade_required: true,
-          debug: {
-            current_storage_bytes: currentStorage,
-            current_storage_mb: currentStorageMB,
-            max_storage_bytes: maxStorage,
-            max_storage_mb: maxStorageMB,
-            file_size_bytes: file.size,
-            file_size_mb: fileSizeMB,
-            new_total_bytes: currentStorage + file.size,
-            new_total_mb: Math.round((currentStorage + file.size) / 1024 / 1024),
-            plan_type: userData.plan_type,
-          },
         },
         { status: 403 },
       )
     }
 
-    // Create storage URLs
+    // Upload to Vercel Blob
+    console.log("☁️ Uploading to Vercel Blob...")
     const timestamp = Date.now()
     const sanitizedName = file.name.replace(/[^a-zA-Z0-9.-]/g, "_")
     const uniqueFilename = `${user.id}/${timestamp}-${sanitizedName}`
-    const storageUrl = `/uploads/${timestamp}-${sanitizedName}`
+
+    const blob = await put(uniqueFilename, file, {
+      access: "public",
+      contentType: correctedMimeType,
+    })
+
+    console.log("✅ File uploaded to Blob:", blob.url)
 
     // Determine file type category
     const getFileTypeCategory = (mimeType: string): string => {
@@ -186,9 +163,7 @@ export async function POST(request: NextRequest) {
       return "other"
     }
 
-    console.log("🔍 Saving to database...")
-
-    // Insert with all required columns based on your table structure
+    // Save to database
     const mediaResult = await sql`
       INSERT INTO media_files (
         user_id, 
@@ -205,16 +180,14 @@ export async function POST(request: NextRequest) {
         ${file.name},
         ${getFileTypeCategory(correctedMimeType)},
         ${file.size}, 
-        ${storageUrl},
+        ${blob.url},
         ${correctedMimeType},
         NOW()
       )
       RETURNING *
     `
 
-    console.log("✅ Media file saved")
-
-    // Update user's usage counters (ensure we're adding numbers, not concatenating strings)
+    // Update user usage
     await sql`
       UPDATE users 
       SET 
@@ -223,22 +196,13 @@ export async function POST(request: NextRequest) {
       WHERE id = ${user.id}
     `
 
-    console.log("✅ User usage updated")
+    console.log("✅ Database updated")
 
     return NextResponse.json({
       success: true,
       file: mediaResult[0],
-      message: "File uploaded successfully (demo mode)",
-      debug: {
-        original_mime_type: file.type,
-        corrected_mime_type: correctedMimeType,
-        file_extension: fileExtension,
-        usage_after_upload: {
-          files: currentFiles + 1,
-          storage_bytes: currentStorage + file.size,
-          storage_mb: Math.round((currentStorage + file.size) / 1024 / 1024),
-        },
-      },
+      message: "File uploaded successfully",
+      blob_url: blob.url,
     })
   } catch (error) {
     console.error("❌ Upload error:", error)
