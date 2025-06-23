@@ -13,13 +13,14 @@ const ALLOWED_TYPES = [
   "video/webm",
   "video/quicktime",
   "application/pdf",
+  // Add text/plain for testing
+  "text/plain",
 ]
 
 export async function POST(request: NextRequest) {
   try {
     console.log("🔍 Starting file upload...")
 
-    // Check authentication
     const user = await getCurrentUser()
     if (!user) {
       console.log("❌ No user authenticated")
@@ -27,7 +28,6 @@ export async function POST(request: NextRequest) {
     }
     console.log("✅ User authenticated:", user.email)
 
-    // Get form data
     const formData = await request.formData()
     const file = formData.get("file") as File
 
@@ -45,22 +45,32 @@ export async function POST(request: NextRequest) {
     // Validate file type
     if (!ALLOWED_TYPES.includes(file.type)) {
       console.log("❌ Invalid file type:", file.type)
-      return NextResponse.json({ error: `File type ${file.type} not supported` }, { status: 400 })
+      return NextResponse.json(
+        {
+          error: `File type ${file.type} not supported`,
+          allowed_types: ALLOWED_TYPES,
+        },
+        { status: 400 },
+      )
     }
 
     // Validate file size
     if (file.size > MAX_FILE_SIZE) {
       console.log("❌ File too large:", file.size)
-      return NextResponse.json({ error: `File too large. Max size: ${MAX_FILE_SIZE / 1024 / 1024}MB` }, { status: 400 })
+      return NextResponse.json(
+        {
+          error: `File too large. Max size: ${MAX_FILE_SIZE / 1024 / 1024}MB`,
+        },
+        { status: 400 },
+      )
     }
 
     console.log("✅ File validation passed")
 
-    // Check database connection
     const sql = getDb()
     console.log("✅ Database connection established")
 
-    // Get user's current usage
+    // Get user's current usage (with proper error handling)
     console.log("🔍 Checking user plan...")
     const userResult = await sql`
       SELECT plan_type, media_files_count, storage_used_bytes
@@ -76,7 +86,7 @@ export async function POST(request: NextRequest) {
     const userData = userResult[0]
     console.log("✅ User data:", userData)
 
-    // Simple plan limit check (free plan: 5 files, 100MB)
+    // Simple plan limit check
     const currentFiles = userData.media_files_count || 0
     const currentStorage = userData.storage_used_bytes || 0
 
@@ -106,13 +116,20 @@ export async function POST(request: NextRequest) {
 
     console.log("✅ Plan limits check passed")
 
-    // For now, let's simulate file storage without Vercel Blob
-    // We'll store file info in database with a placeholder URL
+    // Create mock storage URL for now
     const timestamp = Date.now()
     const uniqueFilename = `${user.id}/${timestamp}-${file.name}`
-    const mockUrl = `/api/media/file/${timestamp}-${file.name.replace(/[^a-zA-Z0-9.-]/g, "_")}`
+    const mockUrl = `/uploads/${timestamp}-${file.name.replace(/[^a-zA-Z0-9.-]/g, "_")}`
 
     console.log("🔍 Saving to database...")
+
+    // Determine file type
+    const getFileType = (mimeType: string): string => {
+      if (mimeType.startsWith("image/")) return "image"
+      if (mimeType.startsWith("video/")) return "video"
+      if (mimeType === "application/pdf") return "document"
+      return "other"
+    }
 
     // Save to database
     const mediaResult = await sql`
@@ -123,7 +140,7 @@ export async function POST(request: NextRequest) {
         ${user.id}, 
         ${uniqueFilename}, 
         ${file.name}, 
-        ${file.type.startsWith("image/") ? "image" : file.type.startsWith("video/") ? "video" : "document"}, 
+        ${getFileType(file.type)}, 
         ${file.size}, 
         ${file.type}, 
         ${mockUrl}, 
@@ -148,7 +165,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       success: true,
       file: mediaResult[0],
-      message: "File uploaded successfully (demo mode)",
+      message: "File uploaded successfully (demo mode - no actual file storage yet)",
     })
   } catch (error) {
     console.error("❌ Upload error:", error)
@@ -156,7 +173,6 @@ export async function POST(request: NextRequest) {
       {
         error: "Failed to upload file",
         details: error instanceof Error ? error.message : "Unknown error",
-        stack: error instanceof Error ? error.stack : null,
       },
       { status: 500 },
     )
