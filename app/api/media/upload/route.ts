@@ -32,30 +32,20 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "No file provided" }, { status: 400 })
     }
 
-    // Debug: Show detailed file info
     console.log("📁 File details:", {
       name: file.name,
       size: file.size,
       type: file.type,
-      lastModified: file.lastModified,
     })
 
     // Get file extension
     const fileExtension = file.name.toLowerCase().substring(file.name.lastIndexOf("."))
-    console.log("📎 File extension:", fileExtension)
 
-    // Validate by MIME type OR file extension (more flexible)
+    // Validate by MIME type OR file extension
     const isValidMimeType = ALLOWED_TYPES.includes(file.type)
     const isValidExtension = ALLOWED_EXTENSIONS.includes(fileExtension)
 
     if (!isValidMimeType && !isValidExtension) {
-      console.log("❌ File validation failed:", {
-        mimeType: file.type,
-        extension: fileExtension,
-        allowedTypes: ALLOWED_TYPES,
-        allowedExtensions: ALLOWED_EXTENSIONS,
-      })
-
       return NextResponse.json(
         {
           error: `File not supported`,
@@ -63,43 +53,10 @@ export async function POST(request: NextRequest) {
             detected_mime_type: file.type,
             detected_extension: fileExtension,
             filename: file.name,
-            allowed_types: ALLOWED_TYPES,
-            allowed_extensions: ALLOWED_EXTENSIONS,
           },
         },
         { status: 400 },
       )
-    }
-
-    // If MIME type is wrong but extension is right, fix it
-    let correctedMimeType = file.type
-    if (!isValidMimeType && isValidExtension) {
-      console.log("🔧 Correcting MIME type based on extension")
-      switch (fileExtension) {
-        case ".jpg":
-        case ".jpeg":
-          correctedMimeType = "image/jpeg"
-          break
-        case ".png":
-          correctedMimeType = "image/png"
-          break
-        case ".gif":
-          correctedMimeType = "image/gif"
-          break
-        case ".webp":
-          correctedMimeType = "image/webp"
-          break
-        case ".mp4":
-          correctedMimeType = "video/mp4"
-          break
-        case ".webm":
-          correctedMimeType = "video/webm"
-          break
-        case ".pdf":
-          correctedMimeType = "application/pdf"
-          break
-      }
-      console.log("✅ MIME type corrected:", file.type, "→", correctedMimeType)
     }
 
     // Validate file size
@@ -150,34 +107,28 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Create mock storage URL (we'll add real Vercel Blob later)
+    // Create mock storage URL
     const timestamp = Date.now()
     const sanitizedName = file.name.replace(/[^a-zA-Z0-9.-]/g, "_")
     const uniqueFilename = `${user.id}/${timestamp}-${sanitizedName}`
     const mockUrl = `/uploads/${timestamp}-${sanitizedName}`
 
-    // Determine file type category
-    const getFileType = (mimeType: string): string => {
-      if (mimeType.startsWith("image/")) return "image"
-      if (mimeType.startsWith("video/")) return "video"
-      if (mimeType === "application/pdf") return "document"
-      return "other"
-    }
-
     console.log("🔍 Saving to database...")
 
-    // Insert with corrected MIME type
+    // Use basic column names that should exist
     const mediaResult = await sql`
       INSERT INTO media_files (
-        user_id, filename, original_name, file_type, file_size, 
-        mime_type, storage_url, created_at
+        user_id, 
+        filename, 
+        file_size, 
+        file_type,
+        url,
+        created_at
       ) VALUES (
         ${user.id}, 
-        ${uniqueFilename}, 
         ${file.name}, 
-        ${getFileType(correctedMimeType)}, 
-        ${file.size},
-        ${correctedMimeType},
+        ${file.size}, 
+        ${file.type},
         ${mockUrl}, 
         NOW()
       )
@@ -201,11 +152,6 @@ export async function POST(request: NextRequest) {
       success: true,
       file: mediaResult[0],
       message: "File uploaded successfully (demo mode)",
-      debug: {
-        original_mime_type: file.type,
-        corrected_mime_type: correctedMimeType,
-        file_extension: fileExtension,
-      },
     })
   } catch (error) {
     console.error("❌ Upload error:", error)
