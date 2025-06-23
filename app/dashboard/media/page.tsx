@@ -12,6 +12,7 @@ import { Badge } from "@/components/ui/badge"
 import { DashboardLayout } from "@/components/dashboard-layout"
 import { UploadMediaDialog } from "@/components/upload-media-dialog"
 import { UsageDashboard } from "@/components/usage-dashboard"
+import { MediaPreviewModal } from "@/components/media-preview-modal"
 
 interface MediaFile {
   id: number
@@ -33,6 +34,8 @@ export default function MediaPage() {
   const [mediaFiles, setMediaFiles] = useState<MediaFile[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [previewFile, setPreviewFile] = useState<MediaFile | null>(null)
+  const [showPreview, setShowPreview] = useState(false)
 
   const loadMediaFiles = async () => {
     try {
@@ -64,30 +67,36 @@ export default function MediaPage() {
     setShowUploadDialog(false)
   }
 
-  const getFileIcon = (type: string) => {
-    switch (type) {
-      case "video":
-        return <Video className="h-4 w-4" />
-      case "image":
-        return <Image className="h-4 w-4" />
-      case "document":
-        return <FileText className="h-4 w-4" />
-      default:
-        return <FileText className="h-4 w-4" />
-    }
+  const handlePreview = (file: MediaFile) => {
+    setPreviewFile(file)
+    setShowPreview(true)
   }
 
-  const getFileTypeColor = (type: string) => {
-    switch (type) {
-      case "video":
-        return "bg-blue-100 text-blue-800"
-      case "image":
-        return "bg-green-100 text-green-800"
-      case "document":
-        return "bg-orange-100 text-orange-800"
-      default:
-        return "bg-gray-100 text-gray-800"
-    }
+  const getFileIcon = (file: MediaFile) => {
+    const isImage = file.mime_type?.startsWith("image/") || file.file_type === "image"
+    const isVideo = file.mime_type?.startsWith("video/") || file.file_type === "video"
+
+    if (isVideo) return <Video className="h-4 w-4" />
+    if (isImage) return <Image className="h-4 w-4" />
+    return <FileText className="h-4 w-4" />
+  }
+
+  const getFileTypeColor = (file: MediaFile) => {
+    const isImage = file.mime_type?.startsWith("image/") || file.file_type === "image"
+    const isVideo = file.mime_type?.startsWith("video/") || file.file_type === "video"
+
+    if (isVideo) return "bg-blue-100 text-blue-800"
+    if (isImage) return "bg-green-100 text-green-800"
+    return "bg-orange-100 text-orange-800"
+  }
+
+  const getFileTypeLabel = (file: MediaFile) => {
+    const isImage = file.mime_type?.startsWith("image/") || file.file_type === "image"
+    const isVideo = file.mime_type?.startsWith("video/") || file.file_type === "video"
+
+    if (isVideo) return "video"
+    if (isImage) return "image"
+    return "document"
   }
 
   const formatFileSize = (bytes: number) => {
@@ -100,6 +109,18 @@ export default function MediaPage() {
 
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString()
+  }
+
+  const getThumbnail = (file: MediaFile) => {
+    const isImage = file.mime_type?.startsWith("image/") || file.file_type === "image"
+
+    if (isImage) {
+      // For images, use the actual image as thumbnail
+      return file.url
+    }
+
+    // For non-images, use placeholder
+    return `/placeholder.svg?height=128&width=200&text=${encodeURIComponent(file.original_name.split(".").pop()?.toUpperCase() || "FILE")}`
   }
 
   const filteredFiles = mediaFiles.filter((file) => file.original_name.toLowerCase().includes(searchTerm.toLowerCase()))
@@ -178,12 +199,13 @@ export default function MediaPage() {
                   <div className="space-y-3">
                     <div className="relative">
                       <img
-                        src={file.thumbnail_url || file.url || "/placeholder.svg"}
+                        src={getThumbnail(file) || "/placeholder.svg"}
                         alt={file.original_name}
-                        className="w-full h-32 object-cover rounded-lg bg-gray-100"
+                        className="w-full h-32 object-cover rounded-lg bg-gray-100 cursor-pointer"
+                        onClick={() => handlePreview(file)}
                         onError={(e) => {
                           // Fallback to placeholder if image fails to load
-                          e.currentTarget.src = "/placeholder.svg?height=128&width=200"
+                          e.currentTarget.src = `/placeholder.svg?height=128&width=200&text=${encodeURIComponent(file.original_name.split(".").pop()?.toUpperCase() || "FILE")}`
                         }}
                       />
                       <div className="absolute top-2 right-2">
@@ -194,7 +216,7 @@ export default function MediaPage() {
                             </Button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end">
-                            <DropdownMenuItem onClick={() => window.open(file.url, "_blank")}>
+                            <DropdownMenuItem onClick={() => handlePreview(file)}>
                               <Eye className="h-4 w-4 mr-2" />
                               Preview
                             </DropdownMenuItem>
@@ -210,9 +232,9 @@ export default function MediaPage() {
                         </DropdownMenu>
                       </div>
                       <div className="absolute bottom-2 left-2">
-                        <Badge className={`${getFileTypeColor(file.file_type)} text-xs`}>
-                          {getFileIcon(file.file_type)}
-                          <span className="ml-1 capitalize">{file.file_type}</span>
+                        <Badge className={`${getFileTypeColor(file)} text-xs`}>
+                          {getFileIcon(file)}
+                          <span className="ml-1 capitalize">{getFileTypeLabel(file)}</span>
                         </Badge>
                       </div>
                     </div>
@@ -257,6 +279,8 @@ export default function MediaPage() {
           onOpenChange={setShowUploadDialog}
           onUploadComplete={handleUploadComplete}
         />
+
+        <MediaPreviewModal file={previewFile} open={showPreview} onOpenChange={setShowPreview} />
       </div>
     </DashboardLayout>
   )

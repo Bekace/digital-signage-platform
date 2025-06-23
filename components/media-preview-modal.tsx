@@ -1,0 +1,212 @@
+"use client"
+
+import { useState } from "react"
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { Button } from "@/components/ui/button"
+import { Badge } from "@/components/ui/badge"
+import { Download } from "lucide-react"
+
+interface MediaFile {
+  id: number
+  filename: string
+  original_name: string
+  file_type: string
+  file_size: number
+  url: string
+  thumbnail_url?: string
+  created_at: string
+  mime_type?: string
+  dimensions?: string
+  duration?: number
+}
+
+interface MediaPreviewModalProps {
+  file: MediaFile | null
+  open: boolean
+  onOpenChange: (open: boolean) => void
+}
+
+export function MediaPreviewModal({ file, open, onOpenChange }: MediaPreviewModalProps) {
+  const [isPlaying, setIsPlaying] = useState(false)
+  const [isMuted, setIsMuted] = useState(false)
+
+  if (!file) return null
+
+  const formatFileSize = (bytes: number) => {
+    if (bytes === 0) return "0 Bytes"
+    const k = 1024
+    const sizes = ["Bytes", "KB", "MB", "GB"]
+    const i = Math.floor(Math.log(bytes) / Math.log(k))
+    return Number.parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i]
+  }
+
+  const formatDate = (dateString: string) => {
+    return new Date(dateString).toLocaleDateString("en-US", {
+      year: "numeric",
+      month: "long",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    })
+  }
+
+  const isImage = file.mime_type?.startsWith("image/") || file.file_type === "image"
+  const isVideo = file.mime_type?.startsWith("video/") || file.file_type === "video"
+  const isPDF = file.mime_type === "application/pdf" || file.file_type === "document"
+
+  const handleDownload = () => {
+    const link = document.createElement("a")
+    link.href = file.url
+    link.download = file.original_name
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-4xl max-h-[90vh] overflow-hidden">
+        <DialogHeader>
+          <DialogTitle className="flex items-center justify-between">
+            <span className="truncate pr-4">{file.original_name}</span>
+            <div className="flex items-center space-x-2">
+              <Button variant="outline" size="sm" onClick={handleDownload}>
+                <Download className="h-4 w-4 mr-2" />
+                Download
+              </Button>
+            </div>
+          </DialogTitle>
+        </DialogHeader>
+
+        <div className="space-y-4">
+          {/* Media Preview */}
+          <div className="flex justify-center bg-gray-50 rounded-lg p-4">
+            {isImage && (
+              <img
+                src={file.url || "/placeholder.svg"}
+                alt={file.original_name}
+                className="max-w-full max-h-[60vh] object-contain rounded-lg"
+                onError={(e) => {
+                  e.currentTarget.src = "/placeholder.svg?height=400&width=600&text=Image+Preview+Error"
+                }}
+              />
+            )}
+
+            {isVideo && (
+              <div className="relative">
+                <video
+                  src={file.url}
+                  className="max-w-full max-h-[60vh] rounded-lg"
+                  controls
+                  muted={isMuted}
+                  onPlay={() => setIsPlaying(true)}
+                  onPause={() => setIsPlaying(false)}
+                  onError={(e) => {
+                    console.error("Video playback error:", e)
+                  }}
+                >
+                  Your browser does not support video playback.
+                </video>
+              </div>
+            )}
+
+            {isPDF && (
+              <div className="text-center py-12">
+                <div className="bg-red-100 p-8 rounded-lg inline-block">
+                  <svg className="h-16 w-16 text-red-600 mx-auto mb-4" fill="currentColor" viewBox="0 0 20 20">
+                    <path
+                      fillRule="evenodd"
+                      d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4zm2 6a1 1 0 011-1h6a1 1 0 110 2H7a1 1 0 01-1-1zm1 3a1 1 0 100 2h6a1 1 0 100-2H7z"
+                      clipRule="evenodd"
+                    />
+                  </svg>
+                  <h3 className="text-lg font-medium text-gray-900 mb-2">PDF Document</h3>
+                  <p className="text-gray-600 mb-4">Click download to view this PDF file</p>
+                  <Button onClick={handleDownload}>
+                    <Download className="h-4 w-4 mr-2" />
+                    Download PDF
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            {!isImage && !isVideo && !isPDF && (
+              <div className="text-center py-12">
+                <div className="bg-gray-100 p-8 rounded-lg inline-block">
+                  <svg className="h-16 w-16 text-gray-400 mx-auto mb-4" fill="currentColor" viewBox="0 0 20 20">
+                    <path
+                      fillRule="evenodd"
+                      d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4z"
+                      clipRule="evenodd"
+                    />
+                  </svg>
+                  <h3 className="text-lg font-medium text-gray-900 mb-2">File Preview</h3>
+                  <p className="text-gray-600 mb-4">Preview not available for this file type</p>
+                  <Button onClick={handleDownload}>
+                    <Download className="h-4 w-4 mr-2" />
+                    Download File
+                  </Button>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* File Details */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-4 bg-gray-50 rounded-lg">
+            <div className="space-y-2">
+              <h4 className="font-medium text-gray-900">File Information</h4>
+              <div className="space-y-1 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-gray-600">File name:</span>
+                  <span className="font-medium">{file.original_name}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-600">File size:</span>
+                  <span className="font-medium">{formatFileSize(file.file_size)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-600">File type:</span>
+                  <Badge variant="secondary" className="text-xs">
+                    {file.mime_type || file.file_type}
+                  </Badge>
+                </div>
+                {file.dimensions && (
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Dimensions:</span>
+                    <span className="font-medium">{file.dimensions}</span>
+                  </div>
+                )}
+                {file.duration && (
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Duration:</span>
+                    <span className="font-medium">
+                      {Math.floor(file.duration / 60)}:{(file.duration % 60).toString().padStart(2, "0")}
+                    </span>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <h4 className="font-medium text-gray-900">Upload Details</h4>
+              <div className="space-y-1 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-gray-600">Uploaded:</span>
+                  <span className="font-medium">{formatDate(file.created_at)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-600">File ID:</span>
+                  <span className="font-medium font-mono text-xs">#{file.id}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-600">Storage:</span>
+                  <span className="font-medium text-green-600">Vercel Blob</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+  )
+}
