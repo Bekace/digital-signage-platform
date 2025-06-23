@@ -41,7 +41,6 @@
     "@react-native-async-storage/async-storage": "latest",
     "@react-navigation/native": "latest",
     "@react-navigation/stack": "latest",
-    "@vercel/blob": "latest",
     "autoprefixer": "^10.4.20",
     "bcryptjs": "latest",
     "class-variance-authority": "^0.7.1",
