@@ -59,6 +59,35 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // Fix MIME type if needed
+    let correctedMimeType = file.type
+    if (!isValidMimeType && isValidExtension) {
+      switch (fileExtension) {
+        case ".jpg":
+        case ".jpeg":
+          correctedMimeType = "image/jpeg"
+          break
+        case ".png":
+          correctedMimeType = "image/png"
+          break
+        case ".gif":
+          correctedMimeType = "image/gif"
+          break
+        case ".webp":
+          correctedMimeType = "image/webp"
+          break
+        case ".mp4":
+          correctedMimeType = "video/mp4"
+          break
+        case ".webm":
+          correctedMimeType = "video/webm"
+          break
+        case ".pdf":
+          correctedMimeType = "application/pdf"
+          break
+      }
+    }
+
     // Validate file size
     if (file.size > MAX_FILE_SIZE) {
       return NextResponse.json(
@@ -107,29 +136,41 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Create mock storage URL
+    // Create storage URLs
     const timestamp = Date.now()
     const sanitizedName = file.name.replace(/[^a-zA-Z0-9.-]/g, "_")
     const uniqueFilename = `${user.id}/${timestamp}-${sanitizedName}`
-    const mockUrl = `/uploads/${timestamp}-${sanitizedName}`
+    const storageUrl = `/uploads/${timestamp}-${sanitizedName}`
+
+    // Determine file type category
+    const getFileTypeCategory = (mimeType: string): string => {
+      if (mimeType.startsWith("image/")) return "image"
+      if (mimeType.startsWith("video/")) return "video"
+      if (mimeType === "application/pdf") return "document"
+      return "other"
+    }
 
     console.log("🔍 Saving to database...")
 
-    // Use basic column names that should exist
+    // Insert with all required columns based on your table structure
     const mediaResult = await sql`
       INSERT INTO media_files (
         user_id, 
         filename, 
-        file_size, 
+        original_name,
         file_type,
+        file_size, 
         url,
+        mime_type,
         created_at
       ) VALUES (
         ${user.id}, 
-        ${file.name}, 
+        ${uniqueFilename}, 
+        ${file.name},
+        ${getFileTypeCategory(correctedMimeType)},
         ${file.size}, 
-        ${file.type},
-        ${mockUrl}, 
+        ${storageUrl},
+        ${correctedMimeType},
         NOW()
       )
       RETURNING *
@@ -152,6 +193,11 @@ export async function POST(request: NextRequest) {
       success: true,
       file: mediaResult[0],
       message: "File uploaded successfully (demo mode)",
+      debug: {
+        original_mime_type: file.type,
+        corrected_mime_type: correctedMimeType,
+        file_extension: fileExtension,
+      },
     })
   } catch (error) {
     console.error("❌ Upload error:", error)
