@@ -2,7 +2,7 @@ import { type NextRequest, NextResponse } from "next/server"
 import { getCurrentUser } from "@/lib/auth"
 import { getDb } from "@/lib/db"
 
-const MAX_FILE_SIZE = 100 * 1024 * 1024 // 100MB
+const MAX_FILE_SIZE = 100 * 1024 * 1024 // 100MB per file
 const ALLOWED_TYPES = [
   "image/jpeg",
   "image/jpg",
@@ -88,21 +88,23 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Validate file size
+    // Validate file size (per file limit)
     if (file.size > MAX_FILE_SIZE) {
       return NextResponse.json(
-        { error: `File too large. Maximum size: ${MAX_FILE_SIZE / 1024 / 1024}MB` },
+        { error: `File too large. Maximum size per file: ${MAX_FILE_SIZE / 1024 / 1024}MB` },
         { status: 400 },
       )
     }
 
     const sql = getDb()
 
-    // Check user's current usage
+    // Get user's current usage and plan limits
     const userResult = await sql`
-      SELECT plan_type, media_files_count, storage_used_bytes
-      FROM users 
-      WHERE id = ${user.id}
+      SELECT u.plan_type, u.media_files_count, u.storage_used_bytes,
+             pl.max_media_files, pl.max_storage_bytes
+      FROM users u
+      LEFT JOIN plan_limits pl ON u.plan_type = pl.plan_type
+      WHERE u.id = ${user.id}
     `
 
     if (userResult.length === 0) {
@@ -112,25 +114,57 @@ export async function POST(request: NextRequest) {
     const userData = userResult[0]
     const currentFiles = userData.media_files_count || 0
     const currentStorage = userData.storage_used_bytes || 0
+    const maxFiles = userData.max_media_files || 5
+    const maxStorage = userData.max_storage_bytes || 104857600 // 100MB default
 
-    // Check free plan limits
-    if (currentFiles >= 5) {
+    console.log("📊 Usage check:", {
+      currentFiles,
+      maxFiles,
+      currentStorage,
+      maxStorage,
+      fileSize: file.size,
+      newTotal: currentStorage + file.size,
+    })
+
+    // Check file count limit
+    if (currentFiles >= maxFiles) {
       return NextResponse.json(
         {
           error: "Upload limit exceeded",
-          message: "Free plan allows 5 media files. Upgrade to upload more.",
+          message: `${userData.plan_type} plan allows ${maxFiles} media files. Upgrade to upload more.`,
           upgrade_required: true,
+          debug: {
+            current_files: currentFiles,
+            max_files: maxFiles,
+            plan_type: userData.plan_type,
+          },
         },
         { status: 403 },
       )
     }
 
-    if (currentStorage + file.size > MAX_FILE_SIZE) {
+    // Check storage limit (use plan's storage limit, not per-file limit)
+    if (currentStorage + file.size > maxStorage) {
+      const maxStorageMB = Math.round(maxStorage / 1024 / 1024)
+      const currentStorageMB = Math.round(currentStorage / 1024 / 1024)
+      const fileSizeMB = Math.round(file.size / 1024 / 1024)
+
       return NextResponse.json(
         {
           error: "Storage limit exceeded",
-          message: "Free plan allows 100MB total storage. Upgrade for more space.",
+          message: `${userData.plan_type} plan allows ${maxStorageMB}MB total storage. Upgrade for more space.`,
           upgrade_required: true,
+          debug: {
+            current_storage_bytes: currentStorage,
+            current_storage_mb: currentStorageMB,
+            max_storage_bytes: maxStorage,
+            max_storage_mb: maxStorageMB,
+            file_size_bytes: file.size,
+            file_size_mb: fileSizeMB,
+            new_total_bytes: currentStorage + file.size,
+            new_total_mb: Math.round((currentStorage + file.size) / 1024 / 1024),
+            plan_type: userData.plan_type,
+          },
         },
         { status: 403 },
       )
@@ -197,6 +231,11 @@ export async function POST(request: NextRequest) {
         original_mime_type: file.type,
         corrected_mime_type: correctedMimeType,
         file_extension: fileExtension,
+        usage_after_upload: {
+          files: currentFiles + 1,
+          storage_bytes: currentStorage + file.size,
+          storage_mb: Math.round((currentStorage + file.size) / 1024 / 1024),
+        },
       },
     })
   } catch (error) {
