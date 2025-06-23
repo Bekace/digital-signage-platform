@@ -1,10 +1,10 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Download } from "lucide-react"
+import { Download, Play, Pause, Volume2, VolumeX, AlertCircle } from "lucide-react"
 
 interface MediaFile {
   id: number
@@ -29,6 +29,15 @@ interface MediaPreviewModalProps {
 export function MediaPreviewModal({ file, open, onOpenChange }: MediaPreviewModalProps) {
   const [isPlaying, setIsPlaying] = useState(false)
   const [isMuted, setIsMuted] = useState(false)
+  const [imageError, setImageError] = useState(false)
+  const [videoError, setVideoError] = useState(false)
+
+  // Reset errors when file changes
+  useEffect(() => {
+    setImageError(false)
+    setVideoError(false)
+    setIsPlaying(false)
+  }, [file])
 
   if (!file) return null
 
@@ -58,9 +67,20 @@ export function MediaPreviewModal({ file, open, onOpenChange }: MediaPreviewModa
     const link = document.createElement("a")
     link.href = file.url
     link.download = file.original_name
+    link.target = "_blank"
     document.body.appendChild(link)
     link.click()
     document.body.removeChild(link)
+  }
+
+  const handleImageError = () => {
+    console.error("Image failed to load:", file.url)
+    setImageError(true)
+  }
+
+  const handleVideoError = (e: any) => {
+    console.error("Video failed to load:", file.url, e)
+    setVideoError(true)
   }
 
   return (
@@ -70,6 +90,9 @@ export function MediaPreviewModal({ file, open, onOpenChange }: MediaPreviewModa
           <DialogTitle className="flex items-center justify-between">
             <span className="truncate pr-4">{file.original_name}</span>
             <div className="flex items-center space-x-2">
+              <Badge variant="outline" className="text-xs">
+                {file.mime_type || file.file_type}
+              </Badge>
               <Button variant="outline" size="sm" onClick={handleDownload}>
                 <Download className="h-4 w-4 mr-2" />
                 Download
@@ -79,41 +102,118 @@ export function MediaPreviewModal({ file, open, onOpenChange }: MediaPreviewModa
         </DialogHeader>
 
         <div className="space-y-4">
+          {/* Debug Info */}
+          <div className="text-xs text-gray-500 bg-gray-50 p-2 rounded">
+            <strong>Debug:</strong> Type: {file.file_type}, MIME: {file.mime_type}, URL: {file.url?.substring(0, 50)}...
+          </div>
+
           {/* Media Preview */}
-          <div className="flex justify-center bg-gray-50 rounded-lg p-4">
-            {isImage && (
-              <img
-                src={file.url || "/placeholder.svg"}
-                alt={file.original_name}
-                className="max-w-full max-h-[60vh] object-contain rounded-lg"
-                onError={(e) => {
-                  e.currentTarget.src = "/placeholder.svg?height=400&width=600&text=Image+Preview+Error"
-                }}
-              />
+          <div className="flex justify-center bg-gray-50 rounded-lg p-4 min-h-[300px]">
+            {isImage && !imageError && (
+              <div className="relative max-w-full max-h-[60vh]">
+                <img
+                  src={file.url || "/placeholder.svg"}
+                  alt={file.original_name}
+                  className="max-w-full max-h-full object-contain rounded-lg shadow-lg"
+                  onError={handleImageError}
+                  onLoad={() => console.log("Image loaded successfully:", file.url)}
+                />
+              </div>
             )}
 
-            {isVideo && (
-              <div className="relative">
+            {isImage && imageError && (
+              <div className="text-center py-12">
+                <div className="bg-red-50 border border-red-200 p-8 rounded-lg inline-block">
+                  <AlertCircle className="h-16 w-16 text-red-400 mx-auto mb-4" />
+                  <h3 className="text-lg font-medium text-red-900 mb-2">Image Preview Error</h3>
+                  <p className="text-red-700 mb-4">Unable to load image preview</p>
+                  <div className="space-y-2">
+                    <Button onClick={handleDownload} variant="outline">
+                      <Download className="h-4 w-4 mr-2" />
+                      Download Image
+                    </Button>
+                    <Button onClick={() => window.open(file.url, "_blank")} variant="outline">
+                      Open in New Tab
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {isVideo && !videoError && (
+              <div className="relative max-w-full max-h-[60vh]">
                 <video
                   src={file.url}
-                  className="max-w-full max-h-[60vh] rounded-lg"
+                  className="max-w-full max-h-full rounded-lg shadow-lg"
                   controls
                   muted={isMuted}
                   onPlay={() => setIsPlaying(true)}
                   onPause={() => setIsPlaying(false)}
-                  onError={(e) => {
-                    console.error("Video playback error:", e)
-                  }}
+                  onError={handleVideoError}
+                  onLoadedData={() => console.log("Video loaded successfully:", file.url)}
+                  preload="metadata"
                 >
                   Your browser does not support video playback.
                 </video>
+
+                {/* Video Controls Overlay */}
+                <div className="absolute bottom-4 left-4 flex space-x-2">
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    onClick={() => {
+                      const video = document.querySelector("video")
+                      if (video) {
+                        if (isPlaying) {
+                          video.pause()
+                        } else {
+                          video.play()
+                        }
+                      }
+                    }}
+                  >
+                    {isPlaying ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    onClick={() => {
+                      const video = document.querySelector("video")
+                      if (video) {
+                        video.muted = !isMuted
+                        setIsMuted(!isMuted)
+                      }
+                    }}
+                  >
+                    {isMuted ? <VolumeX className="h-4 w-4" /> : <Volume2 className="h-4 w-4" />}
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            {isVideo && videoError && (
+              <div className="text-center py-12">
+                <div className="bg-red-50 border border-red-200 p-8 rounded-lg inline-block">
+                  <AlertCircle className="h-16 w-16 text-red-400 mx-auto mb-4" />
+                  <h3 className="text-lg font-medium text-red-900 mb-2">Video Preview Error</h3>
+                  <p className="text-red-700 mb-4">Unable to load video preview</p>
+                  <div className="space-y-2">
+                    <Button onClick={handleDownload} variant="outline">
+                      <Download className="h-4 w-4 mr-2" />
+                      Download Video
+                    </Button>
+                    <Button onClick={() => window.open(file.url, "_blank")} variant="outline">
+                      Open in New Tab
+                    </Button>
+                  </div>
+                </div>
               </div>
             )}
 
             {isPDF && (
               <div className="text-center py-12">
-                <div className="bg-red-100 p-8 rounded-lg inline-block">
-                  <svg className="h-16 w-16 text-red-600 mx-auto mb-4" fill="currentColor" viewBox="0 0 20 20">
+                <div className="bg-blue-50 border border-blue-200 p-8 rounded-lg inline-block">
+                  <svg className="h-16 w-16 text-blue-600 mx-auto mb-4" fill="currentColor" viewBox="0 0 20 20">
                     <path
                       fillRule="evenodd"
                       d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4zm2 6a1 1 0 011-1h6a1 1 0 110 2H7a1 1 0 01-1-1zm1 3a1 1 0 100 2h6a1 1 0 100-2H7z"
@@ -121,11 +221,16 @@ export function MediaPreviewModal({ file, open, onOpenChange }: MediaPreviewModa
                     />
                   </svg>
                   <h3 className="text-lg font-medium text-gray-900 mb-2">PDF Document</h3>
-                  <p className="text-gray-600 mb-4">Click download to view this PDF file</p>
-                  <Button onClick={handleDownload}>
-                    <Download className="h-4 w-4 mr-2" />
-                    Download PDF
-                  </Button>
+                  <p className="text-gray-600 mb-4">Click to download or view this PDF file</p>
+                  <div className="space-y-2">
+                    <Button onClick={handleDownload}>
+                      <Download className="h-4 w-4 mr-2" />
+                      Download PDF
+                    </Button>
+                    <Button onClick={() => window.open(file.url, "_blank")} variant="outline">
+                      Open in New Tab
+                    </Button>
+                  </div>
                 </div>
               </div>
             )}
@@ -142,10 +247,15 @@ export function MediaPreviewModal({ file, open, onOpenChange }: MediaPreviewModa
                   </svg>
                   <h3 className="text-lg font-medium text-gray-900 mb-2">File Preview</h3>
                   <p className="text-gray-600 mb-4">Preview not available for this file type</p>
-                  <Button onClick={handleDownload}>
-                    <Download className="h-4 w-4 mr-2" />
-                    Download File
-                  </Button>
+                  <div className="space-y-2">
+                    <Button onClick={handleDownload}>
+                      <Download className="h-4 w-4 mr-2" />
+                      Download File
+                    </Button>
+                    <Button onClick={() => window.open(file.url, "_blank")} variant="outline">
+                      Open in New Tab
+                    </Button>
+                  </div>
                 </div>
               </div>
             )}
@@ -201,6 +311,12 @@ export function MediaPreviewModal({ file, open, onOpenChange }: MediaPreviewModa
                 <div className="flex justify-between">
                   <span className="text-gray-600">Storage:</span>
                   <span className="font-medium text-green-600">Vercel Blob</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-600">URL:</span>
+                  <span className="font-mono text-xs truncate max-w-32" title={file.url}>
+                    {file.url?.substring(0, 30)}...
+                  </span>
                 </div>
               </div>
             </div>
