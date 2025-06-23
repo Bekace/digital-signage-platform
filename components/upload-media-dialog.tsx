@@ -1,175 +1,193 @@
 "use client"
 
-import type React from "react"
-
-import { useState } from "react"
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { useState, useCallback } from "react"
+import { useDropzone } from "react-dropzone"
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
 import { Progress } from "@/components/ui/progress"
-import { Upload, X, File, ImageIcon, Video } from "lucide-react"
+import { Alert, AlertDescription } from "@/components/ui/alert"
+import { Upload, X, CheckCircle, AlertCircle, File, Image, Video, FileText } from "lucide-react"
 
 interface UploadMediaDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
+  onUploadComplete?: () => void
 }
 
-export function UploadMediaDialog({ open, onOpenChange }: UploadMediaDialogProps) {
-  const [files, setFiles] = useState<File[]>([])
-  const [uploading, setUploading] = useState(false)
-  const [uploadProgress, setUploadProgress] = useState(0)
+interface UploadFile {
+  file: File
+  id: string
+  progress: number
+  status: "pending" | "uploading" | "success" | "error"
+  error?: string
+  url?: string
+}
 
-  const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const selectedFiles = Array.from(event.target.files || [])
-    setFiles(selectedFiles)
+export function UploadMediaDialog({ open, onOpenChange, onUploadComplete }: UploadMediaDialogProps) {
+  const [files, setFiles] = useState<UploadFile[]>([])
+  const [isUploading, setIsUploading] = useState(false)
+
+  const onDrop = useCallback((acceptedFiles: File[]) => {
+    const newFiles: UploadFile[] = acceptedFiles.map((file) => ({
+      file,
+      id: Math.random().toString(36).substr(2, 9),
+      progress: 0,
+      status: "pending",
+    }))
+    setFiles((prev) => [...prev, ...newFiles])
+  }, [])
+
+  const { getRootProps, getInputProps, isDragActive } = useDropzone({
+    onDrop,
+    accept: {
+      "image/*": [".png", ".jpg", ".jpeg", ".gif", ".webp"],
+      "video/*": [".mp4", ".webm", ".mov"],
+      "application/pdf": [".pdf"],
+    },
+    maxSize: 100 * 1024 * 1024, // 100MB
+  })
+
+  const removeFile = (id: string) => {
+    setFiles((prev) => prev.filter((f) => f.id !== id))
   }
 
-  const handleDrop = (event: React.DragEvent<HTMLDivElement>) => {
-    event.preventDefault()
-    const droppedFiles = Array.from(event.dataTransfer.files)
-    setFiles(droppedFiles)
-  }
+  const uploadFiles = async () => {
+    setIsUploading(true)
 
-  const handleDragOver = (event: React.DragEvent<HTMLDivElement>) => {
-    event.preventDefault()
-  }
+    for (const uploadFile of files) {
+      if (uploadFile.status !== "pending") continue
 
-  const removeFile = (index: number) => {
-    setFiles(files.filter((_, i) => i !== index))
-  }
+      try {
+        // Update status to uploading
+        setFiles((prev) =>
+          prev.map((f) => (f.id === uploadFile.id ? { ...f, status: "uploading" as const, progress: 0 } : f)),
+        )
 
-  const getFileIcon = (file: File) => {
-    if (file.type.startsWith("image/")) {
-      return <ImageIcon className="h-4 w-4" />
-    } else if (file.type.startsWith("video/")) {
-      return <Video className="h-4 w-4" />
-    } else {
-      return <File className="h-4 w-4" />
+        const formData = new FormData()
+        formData.append("file", uploadFile.file)
+
+        const response = await fetch("/api/media/upload", {
+          method: "POST",
+          body: formData,
+        })
+
+        const result = await response.json()
+
+        if (response.ok) {
+          setFiles((prev) =>
+            prev.map((f) =>
+              f.id === uploadFile.id ? { ...f, status: "success" as const, progress: 100, url: result.blob_url } : f,
+            ),
+          )
+        } else {
+          setFiles((prev) =>
+            prev.map((f) =>
+              f.id === uploadFile.id ? { ...f, status: "error" as const, error: result.message || result.error } : f,
+            ),
+          )
+        }
+      } catch (error) {
+        setFiles((prev) =>
+          prev.map((f) => (f.id === uploadFile.id ? { ...f, status: "error" as const, error: "Upload failed" } : f)),
+        )
+      }
+    }
+
+    setIsUploading(false)
+
+    // Call completion callback if all files succeeded
+    const allSuccessful = files.every((f) => f.status === "success")
+    if (allSuccessful && onUploadComplete) {
+      onUploadComplete()
     }
   }
 
-  const formatFileSize = (bytes: number) => {
-    if (bytes === 0) return "0 Bytes"
-    const k = 1024
-    const sizes = ["Bytes", "KB", "MB", "GB"]
-    const i = Math.floor(Math.log(bytes) / Math.log(k))
-    return Number.parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i]
-  }
-
-  const handleUpload = async () => {
-    if (files.length === 0) return
-
-    setUploading(true)
-    setUploadProgress(0)
-
-    // Simulate upload progress
-    const interval = setInterval(() => {
-      setUploadProgress((prev) => {
-        if (prev >= 100) {
-          clearInterval(interval)
-          setUploading(false)
-          setFiles([])
-          onOpenChange(false)
-          return 100
-        }
-        return prev + 10
-      })
-    }, 200)
-
-    // In a real app, you would upload files to your server/CDN here
-    // const formData = new FormData()
-    // files.forEach(file => formData.append('files', file))
-    // await fetch('/api/media/upload', { method: 'POST', body: formData })
+  const getFileIcon = (file: File) => {
+    if (file.type.startsWith("image/")) return <Image className="h-4 w-4" />
+    if (file.type.startsWith("video/")) return <Video className="h-4 w-4" />
+    if (file.type === "application/pdf") return <FileText className="h-4 w-4" />
+    return <File className="h-4 w-4" />
   }
 
   const handleClose = () => {
-    if (!uploading) {
+    if (!isUploading) {
       setFiles([])
-      setUploadProgress(0)
       onOpenChange(false)
     }
   }
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="sm:max-w-[600px]">
+      <DialogContent className="max-w-2xl">
         <DialogHeader>
           <DialogTitle>Upload Media Files</DialogTitle>
-          <DialogDescription>Upload images, videos, and documents to your media library</DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-6">
-          {/* File Drop Zone */}
+        <div className="space-y-4">
+          {/* Dropzone */}
           <div
-            className="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center hover:border-gray-400 transition-colors"
-            onDrop={handleDrop}
-            onDragOver={handleDragOver}
+            {...getRootProps()}
+            className={`border-2 border-dashed rounded-lg p-8 text-center cursor-pointer transition-colors ${
+              isDragActive ? "border-blue-400 bg-blue-50" : "border-gray-300 hover:border-gray-400"
+            }`}
           >
+            <input {...getInputProps()} />
             <Upload className="h-12 w-12 mx-auto text-gray-400 mb-4" />
-            <div className="space-y-2">
-              <p className="text-lg font-medium">Drop files here or click to browse</p>
-              <p className="text-sm text-gray-500">Supports: JPG, PNG, GIF, MP4, MOV, PDF (Max 100MB per file)</p>
-            </div>
-            <Input
-              type="file"
-              multiple
-              accept="image/*,video/*,.pdf"
-              onChange={handleFileSelect}
-              className="hidden"
-              id="file-upload"
-            />
-            <Label htmlFor="file-upload" className="cursor-pointer">
-              <Button variant="outline" className="mt-4" asChild>
-                <span>Browse Files</span>
-              </Button>
-            </Label>
+            <p className="text-lg font-medium text-gray-900 mb-2">
+              {isDragActive ? "Drop files here" : "Drag & drop files here"}
+            </p>
+            <p className="text-sm text-gray-500 mb-4">or click to browse files</p>
+            <p className="text-xs text-gray-400">
+              Supports: Images (PNG, JPG, GIF), Videos (MP4, WebM), PDFs • Max 100MB per file
+            </p>
           </div>
 
-          {/* Selected Files */}
+          {/* File List */}
           {files.length > 0 && (
-            <div className="space-y-4">
-              <h3 className="font-medium">Selected Files ({files.length})</h3>
-              <div className="max-h-60 overflow-y-auto space-y-2">
-                {files.map((file, index) => (
-                  <div key={index} className="flex items-center justify-between p-3 border rounded-lg">
-                    <div className="flex items-center space-x-3">
-                      {getFileIcon(file)}
-                      <div>
-                        <p className="text-sm font-medium truncate max-w-xs">{file.name}</p>
-                        <p className="text-xs text-gray-500">{formatFileSize(file.size)}</p>
-                      </div>
-                    </div>
-                    {!uploading && (
-                      <Button variant="ghost" size="sm" onClick={() => removeFile(index)}>
+            <div className="space-y-2 max-h-60 overflow-y-auto">
+              {files.map((uploadFile) => (
+                <div key={uploadFile.id} className="flex items-center space-x-3 p-3 bg-gray-50 rounded-lg">
+                  <div className="flex-shrink-0">{getFileIcon(uploadFile.file)}</div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-gray-900 truncate">{uploadFile.file.name}</p>
+                    <p className="text-xs text-gray-500">{(uploadFile.file.size / 1024 / 1024).toFixed(2)} MB</p>
+                    {uploadFile.status === "uploading" && <Progress value={uploadFile.progress} className="mt-1" />}
+                    {uploadFile.status === "error" && (
+                      <Alert className="mt-2">
+                        <AlertCircle className="h-4 w-4" />
+                        <AlertDescription className="text-xs">{uploadFile.error}</AlertDescription>
+                      </Alert>
+                    )}
+                  </div>
+                  <div className="flex-shrink-0">
+                    {uploadFile.status === "success" && <CheckCircle className="h-5 w-5 text-green-500" />}
+                    {uploadFile.status === "error" && <AlertCircle className="h-5 w-5 text-red-500" />}
+                    {uploadFile.status === "pending" && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => removeFile(uploadFile.id)}
+                        disabled={isUploading}
+                      >
                         <X className="h-4 w-4" />
                       </Button>
                     )}
                   </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Upload Progress */}
-          {uploading && (
-            <div className="space-y-2">
-              <div className="flex justify-between text-sm">
-                <span>Uploading files...</span>
-                <span>{uploadProgress}%</span>
-              </div>
-              <Progress value={uploadProgress} />
+                </div>
+              ))}
             </div>
           )}
 
           {/* Actions */}
           <div className="flex justify-end space-x-2">
-            <Button variant="outline" onClick={handleClose} disabled={uploading}>
-              Cancel
+            <Button variant="outline" onClick={handleClose} disabled={isUploading}>
+              {files.some((f) => f.status === "success") ? "Done" : "Cancel"}
             </Button>
-            <Button onClick={handleUpload} disabled={files.length === 0 || uploading}>
-              {uploading ? "Uploading..." : `Upload ${files.length} File${files.length !== 1 ? "s" : ""}`}
-            </Button>
+            {files.length > 0 && files.some((f) => f.status === "pending") && (
+              <Button onClick={uploadFiles} disabled={isUploading}>
+                {isUploading ? "Uploading..." : `Upload ${files.filter((f) => f.status === "pending").length} Files`}
+              </Button>
+            )}
           </div>
         </div>
       </DialogContent>

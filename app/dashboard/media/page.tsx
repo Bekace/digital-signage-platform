@@ -2,7 +2,7 @@
 
 import { useState } from "react"
 import Image from "next/image"
-import { Upload, Search, Filter, MoreHorizontal, Download, Trash2, Eye, ImageIcon, Video, FileText } from "lucide-react"
+import { Upload, Search, Filter, MoreHorizontal, Download, Trash2, Eye, Video, FileText } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
@@ -11,6 +11,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { Badge } from "@/components/ui/badge"
 import { DashboardLayout } from "@/components/dashboard-layout"
 import { UploadMediaDialog } from "@/components/upload-media-dialog"
+import { UsageDashboard } from "@/components/usage-dashboard"
 
 const mediaFiles = [
   {
@@ -130,61 +131,8 @@ export default function MediaPage() {
           </Button>
         </div>
 
-        {/* Stats */}
-        <div className="grid gap-4 md:grid-cols-4">
-          <Card>
-            <CardContent className="p-4">
-              <div className="flex items-center space-x-2">
-                <div className="p-2 bg-blue-100 rounded-lg">
-                  <Video className="h-4 w-4 text-blue-600" />
-                </div>
-                <div>
-                  <p className="text-sm font-medium">Videos</p>
-                  <p className="text-2xl font-bold">{mediaFiles.filter((f) => f.type === "video").length}</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="p-4">
-              <div className="flex items-center space-x-2">
-                <div className="p-2 bg-green-100 rounded-lg">
-                  <ImageIcon className="h-4 w-4 text-green-600" />
-                </div>
-                <div>
-                  <p className="text-sm font-medium">Images</p>
-                  <p className="text-2xl font-bold">{mediaFiles.filter((f) => f.type === "image").length}</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="p-4">
-              <div className="flex items-center space-x-2">
-                <div className="p-2 bg-orange-100 rounded-lg">
-                  <FileText className="h-4 w-4 text-orange-600" />
-                </div>
-                <div>
-                  <p className="text-sm font-medium">Documents</p>
-                  <p className="text-2xl font-bold">{mediaFiles.filter((f) => f.type === "document").length}</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="p-4">
-              <div className="flex items-center space-x-2">
-                <div className="p-2 bg-purple-100 rounded-lg">
-                  <Upload className="h-4 w-4 text-purple-600" />
-                </div>
-                <div>
-                  <p className="text-sm font-medium">Total Size</p>
-                  <p className="text-2xl font-bold">2.4GB</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
+        {/* Usage Dashboard */}
+        <UsageDashboard />
 
         {/* Media Grid */}
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
