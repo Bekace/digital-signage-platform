@@ -1,13 +1,14 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { Shield, Users, Loader2 } from "lucide-react"
+import { Shield, Users, Loader2, AlertCircle } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { DashboardLayout } from "@/components/dashboard-layout"
+import { Alert, AlertDescription } from "@/components/ui/alert"
 
 interface User {
   id: number
@@ -35,28 +36,45 @@ export default function AdminPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [updatingUser, setUpdatingUser] = useState<number | null>(null)
+  const [debugInfo, setDebugInfo] = useState<any>(null)
+
+  const runDebugCheck = async () => {
+    try {
+      const response = await fetch("/api/admin/debug")
+      const data = await response.json()
+      setDebugInfo(data)
+      console.log("Debug info:", data)
+    } catch (err) {
+      console.error("Debug check failed:", err)
+    }
+  }
 
   const loadUsers = async () => {
     try {
       setLoading(true)
+      setError(null)
+
+      console.log("Loading users...")
       const response = await fetch("/api/admin/users")
       const data = await response.json()
 
+      console.log("Users API response:", data)
+
       if (response.ok) {
         setUsers(data.users || [])
-        setError(null)
       } else {
-        setError(data.message || "Failed to load users")
+        setError(data.message || `Failed to load users (${response.status})`)
       }
     } catch (err) {
-      setError("Failed to load users")
       console.error("Error loading users:", err)
+      setError("Network error: " + err.message)
     } finally {
       setLoading(false)
     }
   }
 
   useEffect(() => {
+    runDebugCheck()
     loadUsers()
   }, [])
 
@@ -79,7 +97,7 @@ export default function AdminPage() {
         setError(data.message || "Failed to update user plan")
       }
     } catch (err) {
-      setError("Failed to update user plan")
+      setError("Failed to update user plan: " + err.message)
       console.error("Error updating user plan:", err)
     } finally {
       setUpdatingUser(null)
@@ -123,19 +141,6 @@ export default function AdminPage() {
     )
   }
 
-  if (error) {
-    return (
-      <DashboardLayout>
-        <div className="text-center py-12">
-          <p className="text-red-600 mb-4">{error}</p>
-          <Button onClick={loadUsers} variant="outline">
-            Try Again
-          </Button>
-        </div>
-      </DashboardLayout>
-    )
-  }
-
   return (
     <DashboardLayout>
       <div className="space-y-6">
@@ -143,6 +148,48 @@ export default function AdminPage() {
           <Shield className="h-6 w-6" />
           <h1 className="text-3xl font-bold">Admin Dashboard</h1>
         </div>
+
+        {/* Debug Info */}
+        {debugInfo && !debugInfo.success && (
+          <Alert>
+            <AlertCircle className="h-4 w-4" />
+            <AlertDescription>
+              <strong>Setup Required:</strong> {debugInfo.message}
+              <br />
+              <small>Step: {debugInfo.step}</small>
+              {debugInfo.step === "admin_check" && (
+                <div className="mt-2">
+                  <Button
+                    size="sm"
+                    onClick={() => {
+                      // Try to make current user admin
+                      fetch("/api/admin/debug", { method: "POST" }).then(() => window.location.reload())
+                    }}
+                  >
+                    Make Me Admin
+                  </Button>
+                </div>
+              )}
+            </AlertDescription>
+          </Alert>
+        )}
+
+        {error && (
+          <Alert variant="destructive">
+            <AlertCircle className="h-4 w-4" />
+            <AlertDescription>
+              {error}
+              <div className="mt-2">
+                <Button size="sm" variant="outline" onClick={loadUsers}>
+                  Try Again
+                </Button>
+                <Button size="sm" variant="outline" onClick={runDebugCheck} className="ml-2">
+                  Run Debug
+                </Button>
+              </div>
+            </AlertDescription>
+          </Alert>
+        )}
 
         {/* Stats Cards */}
         <div className="grid gap-4 md:grid-cols-3">
@@ -176,74 +223,76 @@ export default function AdminPage() {
         </div>
 
         {/* Users Table */}
-        <Card>
-          <CardHeader>
-            <CardTitle>User Management</CardTitle>
-            <CardDescription>Manage user accounts and subscription plans</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>User</TableHead>
-                  <TableHead>Company</TableHead>
-                  <TableHead>Plan</TableHead>
-                  <TableHead>Usage</TableHead>
-                  <TableHead>Admin</TableHead>
-                  <TableHead>Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {users.map((user) => {
-                  const limits = getPlanLimits(user.plan)
-                  return (
-                    <TableRow key={user.id}>
-                      <TableCell>
-                        <div>
-                          <div className="font-medium">
-                            {user.firstName} {user.lastName}
-                          </div>
-                          <div className="text-sm text-muted-foreground">{user.email}</div>
-                        </div>
-                      </TableCell>
-                      <TableCell>{user.company || "N/A"}</TableCell>
-                      <TableCell>
-                        <Badge className={getPlanBadgeColor(user.plan)}>{user.plan}</Badge>
-                      </TableCell>
-                      <TableCell>
-                        <div className="text-sm">
+        {users.length > 0 && (
+          <Card>
+            <CardHeader>
+              <CardTitle>User Management</CardTitle>
+              <CardDescription>Manage user accounts and subscription plans</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>User</TableHead>
+                    <TableHead>Company</TableHead>
+                    <TableHead>Plan</TableHead>
+                    <TableHead>Usage</TableHead>
+                    <TableHead>Admin</TableHead>
+                    <TableHead>Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {users.map((user) => {
+                    const limits = getPlanLimits(user.plan)
+                    return (
+                      <TableRow key={user.id}>
+                        <TableCell>
                           <div>
-                            Files: {user.mediaCount}/{limits.files}
+                            <div className="font-medium">
+                              {user.firstName} {user.lastName}
+                            </div>
+                            <div className="text-sm text-muted-foreground">{user.email}</div>
                           </div>
-                          <div>
-                            Storage: {formatFileSize(user.storageUsed)}/{formatFileSize(limits.storage)}
+                        </TableCell>
+                        <TableCell>{user.company || "N/A"}</TableCell>
+                        <TableCell>
+                          <Badge className={getPlanBadgeColor(user.plan)}>{user.plan}</Badge>
+                        </TableCell>
+                        <TableCell>
+                          <div className="text-sm">
+                            <div>
+                              Files: {user.mediaCount}/{limits.files}
+                            </div>
+                            <div>
+                              Storage: {formatFileSize(user.storageUsed)}/{formatFileSize(limits.storage)}
+                            </div>
                           </div>
-                        </div>
-                      </TableCell>
-                      <TableCell>{user.isAdmin && <Badge variant="secondary">Admin</Badge>}</TableCell>
-                      <TableCell>
-                        <Select
-                          value={user.plan}
-                          onValueChange={(newPlan) => updateUserPlan(user.id, newPlan)}
-                          disabled={updatingUser === user.id}
-                        >
-                          <SelectTrigger className="w-32">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="free">Free</SelectItem>
-                            <SelectItem value="pro">Pro</SelectItem>
-                            <SelectItem value="enterprise">Enterprise</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </TableCell>
-                    </TableRow>
-                  )
-                })}
-              </TableBody>
-            </Table>
-          </CardContent>
-        </Card>
+                        </TableCell>
+                        <TableCell>{user.isAdmin && <Badge variant="secondary">Admin</Badge>}</TableCell>
+                        <TableCell>
+                          <Select
+                            value={user.plan}
+                            onValueChange={(newPlan) => updateUserPlan(user.id, newPlan)}
+                            disabled={updatingUser === user.id}
+                          >
+                            <SelectTrigger className="w-32">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="free">Free</SelectItem>
+                              <SelectItem value="pro">Pro</SelectItem>
+                              <SelectItem value="enterprise">Enterprise</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </TableCell>
+                      </TableRow>
+                    )
+                  })}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+        )}
       </div>
     </DashboardLayout>
   )

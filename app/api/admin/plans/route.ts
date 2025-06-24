@@ -4,6 +4,8 @@ import { getDb } from "@/lib/db"
 
 export async function GET() {
   try {
+    console.log("Admin plans API: Starting request")
+
     const user = await getCurrentUser()
 
     if (!user) {
@@ -13,27 +15,55 @@ export async function GET() {
     const sql = getDb()
 
     // Check if user is admin
-    const adminCheck = await sql`
-      SELECT is_admin FROM users WHERE id = ${user.id} AND is_admin = true
-    `
+    let adminCheck
+    try {
+      adminCheck = await sql`
+        SELECT is_admin FROM users WHERE id = ${user.id} AND is_admin = true
+      `
+    } catch (err) {
+      console.log("Admin plans API: is_admin column error:", err.message)
+      return NextResponse.json({ success: false, message: "Admin access not configured" }, { status: 403 })
+    }
 
     if (adminCheck.length === 0) {
       return NextResponse.json({ success: false, message: "Access denied" }, { status: 403 })
     }
 
-    // Get all plan templates
-    const plans = await sql`
-      SELECT * FROM plan_templates 
-      ORDER BY sort_order ASC, created_at ASC
-    `
+    // Check if plan_templates table exists
+    try {
+      const plans = await sql`
+        SELECT * FROM plan_templates 
+        ORDER BY sort_order ASC, created_at ASC
+      `
 
-    return NextResponse.json({
-      success: true,
-      plans: plans,
-    })
+      console.log("Admin plans API: Found", plans.length, "plans")
+
+      return NextResponse.json({
+        success: true,
+        plans: plans.map((plan) => ({
+          ...plan,
+          features: typeof plan.features === "string" ? JSON.parse(plan.features) : plan.features || [],
+        })),
+      })
+    } catch (tableErr) {
+      console.log("Admin plans API: plan_templates table error:", tableErr.message)
+
+      // Return empty plans if table doesn't exist yet
+      return NextResponse.json({
+        success: true,
+        plans: [],
+        message: "Plan templates table not found - please run database setup",
+      })
+    }
   } catch (error) {
-    console.error("Get plans error:", error)
-    return NextResponse.json({ success: false, message: "Internal server error" }, { status: 500 })
+    console.error("Admin plans API: General error:", error)
+    return NextResponse.json(
+      {
+        success: false,
+        message: "Internal server error: " + error.message,
+      },
+      { status: 500 },
+    )
   }
 }
 
@@ -70,6 +100,20 @@ export async function POST(request: NextRequest) {
       sort_order,
     } = await request.json()
 
+    console.log("Creating plan with data:", {
+      plan_type,
+      name,
+      description,
+      max_media_files,
+      max_storage_bytes,
+      max_screens,
+      price_monthly,
+      price_yearly,
+      features,
+      is_active,
+      sort_order,
+    })
+
     // Create new plan
     const newPlan = await sql`
       INSERT INTO plan_templates (
@@ -85,11 +129,20 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      plan: newPlan[0],
+      plan: {
+        ...newPlan[0],
+        features: typeof newPlan[0].features === "string" ? JSON.parse(newPlan[0].features) : newPlan[0].features || [],
+      },
       message: "Plan created successfully",
     })
   } catch (error) {
     console.error("Create plan error:", error)
-    return NextResponse.json({ success: false, message: "Failed to create plan" }, { status: 500 })
+    return NextResponse.json(
+      {
+        success: false,
+        message: "Failed to create plan: " + error.message,
+      },
+      { status: 500 },
+    )
   }
 }
