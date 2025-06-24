@@ -67,9 +67,11 @@ export default function PlansAdminPage() {
   const [features, setFeatures] = useState<Feature[]>([])
   const [loading, setLoading] = useState(true)
   const [creating, setCreating] = useState(false)
+  const [updating, setUpdating] = useState<number | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [editingPlan, setEditingPlan] = useState<Plan | null>(null)
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false)
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
   const [newPlan, setNewPlan] = useState<Omit<Plan, "id" | "created_at" | "updated_at">>(defaultPlan)
   const { toast } = useToast()
 
@@ -188,21 +190,40 @@ export default function PlansAdminPage() {
     }
   }
 
-  const handleUpdatePlan = async (planId: number, updatedPlan: Partial<Plan>) => {
+  const handleEditPlan = (plan: Plan) => {
+    setEditingPlan({ ...plan })
+    setIsEditDialogOpen(true)
+  }
+
+  const handleUpdatePlan = async () => {
+    if (!editingPlan) return
+
+    const validationError = validatePlan(editingPlan)
+    if (validationError) {
+      toast({
+        title: "Validation Error",
+        description: validationError,
+        variant: "destructive",
+      })
+      return
+    }
+
     try {
-      const response = await fetch(`/api/admin/plans/${planId}`, {
+      setUpdating(editingPlan.id)
+      const response = await fetch(`/api/admin/plans/${editingPlan.id}`, {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify(updatedPlan),
+        body: JSON.stringify(editingPlan),
       })
 
       const data = await response.json()
 
       if (response.ok) {
-        setPlans(plans.map((plan) => (plan.id === planId ? data.plan : plan)))
+        setPlans(plans.map((plan) => (plan.id === editingPlan.id ? data.plan : plan)))
         setEditingPlan(null)
+        setIsEditDialogOpen(false)
         toast({
           title: "Success",
           description: "Plan updated successfully",
@@ -223,11 +244,13 @@ export default function PlansAdminPage() {
         description: "Failed to update plan",
         variant: "destructive",
       })
+    } finally {
+      setUpdating(null)
     }
   }
 
   const handleDeletePlan = async (planId: number) => {
-    if (!confirm("Are you sure you want to delete this plan?")) return
+    if (!confirm("Are you sure you want to delete this plan? This action cannot be undone.")) return
 
     try {
       const response = await fetch(`/api/admin/plans/${planId}`, {
@@ -278,6 +301,150 @@ export default function PlansAdminPage() {
     return isNaN(num) ? 0 : num
   }
 
+  const PlanForm = ({ plan, setPlan, isEdit = false }: { plan: any; setPlan: any; isEdit?: boolean }) => (
+    <div className="grid gap-4 py-4">
+      <div className="grid grid-cols-2 gap-4">
+        <div>
+          <Label htmlFor="plan_type">Plan Type *</Label>
+          <Input
+            id="plan_type"
+            value={plan.plan_type}
+            onChange={(e) => setPlan({ ...plan, plan_type: e.target.value })}
+            placeholder="e.g., premium"
+            required
+            disabled={isEdit} // Don't allow changing plan_type for existing plans
+          />
+          {isEdit && <p className="text-xs text-muted-foreground mt-1">Plan type cannot be changed</p>}
+        </div>
+        <div>
+          <Label htmlFor="name">Plan Name *</Label>
+          <Input
+            id="name"
+            value={plan.name}
+            onChange={(e) => setPlan({ ...plan, name: e.target.value })}
+            placeholder="e.g., Premium Plan"
+            required
+          />
+        </div>
+      </div>
+      <div>
+        <Label htmlFor="description">Description *</Label>
+        <Textarea
+          id="description"
+          value={plan.description}
+          onChange={(e) => setPlan({ ...plan, description: e.target.value })}
+          placeholder="Plan description..."
+          required
+        />
+      </div>
+      <div className="grid grid-cols-3 gap-4">
+        <div>
+          <Label htmlFor="max_media_files">Media Files Limit</Label>
+          <Input
+            id="max_media_files"
+            value={plan.max_media_files === -1 ? "" : plan.max_media_files}
+            onChange={(e) => setPlan({ ...plan, max_media_files: parseNumberInput(e.target.value) })}
+            placeholder="5 or 'unlimited'"
+          />
+          <p className="text-xs text-muted-foreground mt-1">Leave empty for unlimited</p>
+        </div>
+        <div>
+          <Label htmlFor="max_storage">Storage Limit (MB)</Label>
+          <Input
+            id="max_storage"
+            value={formatStorageInput(plan.max_storage_bytes)}
+            onChange={(e) => setPlan({ ...plan, max_storage_bytes: parseStorageInput(e.target.value) })}
+            placeholder="100 or 'unlimited'"
+          />
+          <p className="text-xs text-muted-foreground mt-1">Leave empty for unlimited</p>
+        </div>
+        <div>
+          <Label htmlFor="max_screens">Screens Limit</Label>
+          <Input
+            id="max_screens"
+            value={plan.max_screens === -1 ? "" : plan.max_screens}
+            onChange={(e) => setPlan({ ...plan, max_screens: parseNumberInput(e.target.value) })}
+            placeholder="1 or 'unlimited'"
+          />
+          <p className="text-xs text-muted-foreground mt-1">Leave empty for unlimited</p>
+        </div>
+      </div>
+      <div className="grid grid-cols-2 gap-4">
+        <div>
+          <Label htmlFor="price_monthly">Monthly Price ($)</Label>
+          <Input
+            id="price_monthly"
+            type="number"
+            step="0.01"
+            min="0"
+            value={plan.price_monthly}
+            onChange={(e) => setPlan({ ...plan, price_monthly: Number.parseFloat(e.target.value) || 0 })}
+            placeholder="0.00"
+          />
+        </div>
+        <div>
+          <Label htmlFor="price_yearly">Yearly Price ($)</Label>
+          <Input
+            id="price_yearly"
+            type="number"
+            step="0.01"
+            min="0"
+            value={plan.price_yearly}
+            onChange={(e) => setPlan({ ...plan, price_yearly: Number.parseFloat(e.target.value) || 0 })}
+            placeholder="0.00"
+          />
+        </div>
+      </div>
+      <div>
+        <Label htmlFor="sort_order">Sort Order</Label>
+        <Input
+          id="sort_order"
+          type="number"
+          min="0"
+          value={plan.sort_order}
+          onChange={(e) => setPlan({ ...plan, sort_order: Number.parseInt(e.target.value) || 0 })}
+          placeholder="0"
+        />
+      </div>
+      {features.length > 0 && (
+        <div>
+          <Label>Features</Label>
+          <div className="grid grid-cols-2 gap-2 mt-2 max-h-40 overflow-y-auto border rounded p-2">
+            {features.map((feature) => (
+              <div key={feature.id} className="flex items-center space-x-2">
+                <Checkbox
+                  id={`feature-${feature.id}`}
+                  checked={plan.features.includes(feature.feature_name)}
+                  onCheckedChange={(checked) => {
+                    if (checked) {
+                      setPlan({ ...plan, features: [...plan.features, feature.feature_name] })
+                    } else {
+                      setPlan({
+                        ...plan,
+                        features: plan.features.filter((f: string) => f !== feature.feature_name),
+                      })
+                    }
+                  }}
+                />
+                <Label htmlFor={`feature-${feature.id}`} className="text-sm">
+                  {feature.feature_name}
+                </Label>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+      <div className="flex items-center space-x-2">
+        <Switch
+          id="is_active"
+          checked={plan.is_active}
+          onCheckedChange={(checked) => setPlan({ ...plan, is_active: checked })}
+        />
+        <Label htmlFor="is_active">Active</Label>
+      </div>
+    </div>
+  )
+
   if (loading) {
     return (
       <DashboardLayout>
@@ -308,147 +475,7 @@ export default function PlansAdminPage() {
                 <DialogTitle>Create New Plan</DialogTitle>
                 <DialogDescription>Create a new subscription plan with custom limits and pricing</DialogDescription>
               </DialogHeader>
-              <div className="grid gap-4 py-4">
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <Label htmlFor="plan_type">Plan Type *</Label>
-                    <Input
-                      id="plan_type"
-                      value={newPlan.plan_type}
-                      onChange={(e) => setNewPlan({ ...newPlan, plan_type: e.target.value })}
-                      placeholder="e.g., premium"
-                      required
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="name">Plan Name *</Label>
-                    <Input
-                      id="name"
-                      value={newPlan.name}
-                      onChange={(e) => setNewPlan({ ...newPlan, name: e.target.value })}
-                      placeholder="e.g., Premium Plan"
-                      required
-                    />
-                  </div>
-                </div>
-                <div>
-                  <Label htmlFor="description">Description *</Label>
-                  <Textarea
-                    id="description"
-                    value={newPlan.description}
-                    onChange={(e) => setNewPlan({ ...newPlan, description: e.target.value })}
-                    placeholder="Plan description..."
-                    required
-                  />
-                </div>
-                <div className="grid grid-cols-3 gap-4">
-                  <div>
-                    <Label htmlFor="max_media_files">Media Files Limit</Label>
-                    <Input
-                      id="max_media_files"
-                      value={newPlan.max_media_files === -1 ? "" : newPlan.max_media_files}
-                      onChange={(e) => setNewPlan({ ...newPlan, max_media_files: parseNumberInput(e.target.value) })}
-                      placeholder="5 or 'unlimited'"
-                    />
-                    <p className="text-xs text-muted-foreground mt-1">Leave empty for unlimited</p>
-                  </div>
-                  <div>
-                    <Label htmlFor="max_storage">Storage Limit (MB)</Label>
-                    <Input
-                      id="max_storage"
-                      value={formatStorageInput(newPlan.max_storage_bytes)}
-                      onChange={(e) => setNewPlan({ ...newPlan, max_storage_bytes: parseStorageInput(e.target.value) })}
-                      placeholder="100 or 'unlimited'"
-                    />
-                    <p className="text-xs text-muted-foreground mt-1">Leave empty for unlimited</p>
-                  </div>
-                  <div>
-                    <Label htmlFor="max_screens">Screens Limit</Label>
-                    <Input
-                      id="max_screens"
-                      value={newPlan.max_screens === -1 ? "" : newPlan.max_screens}
-                      onChange={(e) => setNewPlan({ ...newPlan, max_screens: parseNumberInput(e.target.value) })}
-                      placeholder="1 or 'unlimited'"
-                    />
-                    <p className="text-xs text-muted-foreground mt-1">Leave empty for unlimited</p>
-                  </div>
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <Label htmlFor="price_monthly">Monthly Price ($)</Label>
-                    <Input
-                      id="price_monthly"
-                      type="number"
-                      step="0.01"
-                      min="0"
-                      value={newPlan.price_monthly}
-                      onChange={(e) =>
-                        setNewPlan({ ...newPlan, price_monthly: Number.parseFloat(e.target.value) || 0 })
-                      }
-                      placeholder="0.00"
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="price_yearly">Yearly Price ($)</Label>
-                    <Input
-                      id="price_yearly"
-                      type="number"
-                      step="0.01"
-                      min="0"
-                      value={newPlan.price_yearly}
-                      onChange={(e) => setNewPlan({ ...newPlan, price_yearly: Number.parseFloat(e.target.value) || 0 })}
-                      placeholder="0.00"
-                    />
-                  </div>
-                </div>
-                <div>
-                  <Label htmlFor="sort_order">Sort Order</Label>
-                  <Input
-                    id="sort_order"
-                    type="number"
-                    min="0"
-                    value={newPlan.sort_order}
-                    onChange={(e) => setNewPlan({ ...newPlan, sort_order: Number.parseInt(e.target.value) || 0 })}
-                    placeholder="0"
-                  />
-                </div>
-                {features.length > 0 && (
-                  <div>
-                    <Label>Features</Label>
-                    <div className="grid grid-cols-2 gap-2 mt-2 max-h-40 overflow-y-auto border rounded p-2">
-                      {features.map((feature) => (
-                        <div key={feature.id} className="flex items-center space-x-2">
-                          <Checkbox
-                            id={`feature-${feature.id}`}
-                            checked={newPlan.features.includes(feature.feature_name)}
-                            onCheckedChange={(checked) => {
-                              if (checked) {
-                                setNewPlan({ ...newPlan, features: [...newPlan.features, feature.feature_name] })
-                              } else {
-                                setNewPlan({
-                                  ...newPlan,
-                                  features: newPlan.features.filter((f) => f !== feature.feature_name),
-                                })
-                              }
-                            }}
-                          />
-                          <Label htmlFor={`feature-${feature.id}`} className="text-sm">
-                            {feature.feature_name}
-                          </Label>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-                <div className="flex items-center space-x-2">
-                  <Switch
-                    id="is_active"
-                    checked={newPlan.is_active}
-                    onCheckedChange={(checked) => setNewPlan({ ...newPlan, is_active: checked })}
-                  />
-                  <Label htmlFor="is_active">Active</Label>
-                </div>
-              </div>
+              <PlanForm plan={newPlan} setPlan={setNewPlan} />
               <div className="flex justify-end space-x-2">
                 <Button variant="outline" onClick={() => setIsCreateDialogOpen(false)} disabled={creating}>
                   Cancel
@@ -460,6 +487,32 @@ export default function PlansAdminPage() {
             </DialogContent>
           </Dialog>
         </div>
+
+        {/* Edit Plan Dialog */}
+        <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+          <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>Edit Plan</DialogTitle>
+              <DialogDescription>Modify the plan limits, pricing, and features</DialogDescription>
+            </DialogHeader>
+            {editingPlan && <PlanForm plan={editingPlan} setPlan={setEditingPlan} isEdit={true} />}
+            <div className="flex justify-end space-x-2">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setIsEditDialogOpen(false)
+                  setEditingPlan(null)
+                }}
+                disabled={updating !== null}
+              >
+                Cancel
+              </Button>
+              <Button onClick={handleUpdatePlan} disabled={updating !== null}>
+                {updating !== null ? "Updating..." : "Update Plan"}
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
 
         {error && (
           <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded">
@@ -513,7 +566,9 @@ export default function PlansAdminPage() {
         <Card>
           <CardHeader>
             <CardTitle>Subscription Plans</CardTitle>
-            <CardDescription>Manage plan limits, pricing, and features</CardDescription>
+            <CardDescription>
+              These are your active subscription plans. The first 3 were created from your database setup.
+            </CardDescription>
           </CardHeader>
           <CardContent>
             {plans.length === 0 ? (
@@ -589,7 +644,12 @@ export default function PlansAdminPage() {
                       </TableCell>
                       <TableCell>
                         <div className="flex space-x-2">
-                          <Button variant="outline" size="sm" onClick={() => setEditingPlan(plan)}>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleEditPlan(plan)}
+                            disabled={updating === plan.id}
+                          >
                             <Edit className="h-4 w-4" />
                           </Button>
                           <Button
