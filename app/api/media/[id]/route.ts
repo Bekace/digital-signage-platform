@@ -35,20 +35,34 @@ export async function DELETE(request: Request, { params }: { params: { id: strin
       WHERE id = ${fileId} AND user_id = ${user.id}
     `
 
-    // Update user's storage usage
+    // Update user's storage usage in the USERS table (not user_plans)
     await sql`
-      UPDATE user_plans 
-      SET storage_used = GREATEST(0, storage_used - ${file.file_size}),
-          files_used = GREATEST(0, files_used - 1)
-      WHERE user_id = ${user.id}
+      UPDATE users 
+      SET 
+        media_files_count = GREATEST(0, COALESCE(media_files_count, 0) - 1),
+        storage_used_bytes = GREATEST(0, COALESCE(storage_used_bytes::bigint, 0) - ${file.file_size})
+      WHERE id = ${user.id}
     `
+
+    console.log(`✅ File deleted: ${file.original_name}, Size: ${file.file_size} bytes`)
 
     return NextResponse.json({
       success: true,
       message: `File "${file.original_name}" deleted successfully`,
+      debug: {
+        file_id: fileId,
+        file_size: file.file_size,
+        user_id: user.id,
+      },
     })
   } catch (error) {
     console.error("Error deleting media file:", error)
-    return NextResponse.json({ error: "Failed to delete file" }, { status: 500 })
+    return NextResponse.json(
+      {
+        error: "Failed to delete file",
+        details: error instanceof Error ? error.message : "Unknown error",
+      },
+      { status: 500 },
+    )
   }
 }
