@@ -250,7 +250,7 @@ export function UploadMediaDialog({ open, onOpenChange, onUploadComplete }: Uplo
               )}
             </Button>
           )}
-        </div>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   )
