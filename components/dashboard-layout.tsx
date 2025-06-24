@@ -3,7 +3,7 @@
 import type React from "react"
 
 import { useState, useEffect } from "react"
-import { Home, Monitor, ImageIcon, Play, Settings, Shield, Menu } from "lucide-react"
+import { Home, Monitor, ImageIcon, Play, Settings, Shield, Menu, DollarSign, Users } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet"
@@ -22,7 +22,11 @@ const navigation = [
   { name: "Settings", href: "/dashboard/settings", icon: Settings },
 ]
 
-const adminNavigation = [{ name: "Admin", href: "/dashboard/admin", icon: Shield }]
+const adminNavigation = [
+  { name: "Admin Overview", href: "/dashboard/admin", icon: Shield },
+  { name: "User Management", href: "/dashboard/admin/users", icon: Users },
+  { name: "Plan Management", href: "/dashboard/admin/plans", icon: DollarSign },
+]
 
 export function DashboardLayout({ children }: DashboardLayoutProps) {
   const pathname = usePathname()
@@ -58,7 +62,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
           </div>
           <div className="mt-5 flex-grow flex flex-col">
             <nav className="flex-1 px-2 pb-4 space-y-1">
-              {allNavigation.map((item) => {
+              {navigation.map((item) => {
                 const isActive = pathname === item.href
                 return (
                   <Link
@@ -73,6 +77,30 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
                   </Link>
                 )
               })}
+
+              {isAdmin && (
+                <>
+                  <Separator className="my-4" />
+                  <div className="px-2 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                    Administration
+                  </div>
+                  {adminNavigation.map((item) => {
+                    const isActive = pathname === item.href
+                    return (
+                      <Link
+                        key={item.name}
+                        href={item.href}
+                        className={`group flex items-center px-2 py-2 text-sm font-medium rounded-md ${
+                          isActive ? "bg-gray-100 text-gray-900" : "text-gray-600 hover:bg-gray-50 hover:text-gray-900"
+                        }`}
+                      >
+                        <item.icon className="mr-3 h-5 w-5" />
+                        {item.name}
+                      </Link>
+                    )
+                  })}
+                </>
+              )}
             </nav>
           </div>
         </div>
