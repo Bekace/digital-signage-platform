@@ -13,6 +13,16 @@ import { DashboardLayout } from "@/components/dashboard-layout"
 import { UploadMediaDialog } from "@/components/upload-media-dialog"
 import { UsageDashboard } from "@/components/usage-dashboard"
 import { MediaPreviewModal } from "@/components/media-preview-modal"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 
 interface MediaFile {
   id: number
@@ -36,6 +46,9 @@ export default function MediaPage() {
   const [error, setError] = useState<string | null>(null)
   const [previewFile, setPreviewFile] = useState<MediaFile | null>(null)
   const [showPreview, setShowPreview] = useState(false)
+  const [deleteFile, setDeleteFile] = useState<MediaFile | null>(null)
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false)
+  const [deleting, setDeleting] = useState(false)
 
   const loadMediaFiles = async () => {
     try {
@@ -70,6 +83,40 @@ export default function MediaPage() {
   const handlePreview = (file: MediaFile) => {
     setPreviewFile(file)
     setShowPreview(true)
+  }
+
+  const handleDelete = async (file: MediaFile) => {
+    setDeleteFile(file)
+    setShowDeleteDialog(true)
+  }
+
+  const confirmDelete = async () => {
+    if (!deleteFile) return
+
+    try {
+      setDeleting(true)
+      const response = await fetch(`/api/media/${deleteFile.id}`, {
+        method: "DELETE",
+      })
+
+      const data = await response.json()
+
+      if (response.ok) {
+        // Remove file from local state
+        setMediaFiles((prev) => prev.filter((f) => f.id !== deleteFile.id))
+        setShowDeleteDialog(false)
+        setDeleteFile(null)
+        // Show success message (you can add toast notification here)
+        console.log(data.message)
+      } else {
+        setError(data.error || "Failed to delete file")
+      }
+    } catch (err) {
+      setError("Failed to delete file")
+      console.error("Error deleting file:", err)
+    } finally {
+      setDeleting(false)
+    }
   }
 
   const getFileIcon = (file: MediaFile) => {
@@ -224,7 +271,7 @@ export default function MediaPage() {
                               <Download className="h-4 w-4 mr-2" />
                               Download
                             </DropdownMenuItem>
-                            <DropdownMenuItem className="text-red-600">
+                            <DropdownMenuItem className="text-red-600" onClick={() => handleDelete(file)}>
                               <Trash2 className="h-4 w-4 mr-2" />
                               Delete
                             </DropdownMenuItem>
@@ -281,6 +328,34 @@ export default function MediaPage() {
         />
 
         <MediaPreviewModal file={previewFile} open={showPreview} onOpenChange={setShowPreview} />
+
+        {/* Delete Confirmation Dialog */}
+        <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Delete File</AlertDialogTitle>
+              <AlertDialogDescription>
+                Are you sure you want to delete "{deleteFile?.original_name}"? This action cannot be undone.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel disabled={deleting}>Cancel</AlertDialogCancel>
+              <AlertDialogAction onClick={confirmDelete} disabled={deleting} className="bg-red-600 hover:bg-red-700">
+                {deleting ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Deleting...
+                  </>
+                ) : (
+                  <>
+                    <Trash2 className="h-4 w-4 mr-2" />
+                    Delete
+                  </>
+                )}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </div>
     </DashboardLayout>
   )
