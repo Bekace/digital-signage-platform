@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { Plus, Edit, Trash2, Tag, Settings } from "lucide-react"
+import { Plus, Edit, Trash2, Tag, Settings, Search, MoreHorizontal, CheckSquare } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
@@ -19,6 +19,15 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
+import { Checkbox } from "@/components/ui/checkbox"
 import { DashboardLayout } from "@/components/dashboard-layout"
 import { useToast } from "@/hooks/use-toast"
 
@@ -52,14 +61,21 @@ const categories = [
 export default function FeaturesAdminPage() {
   const [features, setFeatures] = useState<Feature[]>([])
   const [groupedFeatures, setGroupedFeatures] = useState<Record<string, Feature[]>>({})
+  const [filteredFeatures, setFilteredFeatures] = useState<Feature[]>([])
   const [loading, setLoading] = useState(true)
   const [creating, setCreating] = useState(false)
   const [updating, setUpdating] = useState<number | null>(null)
+  const [bulkOperating, setBulkOperating] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [editingFeature, setEditingFeature] = useState<Feature | null>(null)
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false)
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
   const [newFeature, setNewFeature] = useState(defaultFeature)
+  const [selectedFeatures, setSelectedFeatures] = useState<number[]>([])
+  const [searchTerm, setSearchTerm] = useState("")
+  const [categoryFilter, setCategoryFilter] = useState<string>("all")
+  const [statusFilter, setStatusFilter] = useState<string>("all")
+  const [currentView, setCurrentView] = useState<"table" | "cards">("table")
   const { toast } = useToast()
 
   const loadFeatures = async () => {
@@ -97,6 +113,29 @@ export default function FeaturesAdminPage() {
     loadFeatures()
   }, [])
 
+  // Filter features based on search and filters
+  useEffect(() => {
+    let filtered = features
+
+    if (searchTerm) {
+      filtered = filtered.filter(
+        (feature) =>
+          feature.feature_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          feature.description.toLowerCase().includes(searchTerm.toLowerCase()),
+      )
+    }
+
+    if (categoryFilter !== "all") {
+      filtered = filtered.filter((feature) => feature.category === categoryFilter)
+    }
+
+    if (statusFilter !== "all") {
+      filtered = filtered.filter((feature) => (statusFilter === "active" ? feature.is_active : !feature.is_active))
+    }
+
+    setFilteredFeatures(filtered)
+  }, [features, searchTerm, categoryFilter, statusFilter])
+
   const validateFeature = (feature: typeof defaultFeature): string | null => {
     if (!feature.feature_name.trim()) return "Feature name is required"
     if (!feature.description.trim()) return "Feature description is required"
@@ -128,7 +167,7 @@ export default function FeaturesAdminPage() {
       const data = await response.json()
 
       if (response.ok) {
-        await loadFeatures() // Reload to get updated grouping
+        await loadFeatures()
         setIsCreateDialogOpen(false)
         setNewFeature(defaultFeature)
         toast({
@@ -187,7 +226,7 @@ export default function FeaturesAdminPage() {
       const data = await response.json()
 
       if (response.ok) {
-        await loadFeatures() // Reload to get updated grouping
+        await loadFeatures()
         setEditingFeature(null)
         setIsEditDialogOpen(false)
         toast({
@@ -248,6 +287,74 @@ export default function FeaturesAdminPage() {
         variant: "destructive",
       })
     }
+  }
+
+  const handleBulkOperation = async (action: string) => {
+    if (selectedFeatures.length === 0) {
+      toast({
+        title: "No Selection",
+        description: "Please select features to perform bulk operations",
+        variant: "destructive",
+      })
+      return
+    }
+
+    const actionText = action === "activate" ? "activate" : action === "deactivate" ? "deactivate" : "delete"
+    if (!confirm(`Are you sure you want to ${actionText} ${selectedFeatures.length} selected features?`)) return
+
+    try {
+      setBulkOperating(true)
+      const response = await fetch("/api/admin/features/bulk", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          action,
+          featureIds: selectedFeatures,
+        }),
+      })
+
+      const data = await response.json()
+
+      if (response.ok) {
+        await loadFeatures()
+        setSelectedFeatures([])
+        toast({
+          title: "Success",
+          description: data.message,
+        })
+      } else {
+        toast({
+          title: "Error",
+          description: data.message || `Failed to ${actionText} features`,
+          variant: "destructive",
+        })
+      }
+    } catch (err) {
+      console.error("Error performing bulk operation:", err)
+      toast({
+        title: "Error",
+        description: `Failed to ${actionText} features`,
+        variant: "destructive",
+      })
+    } finally {
+      setBulkOperating(false)
+    }
+  }
+
+  const handleSelectAll = () => {
+    if (selectedFeatures.length === filteredFeatures.length) {
+      setSelectedFeatures([])
+    } else {
+      setSelectedFeatures(filteredFeatures.map((f) => f.id))
+    }
+  }
+
+  const handleSelectFeature = (featureId: number) => {
+    setSelectedFeatures((prev) =>
+      prev.includes(featureId) ? prev.filter((id) => id !== featureId) : [...prev, featureId],
+    )
   }
 
   const FeatureForm = ({ feature, setFeature }: { feature: any; setFeature: any }) => (
@@ -404,46 +511,155 @@ export default function FeaturesAdminPage() {
           </Card>
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Most Used Category</CardTitle>
-              <Tag className="h-4 w-4 text-muted-foreground" />
+              <CardTitle className="text-sm font-medium">Selected</CardTitle>
+              <CheckSquare className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">
-                {Object.keys(groupedFeatures).length > 0
-                  ? Object.entries(groupedFeatures).sort(([, a], [, b]) => b.length - a.length)[0][0]
-                  : "None"}
-              </div>
+              <div className="text-2xl font-bold">{selectedFeatures.length}</div>
             </CardContent>
           </Card>
         </div>
 
-        {/* Features by Category */}
-        {Object.entries(groupedFeatures).map(([category, categoryFeatures]) => (
-          <Card key={category}>
-            <CardHeader>
-              <CardTitle className="capitalize">
-                {categories.find((c) => c.value === category)?.label || category} Features
-              </CardTitle>
-              <CardDescription>Features in the {category} category</CardDescription>
-            </CardHeader>
-            <CardContent>
+        {/* Search and Filters */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Search & Filter</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="flex flex-col md:flex-row gap-4">
+              <div className="flex-1">
+                <div className="relative">
+                  <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    placeholder="Search features..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="pl-8"
+                  />
+                </div>
+              </div>
+              <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+                <SelectTrigger className="w-[180px]">
+                  <SelectValue placeholder="All Categories" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Categories</SelectItem>
+                  {categories.map((cat) => (
+                    <SelectItem key={cat.value} value={cat.value}>
+                      {cat.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Select value={statusFilter} onValueChange={setStatusFilter}>
+                <SelectTrigger className="w-[140px]">
+                  <SelectValue placeholder="All Status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Status</SelectItem>
+                  <SelectItem value="active">Active</SelectItem>
+                  <SelectItem value="inactive">Inactive</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Bulk Operations */}
+        {selectedFeatures.length > 0 && (
+          <Card>
+            <CardContent className="pt-6">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-2">
+                  <span className="text-sm font-medium">{selectedFeatures.length} features selected</span>
+                </div>
+                <div className="flex space-x-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handleBulkOperation("activate")}
+                    disabled={bulkOperating}
+                  >
+                    Activate Selected
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handleBulkOperation("deactivate")}
+                    disabled={bulkOperating}
+                  >
+                    Deactivate Selected
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handleBulkOperation("delete")}
+                    disabled={bulkOperating}
+                    className="text-red-600 hover:text-red-700"
+                  >
+                    Delete Selected
+                  </Button>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Features Table */}
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle>Features ({filteredFeatures.length})</CardTitle>
+                <CardDescription>Manage your subscription plan features</CardDescription>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent>
+            {filteredFeatures.length === 0 ? (
+              <div className="text-center py-8">
+                <p className="text-muted-foreground">
+                  {features.length === 0
+                    ? "No features created yet. Create your first feature to get started."
+                    : "No features match your current filters."}
+                </p>
+              </div>
+            ) : (
               <Table>
                 <TableHeader>
                   <TableRow>
+                    <TableHead className="w-12">
+                      <Checkbox
+                        checked={selectedFeatures.length === filteredFeatures.length}
+                        onCheckedChange={handleSelectAll}
+                      />
+                    </TableHead>
                     <TableHead>Feature</TableHead>
+                    <TableHead>Category</TableHead>
                     <TableHead>Description</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead>Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {categoryFeatures.map((feature) => (
+                  {filteredFeatures.map((feature) => (
                     <TableRow key={feature.id}>
+                      <TableCell>
+                        <Checkbox
+                          checked={selectedFeatures.includes(feature.id)}
+                          onCheckedChange={() => handleSelectFeature(feature.id)}
+                        />
+                      </TableCell>
                       <TableCell>
                         <div className="font-medium">{feature.feature_name}</div>
                       </TableCell>
                       <TableCell>
-                        <div className="text-sm text-muted-foreground max-w-md">{feature.description}</div>
+                        <Badge variant="outline">
+                          {categories.find((c) => c.value === feature.category)?.label || feature.category}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        <div className="text-sm text-muted-foreground max-w-md truncate">{feature.description}</div>
                       </TableCell>
                       <TableCell>
                         <Badge variant={feature.is_active ? "default" : "secondary"}>
@@ -451,42 +667,39 @@ export default function FeaturesAdminPage() {
                         </Badge>
                       </TableCell>
                       <TableCell>
-                        <div className="flex space-x-2">
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => handleEditFeature(feature)}
-                            disabled={updating === feature.id}
-                          >
-                            <Edit className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => handleDeleteFeature(feature.id)}
-                            className="text-red-600 hover:text-red-700"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </div>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" className="h-8 w-8 p-0">
+                              <MoreHorizontal className="h-4 w-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuLabel>Actions</DropdownMenuLabel>
+                            <DropdownMenuItem onClick={() => handleEditFeature(feature)}>
+                              <Edit className="mr-2 h-4 w-4" />
+                              Edit
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              onClick={() => handleBulkOperation(feature.is_active ? "deactivate" : "activate")}
+                            >
+                              <Settings className="mr-2 h-4 w-4" />
+                              {feature.is_active ? "Deactivate" : "Activate"}
+                            </DropdownMenuItem>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem onClick={() => handleDeleteFeature(feature.id)} className="text-red-600">
+                              <Trash2 className="mr-2 h-4 w-4" />
+                              Delete
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
                       </TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
               </Table>
-            </CardContent>
-          </Card>
-        ))}
-
-        {features.length === 0 && (
-          <Card>
-            <CardContent className="text-center py-8">
-              <p className="text-muted-foreground">
-                No features created yet. Create your first feature to get started.
-              </p>
-            </CardContent>
-          </Card>
-        )}
+            )}
+          </CardContent>
+        </Card>
       </div>
     </DashboardLayout>
   )

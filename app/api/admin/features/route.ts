@@ -28,9 +28,19 @@ export async function GET() {
         ORDER BY category ASC, feature_name ASC
       `
 
+      // Group features by category
+      const groupedFeatures = features.reduce((acc, feature) => {
+        if (!acc[feature.category]) {
+          acc[feature.category] = []
+        }
+        acc[feature.category].push(feature)
+        return acc
+      }, {})
+
       return NextResponse.json({
         success: true,
         features: features,
+        groupedFeatures: groupedFeatures,
       })
     } catch (tableErr) {
       console.log("Features API: plan_features table error:", tableErr.message)
@@ -39,6 +49,7 @@ export async function GET() {
       return NextResponse.json({
         success: true,
         features: [],
+        groupedFeatures: {},
         message: "Plan features table not found - please run database setup",
       })
     }
