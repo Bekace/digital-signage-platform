@@ -21,29 +21,36 @@ export async function GET() {
       return NextResponse.json({ success: false, message: "Access denied" }, { status: 403 })
     }
 
-    // Get all features grouped by category
-    const features = await sql`
-      SELECT * FROM plan_features 
-      ORDER BY category, feature_name
-    `
+    try {
+      // Get all features
+      const features = await sql`
+        SELECT * FROM plan_features 
+        ORDER BY category ASC, feature_name ASC
+      `
 
-    // Group features by category
-    const groupedFeatures = features.reduce((acc, feature) => {
-      if (!acc[feature.category]) {
-        acc[feature.category] = []
-      }
-      acc[feature.category].push(feature)
-      return acc
-    }, {})
+      return NextResponse.json({
+        success: true,
+        features: features,
+      })
+    } catch (tableErr) {
+      console.log("Features API: plan_features table error:", tableErr.message)
 
-    return NextResponse.json({
-      success: true,
-      features: features,
-      groupedFeatures: groupedFeatures,
-    })
+      // Return empty features if table doesn't exist yet
+      return NextResponse.json({
+        success: true,
+        features: [],
+        message: "Plan features table not found - please run database setup",
+      })
+    }
   } catch (error) {
     console.error("Get features error:", error)
-    return NextResponse.json({ success: false, message: "Internal server error" }, { status: 500 })
+    return NextResponse.json(
+      {
+        success: false,
+        message: "Internal server error: " + error.message,
+      },
+      { status: 500 },
+    )
   }
 }
 
@@ -71,7 +78,7 @@ export async function POST(request: NextRequest) {
     // Create new feature
     const newFeature = await sql`
       INSERT INTO plan_features (feature_name, description, category, is_active)
-      VALUES (${feature_name}, ${description}, ${category || "general"}, ${is_active !== false})
+      VALUES (${feature_name}, ${description}, ${category}, ${is_active})
       RETURNING *
     `
 
@@ -82,6 +89,12 @@ export async function POST(request: NextRequest) {
     })
   } catch (error) {
     console.error("Create feature error:", error)
-    return NextResponse.json({ success: false, message: "Failed to create feature" }, { status: 500 })
+    return NextResponse.json(
+      {
+        success: false,
+        message: "Failed to create feature: " + error.message,
+      },
+      { status: 500 },
+    )
   }
 }
