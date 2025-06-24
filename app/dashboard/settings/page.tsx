@@ -12,6 +12,17 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { DashboardLayout } from "@/components/dashboard-layout"
 import { useToast } from "@/hooks/use-toast"
 
+const formatBytes = (bytes: number): string => {
+  if (bytes === 0) return "0 Bytes"
+  if (bytes === -1) return "Unlimited"
+
+  const k = 1024
+  const sizes = ["Bytes", "KB", "MB", "GB", "TB"]
+  const i = Math.floor(Math.log(bytes) / Math.log(k))
+
+  return Number.parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i]
+}
+
 interface UserProfile {
   id: string
   email: string
@@ -41,6 +52,7 @@ export default function SettingsPage() {
     companyPhone: "",
   })
   const [companySaving, setCompanySaving] = useState(false)
+  const [planData, setPlanData] = useState<any>(null)
 
   const [passwordData, setPasswordData] = useState({
     currentPassword: "",
@@ -60,28 +72,28 @@ export default function SettingsPage() {
 
   const fetchUserProfile = async () => {
     try {
-      const response = await fetch("/api/user/profile")
-      const data = await response.json()
+      const [profileResponse, planResponse] = await Promise.all([fetch("/api/user/profile"), fetch("/api/user/plan")])
 
-      if (data.success && data.user) {
-        setUser(data.user)
+      const profileData = await profileResponse.json()
+      const planDataResponse = await planResponse.json()
+
+      if (profileData.success && profileData.user) {
+        setUser(profileData.user)
         setCompanyData({
-          companyName: data.user.company || "",
-          companyAddress: data.user.companyAddress || "",
-          companyPhone: data.user.companyPhone || "",
-        })
-      } else {
-        toast({
-          title: "Error",
-          description: "Failed to load user profile",
-          variant: "destructive",
+          companyName: profileData.user.company || "",
+          companyAddress: profileData.user.companyAddress || "",
+          companyPhone: profileData.user.companyPhone || "",
         })
       }
+
+      if (planResponse.ok) {
+        setPlanData(planDataResponse)
+      }
     } catch (error) {
-      console.error("Failed to fetch user profile:", error)
+      console.error("Failed to fetch user data:", error)
       toast({
         title: "Error",
-        description: "Failed to load user profile",
+        description: "Failed to load user data",
         variant: "destructive",
       })
     } finally {
@@ -359,63 +371,109 @@ export default function SettingsPage() {
                 <CardDescription>Manage your subscription and payment methods</CardDescription>
               </CardHeader>
               <CardContent className="space-y-6">
-                <div className="flex justify-between items-center p-4 border rounded-lg">
-                  <div>
-                    <h3 className="font-semibold">Current Plan</h3>
-                    <p className="text-sm text-gray-600">{getPlanDisplayName(user.plan)}</p>
-                  </div>
-                  <div className="text-right">
-                    <div className="text-2xl font-bold">$180/month</div>
-                    <div className="text-sm text-gray-600">12 screens × $15</div>
-                  </div>
-                </div>
+                {planData ? (
+                  <>
+                    <div className="flex justify-between items-center p-4 border rounded-lg">
+                      <div>
+                        <h3 className="font-semibold">Current Plan</h3>
+                        <p className="text-sm text-gray-600 capitalize">{planData.usage.plan_type} Plan</p>
+                      </div>
+                      <div className="text-right">
+                        <div className="text-2xl font-bold">
+                          {planData.limits.price_monthly === 0 ? "Free" : `$${planData.limits.price_monthly}/month`}
+                        </div>
+                        <div className="text-sm text-gray-600">
+                          {planData.usage.screens_count} screen{planData.usage.screens_count !== 1 ? "s" : ""} active
+                        </div>
+                      </div>
+                    </div>
 
-                <div className="space-y-4">
-                  <h3 className="font-semibold">Account Information</h3>
-                  <div className="space-y-2">
-                    <div className="flex justify-between">
-                      <span>Account Holder</span>
-                      <span>
-                        {user.firstName} {user.lastName}
-                      </span>
+                    <div className="space-y-4">
+                      <h3 className="font-semibold">Account Information</h3>
+                      <div className="space-y-2">
+                        <div className="flex justify-between">
+                          <span>Account Holder</span>
+                          <span>
+                            {user.firstName} {user.lastName}
+                          </span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span>Email</span>
+                          <span>{user.email}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span>Plan Type</span>
+                          <span className="capitalize">{planData.usage.plan_type}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span>Member Since</span>
+                          <span>{formatDate(user.createdAt)}</span>
+                        </div>
+                        {planData.plan_expires_at && (
+                          <div className="flex justify-between">
+                            <span>Plan Expires</span>
+                            <span>{formatDate(planData.plan_expires_at)}</span>
+                          </div>
+                        )}
+                      </div>
                     </div>
-                    <div className="flex justify-between">
-                      <span>Email</span>
-                      <span>{user.email}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span>Plan Type</span>
-                      <span>{getPlanDisplayName(user.plan)}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span>Member Since</span>
-                      <span>{formatDate(user.createdAt)}</span>
-                    </div>
-                  </div>
-                </div>
 
-                <div className="space-y-4">
-                  <h3 className="font-semibold">Screen Usage</h3>
-                  <div className="space-y-2">
-                    <div className="flex justify-between">
-                      <span>Active Screens</span>
-                      <span>12</span>
+                    <div className="space-y-4">
+                      <h3 className="font-semibold">Usage Summary</h3>
+                      <div className="space-y-2">
+                        <div className="flex justify-between">
+                          <span>Active Screens</span>
+                          <span>
+                            {planData.usage.screens_count} /{" "}
+                            {planData.limits.max_screens === -1 ? "Unlimited" : planData.limits.max_screens}
+                          </span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span>Media Files</span>
+                          <span>
+                            {planData.usage.media_files_count} /{" "}
+                            {planData.limits.max_media_files === -1 ? "Unlimited" : planData.limits.max_media_files}
+                          </span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span>Storage Used</span>
+                          <span>
+                            {formatBytes(planData.usage.storage_used_bytes)} /{" "}
+                            {formatBytes(planData.limits.max_storage_bytes)}
+                          </span>
+                        </div>
+                        <div className="flex justify-between font-semibold">
+                          <span>Monthly Cost</span>
+                          <span>
+                            {planData.limits.price_monthly === 0 ? "Free" : `$${planData.limits.price_monthly}`}
+                          </span>
+                        </div>
+                      </div>
                     </div>
-                    <div className="flex justify-between">
-                      <span>Monthly Cost per Screen</span>
-                      <span>$15</span>
-                    </div>
-                    <div className="flex justify-between font-semibold">
-                      <span>Total Monthly Cost</span>
-                      <span>$180</span>
-                    </div>
-                  </div>
-                </div>
 
-                <div className="flex space-x-4">
-                  <Button variant="outline">Switch to Annual</Button>
-                  <Button variant="outline">Download Invoice</Button>
-                </div>
+                    <div className="space-y-4">
+                      <h3 className="font-semibold">Plan Features</h3>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                        {planData.limits.features.map((feature: string, index: number) => (
+                          <div key={index} className="flex items-center space-x-2">
+                            <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                            <span className="text-sm">{feature}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="flex space-x-4">
+                      {planData.usage.plan_type === "free" && <Button>Upgrade to Pro</Button>}
+                      {planData.usage.plan_type === "pro" && <Button variant="outline">Upgrade to Enterprise</Button>}
+                      <Button variant="outline">Download Invoice</Button>
+                    </div>
+                  </>
+                ) : (
+                  <div className="text-center py-8">
+                    <p className="text-gray-500">Loading billing information...</p>
+                  </div>
+                )}
               </CardContent>
             </Card>
           </TabsContent>
