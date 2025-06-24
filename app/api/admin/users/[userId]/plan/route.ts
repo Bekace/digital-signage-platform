@@ -1,43 +1,45 @@
 import { type NextRequest, NextResponse } from "next/server"
-import { getDb } from "@/lib/db"
 import { getCurrentUser } from "@/lib/auth"
+import { getDb } from "@/lib/db"
 
 export async function PUT(request: NextRequest, { params }: { params: { userId: string } }) {
   try {
-    const currentUser = await getCurrentUser()
-    if (!currentUser) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    const user = await getCurrentUser()
+
+    if (!user) {
+      return NextResponse.json({ success: false, message: "Not authenticated" }, { status: 401 })
     }
 
     const sql = getDb()
 
     // Check if user is admin
     const adminCheck = await sql`
-      SELECT is_admin FROM users WHERE id = ${currentUser.id}
+      SELECT is_admin FROM users WHERE id = ${user.id} AND is_admin = true
     `
 
-    if (!adminCheck[0]?.is_admin) {
-      return NextResponse.json({ error: "Admin access required" }, { status: 403 })
+    if (adminCheck.length === 0) {
+      return NextResponse.json({ success: false, message: "Access denied" }, { status: 403 })
     }
 
-    const { plan_type } = await request.json()
-    const userId = params.userId
+    const { plan } = await request.json()
 
-    // Validate plan type
-    if (!["free", "pro", "enterprise"].includes(plan_type)) {
-      return NextResponse.json({ error: "Invalid plan type" }, { status: 400 })
+    if (!plan || !["free", "pro", "enterprise"].includes(plan)) {
+      return NextResponse.json({ success: false, message: "Invalid plan" }, { status: 400 })
     }
 
     // Update user plan
     await sql`
       UPDATE users 
-      SET plan_type = ${plan_type}
-      WHERE id = ${userId}
+      SET plan = ${plan}
+      WHERE id = ${params.userId}
     `
 
-    return NextResponse.json({ success: true })
+    return NextResponse.json({
+      success: true,
+      message: "User plan updated successfully",
+    })
   } catch (error) {
-    console.error("Error updating user plan:", error)
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 })
+    console.error("Update user plan error:", error)
+    return NextResponse.json({ success: false, message: "Internal server error" }, { status: 500 })
   }
 }

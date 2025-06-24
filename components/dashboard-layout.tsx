@@ -1,138 +1,128 @@
 "use client"
 
-import { Home, LayoutDashboard, ListChecks, Settings, Shield, User, Monitor, ImageIcon, Play } from "lucide-react"
+import type React from "react"
+
+import { useState, useEffect } from "react"
+import { Home, Monitor, ImageIcon, Play, Settings, Shield, Menu } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
-import { ScrollArea } from "@/components/ui/scroll-area"
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet"
-import { Link } from "lucide-react"
 import { usePathname } from "next/navigation"
-import { useEffect, useState } from "react"
+import Link from "next/link"
 
-interface SidebarProps {
-  isMobile: boolean
+interface DashboardLayoutProps {
+  children: React.ReactNode
 }
 
-const sidebarNavItems = [
-  {
-    name: "Home",
-    href: "/dashboard",
-    icon: Home,
-  },
-  {
-    name: "Tasks",
-    href: "/dashboard/tasks",
-    icon: ListChecks,
-  },
-  {
-    name: "Settings",
-    href: "/dashboard/settings",
-    icon: Settings,
-  },
-  {
-    name: "Profile",
-    href: "/dashboard/profile",
-    icon: User,
-  },
-  {
-    name: "Admin",
-    href: "/dashboard/admin",
-    icon: Shield,
-    adminOnly: true,
-  },
-]
-
 const navigation = [
-  { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
+  { name: "Dashboard", href: "/dashboard", icon: Home },
   { name: "Screens", href: "/dashboard/screens", icon: Monitor },
   { name: "Media", href: "/dashboard/media", icon: ImageIcon },
   { name: "Playlists", href: "/dashboard/playlists", icon: Play },
   { name: "Settings", href: "/dashboard/settings", icon: Settings },
 ]
 
-// Add admin navigation conditionally
 const adminNavigation = [{ name: "Admin", href: "/dashboard/admin", icon: Shield }]
 
-export const DashboardLayout = ({ isMobile }: SidebarProps) => {
+export function DashboardLayout({ children }: DashboardLayoutProps) {
   const pathname = usePathname()
-  const [showSidebar, setShowSidebar] = useState(false)
   const [isAdmin, setIsAdmin] = useState(false)
+  const [sidebarOpen, setSidebarOpen] = useState(false)
 
   useEffect(() => {
-    // Replace this with your actual logic to check user permissions
-    // For example, you might fetch user data from an API and check their role
+    // Check if user is admin
     const checkAdminStatus = async () => {
-      // Simulate an API call or permission check
-      const userIsAdmin = true // Replace with actual logic
-      setIsAdmin(userIsAdmin)
+      try {
+        const response = await fetch("/api/user/profile")
+        if (response.ok) {
+          const data = await response.json()
+          setIsAdmin(data.user?.isAdmin || false)
+        }
+      } catch (error) {
+        console.error("Error checking admin status:", error)
+      }
     }
 
     checkAdminStatus()
   }, [])
 
-  return (
-    <div className="flex h-screen">
-      {isMobile ? (
-        <Sheet open={showSidebar} onOpenChange={setShowSidebar}>
-          <SheetTrigger asChild>
-            <Button variant="ghost" size="icon" className="md:hidden">
-              <LayoutDashboard className="h-6 w-6" />
-            </Button>
-          </SheetTrigger>
-          <SheetContent side="left" className="w-3/4 p-0">
-            <SidebarContent isAdmin={isAdmin} pathname={pathname} />
-          </SheetContent>
-        </Sheet>
-      ) : (
-        <aside className="hidden md:flex md:w-[200px] lg:w-[250px] border-r flex-col">
-          <SidebarContent isAdmin={isAdmin} pathname={pathname} />
-        </aside>
-      )}
-      <main className="flex-1 p-4">
-        {/* Your page content goes here */}
-        <p>Main Content</p>
-      </main>
-    </div>
-  )
-}
+  const allNavigation = [...navigation, ...(isAdmin ? adminNavigation : [])]
 
-interface SidebarContentProps {
-  pathname: string
-  isAdmin: boolean
-}
-
-const SidebarContent = ({ pathname, isAdmin }: SidebarContentProps) => {
   return (
-    <div className="flex flex-col h-full">
-      <div className="px-4 py-6">
-        <Link href="/" className="flex items-center font-semibold">
-          <LayoutDashboard className="h-6 w-6 mr-2" />
-          Acme Corp
-        </Link>
-      </div>
-      <Separator />
-      <ScrollArea className="flex-1 space-y-4 p-4">
-        <div className="space-y-1">
-          {sidebarNavItems.map((item) => {
-            if (item.adminOnly && !isAdmin) {
-              return null
-            }
-            const isActive = pathname === item.href
-            return (
-              <Button
-                variant={isActive ? "secondary" : "ghost"}
-                href={item.href}
-                asChild
-                className="w-full justify-start gap-2"
-                key={item.href}
-              >
-                <item.icon className="h-4 w-4" />
-                {item.name}
-              </Button>
-            )
-          })}
+    <div className="flex h-screen bg-gray-100">
+      {/* Desktop Sidebar */}
+      <div className="hidden md:flex md:w-64 md:flex-col">
+        <div className="flex flex-col flex-grow pt-5 overflow-y-auto bg-white border-r">
+          <div className="flex items-center flex-shrink-0 px-4">
+            <h1 className="text-xl font-semibold">Digital Signage</h1>
+          </div>
+          <div className="mt-5 flex-grow flex flex-col">
+            <nav className="flex-1 px-2 pb-4 space-y-1">
+              {allNavigation.map((item) => {
+                const isActive = pathname === item.href
+                return (
+                  <Link
+                    key={item.name}
+                    href={item.href}
+                    className={`group flex items-center px-2 py-2 text-sm font-medium rounded-md ${
+                      isActive ? "bg-gray-100 text-gray-900" : "text-gray-600 hover:bg-gray-50 hover:text-gray-900"
+                    }`}
+                  >
+                    <item.icon className="mr-3 h-5 w-5" />
+                    {item.name}
+                  </Link>
+                )
+              })}
+            </nav>
+          </div>
         </div>
-      </ScrollArea>
+      </div>
+
+      {/* Mobile Sidebar */}
+      <Sheet open={sidebarOpen} onOpenChange={setSidebarOpen}>
+        <SheetTrigger asChild>
+          <Button variant="ghost" size="icon" className="md:hidden fixed top-4 left-4 z-50">
+            <Menu className="h-6 w-6" />
+          </Button>
+        </SheetTrigger>
+        <SheetContent side="left" className="w-64 p-0">
+          <div className="flex flex-col h-full">
+            <div className="flex items-center justify-between p-4">
+              <h1 className="text-xl font-semibold">Digital Signage</h1>
+            </div>
+            <Separator />
+            <nav className="flex-1 px-2 py-4 space-y-1">
+              {allNavigation.map((item) => {
+                const isActive = pathname === item.href
+                return (
+                  <Link
+                    key={item.name}
+                    href={item.href}
+                    onClick={() => setSidebarOpen(false)}
+                    className={`group flex items-center px-2 py-2 text-sm font-medium rounded-md ${
+                      isActive ? "bg-gray-100 text-gray-900" : "text-gray-600 hover:bg-gray-50 hover:text-gray-900"
+                    }`}
+                  >
+                    <item.icon className="mr-3 h-5 w-5" />
+                    {item.name}
+                  </Link>
+                )
+              })}
+            </nav>
+          </div>
+        </SheetContent>
+      </Sheet>
+
+      {/* Main Content */}
+      <div className="flex flex-col flex-1 overflow-hidden">
+        <main className="flex-1 relative overflow-y-auto focus:outline-none">
+          <div className="py-6">
+            <div className="max-w-7xl mx-auto px-4 sm:px-6 md:px-8">{children}</div>
+          </div>
+        </main>
+      </div>
     </div>
   )
 }
+
+export default DashboardLayout

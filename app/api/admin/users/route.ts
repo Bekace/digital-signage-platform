@@ -1,60 +1,69 @@
 import { NextResponse } from "next/server"
-import { getDb } from "@/lib/db"
 import { getCurrentUser } from "@/lib/auth"
+import { getDb } from "@/lib/db"
 
 export async function GET() {
   try {
-    const currentUser = await getCurrentUser()
-    if (!currentUser) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    const user = await getCurrentUser()
+
+    if (!user) {
+      return NextResponse.json({ success: false, message: "Not authenticated" }, { status: 401 })
     }
 
     const sql = getDb()
 
     // Check if user is admin
     const adminCheck = await sql`
-      SELECT is_admin FROM users WHERE id = ${currentUser.id}
+      SELECT is_admin FROM users WHERE id = ${user.id} AND is_admin = true
     `
 
-    if (!adminCheck[0]?.is_admin) {
-      return NextResponse.json({ error: "Admin access required" }, { status: 403 })
+    if (adminCheck.length === 0) {
+      return NextResponse.json({ success: false, message: "Access denied" }, { status: 403 })
     }
 
-    // Get all users with their plan information and usage stats
+    // Get all users with their usage stats
     const users = await sql`
       SELECT 
-        u.id,
-        u.email,
-        u.first_name,
-        u.last_name,
-        u.company,
-        u.plan_type,
-        u.created_at,
+        u.id, 
+        u.email, 
+        u.first_name, 
+        u.last_name, 
+        u.company, 
+        u.plan, 
+        u.created_at, 
         u.is_admin,
-        COALESCE(media_stats.media_files_count, 0) as media_files_count,
-        COALESCE(media_stats.storage_used_bytes, 0) as storage_used_bytes,
-        0 as screens_count,
-        pl.max_media_files,
-        pl.max_storage_bytes,
-        pl.max_screens,
-        pl.price_monthly
+        COALESCE(media_stats.media_count, 0) as media_count,
+        COALESCE(media_stats.storage_used, 0) as storage_used
       FROM users u
       LEFT JOIN (
         SELECT 
           user_id,
-          COUNT(*) as media_files_count,
-          SUM(file_size) as storage_used_bytes
+          COUNT(*) as media_count,
+          SUM(file_size) as storage_used
         FROM media_files 
         WHERE deleted_at IS NULL
         GROUP BY user_id
       ) media_stats ON u.id = media_stats.user_id
-      LEFT JOIN plan_limits pl ON u.plan_type = pl.plan_type
       ORDER BY u.created_at DESC
     `
 
-    return NextResponse.json({ success: true, users })
+    return NextResponse.json({
+      success: true,
+      users: users.map((user) => ({
+        id: user.id,
+        email: user.email,
+        firstName: user.first_name,
+        lastName: user.last_name,
+        company: user.company,
+        plan: user.plan,
+        createdAt: user.created_at,
+        isAdmin: user.is_admin || false,
+        mediaCount: Number(user.media_count) || 0,
+        storageUsed: Number(user.storage_used) || 0,
+      })),
+    })
   } catch (error) {
-    console.error("Error fetching users:", error)
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 })
+    console.error("Admin users fetch error:", error)
+    return NextResponse.json({ success: false, message: "Internal server error" }, { status: 500 })
   }
 }

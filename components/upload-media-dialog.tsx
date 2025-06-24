@@ -15,7 +15,6 @@ import {
 } from "@/components/ui/alert-dialog"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { canUploadFile } from "@/lib/plans"
 
 interface UploadMediaDialogProps {
   open: boolean
@@ -23,7 +22,7 @@ interface UploadMediaDialogProps {
   onFileUploaded: (file: File) => void
 }
 
-const UploadMediaDialog: React.FC<UploadMediaDialogProps> = ({ open, setOpen, onFileUploaded }) => {
+export function UploadMediaDialog({ open, setOpen, onFileUploaded }: UploadMediaDialogProps) {
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [planData, setPlanData] = useState<any>(null)
@@ -48,13 +47,11 @@ const UploadMediaDialog: React.FC<UploadMediaDialogProps> = ({ open, setOpen, on
 
   const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
-    if (!file || !planData) return
+    if (!file) return
 
-    // Check plan limits before setting file
-    const uploadCheck = canUploadFile(planData.usage, planData.limits, file.size)
-
-    if (!uploadCheck.allowed) {
-      setError(uploadCheck.reason || "Upload not allowed")
+    // Basic file size check (100MB limit for demo)
+    if (file.size > 100 * 1024 * 1024) {
+      setError("File size must be less than 100MB")
       return
     }
 
@@ -84,8 +81,8 @@ const UploadMediaDialog: React.FC<UploadMediaDialogProps> = ({ open, setOpen, on
           <AlertDialogDescription>Select a file to upload to the server.</AlertDialogDescription>
         </AlertDialogHeader>
         <div className="grid gap-4 py-4">
-          <Input type="file" onChange={handleFileSelect} />
-          {error && <p className="text-red-500">{error}</p>}
+          <Input type="file" onChange={handleFileSelect} accept="image/*,video/*,.pdf" />
+          {error && <p className="text-red-500 text-sm">{error}</p>}
         </div>
         <AlertDialogFooter>
           <AlertDialogCancel>Cancel</AlertDialogCancel>

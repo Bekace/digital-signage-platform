@@ -1,40 +1,32 @@
-import { type NextRequest, NextResponse } from "next/server"
-import { cookies } from "next/headers"
-import { verify } from "jsonwebtoken"
-import { sql } from "@vercel/postgres"
+import { NextResponse } from "next/server"
+import { getCurrentUser } from "@/lib/auth"
+import { getDb } from "@/lib/db"
 
-export const runtime = "edge"
-
-const secret = process.env.JWT_SECRET || "oursecret"
-
-export async function GET(req: NextRequest) {
+export async function GET() {
   try {
-    const cookieStore = cookies()
-    const token = cookieStore.get("token")
+    const user = await getCurrentUser()
 
-    if (!token) {
-      return NextResponse.json({ message: "Unauthorized" }, { status: 401 })
+    if (!user) {
+      return NextResponse.json({ success: false, message: "Not authenticated" }, { status: 401 })
     }
 
-    const { value } = token
+    const sql = getDb()
 
-    const decodedToken = verify(value, secret)
-
-    //@ts-ignore
-    const user = decodedToken
-
-    const userDataResult = await sql`
-      SELECT id, email, first_name, last_name, company, plan, created_at, is_admin
+    // Get complete user profile including company info and admin status
+    const users = await sql`
+      SELECT 
+        id, email, first_name, last_name, company, 
+        company_address, company_phone, plan, created_at, is_admin
       FROM users 
       WHERE id = ${user.id}
       LIMIT 1
     `
 
-    if (userDataResult.rows.length === 0) {
-      return NextResponse.json({ message: "User not found" }, { status: 404 })
+    if (users.length === 0) {
+      return NextResponse.json({ success: false, message: "User not found" }, { status: 404 })
     }
 
-    const userData = userDataResult.rows[0]
+    const userData = users[0]
 
     return NextResponse.json({
       success: true,
@@ -44,13 +36,15 @@ export async function GET(req: NextRequest) {
         firstName: userData.first_name,
         lastName: userData.last_name,
         company: userData.company,
+        companyAddress: userData.company_address,
+        companyPhone: userData.company_phone,
         plan: userData.plan,
         createdAt: userData.created_at,
         isAdmin: userData.is_admin || false,
       },
     })
   } catch (error) {
-    console.error(error)
-    return NextResponse.json({ message: "Something went wrong" }, { status: 500 })
+    console.error("Profile fetch error:", error)
+    return NextResponse.json({ success: false, message: "Internal server error" }, { status: 500 })
   }
 }

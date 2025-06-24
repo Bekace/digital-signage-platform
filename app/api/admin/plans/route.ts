@@ -1,85 +1,53 @@
-import { type NextRequest, NextResponse } from "next/server"
-import { getDb } from "@/lib/db"
+import { NextResponse } from "next/server"
 import { getCurrentUser } from "@/lib/auth"
+import { getDb } from "@/lib/db"
+
+const PLAN_LIMITS = {
+  free: {
+    maxMediaFiles: 5,
+    maxStorageBytes: 100 * 1024 * 1024, // 100MB
+    maxScreens: 1,
+    priceMonthly: 0,
+  },
+  pro: {
+    maxMediaFiles: 100,
+    maxStorageBytes: 10 * 1024 * 1024 * 1024, // 10GB
+    maxScreens: 10,
+    priceMonthly: 29,
+  },
+  enterprise: {
+    maxMediaFiles: 1000,
+    maxStorageBytes: 100 * 1024 * 1024 * 1024, // 100GB
+    maxScreens: 100,
+    priceMonthly: 99,
+  },
+}
 
 export async function GET() {
   try {
-    const currentUser = await getCurrentUser()
-    if (!currentUser) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    const user = await getCurrentUser()
+
+    if (!user) {
+      return NextResponse.json({ success: false, message: "Not authenticated" }, { status: 401 })
     }
 
     const sql = getDb()
 
     // Check if user is admin
     const adminCheck = await sql`
-      SELECT is_admin FROM users WHERE id = ${currentUser.id}
+      SELECT is_admin FROM users WHERE id = ${user.id} AND is_admin = true
     `
 
-    if (!adminCheck[0]?.is_admin) {
-      return NextResponse.json({ error: "Admin access required" }, { status: 403 })
+    if (adminCheck.length === 0) {
+      return NextResponse.json({ success: false, message: "Access denied" }, { status: 403 })
     }
 
-    // Get all plan limits
-    const plans = await sql`
-      SELECT 
-        plan_type,
-        max_media_files,
-        max_storage_bytes,
-        max_screens,
-        price_monthly,
-        features
-      FROM plan_limits
-      ORDER BY 
-        CASE plan_type 
-          WHEN 'free' THEN 1
-          WHEN 'pro' THEN 2
-          WHEN 'enterprise' THEN 3
-          ELSE 4
-        END
-    `
-
-    return NextResponse.json({ success: true, plans })
+    return NextResponse.json({
+      success: true,
+      plans: PLAN_LIMITS,
+    })
   } catch (error) {
-    console.error("Error fetching plans:", error)
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 })
-  }
-}
-
-export async function PUT(request: NextRequest) {
-  try {
-    const currentUser = await getCurrentUser()
-    if (!currentUser) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-    }
-
-    const sql = getDb()
-
-    // Check if user is admin
-    const adminCheck = await sql`
-      SELECT is_admin FROM users WHERE id = ${currentUser.id}
-    `
-
-    if (!adminCheck[0]?.is_admin) {
-      return NextResponse.json({ error: "Admin access required" }, { status: 403 })
-    }
-
-    const { plan_type, max_media_files, max_storage_bytes, max_screens, price_monthly } = await request.json()
-
-    // Update plan limits
-    await sql`
-      UPDATE plan_limits 
-      SET 
-        max_media_files = ${max_media_files},
-        max_storage_bytes = ${max_storage_bytes},
-        max_screens = ${max_screens},
-        price_monthly = ${price_monthly}
-      WHERE plan_type = ${plan_type}
-    `
-
-    return NextResponse.json({ success: true })
-  } catch (error) {
-    console.error("Error updating plan:", error)
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 })
+    console.error("Get plans error:", error)
+    return NextResponse.json({ success: false, message: "Internal server error" }, { status: 500 })
   }
 }
