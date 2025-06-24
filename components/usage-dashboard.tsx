@@ -26,16 +26,17 @@ interface PlanData {
   plan_expires_at?: string
 }
 
-export function UsageDashboard() {
+interface UsageDashboardProps {
+  refreshTrigger?: number // Add this prop to trigger refreshes
+}
+
+export function UsageDashboard({ refreshTrigger }: UsageDashboardProps) {
   const [planData, setPlanData] = useState<PlanData | null>(null)
   const [loading, setLoading] = useState(true)
 
-  useEffect(() => {
-    fetchPlanData()
-  }, [])
-
   const fetchPlanData = async () => {
     try {
+      setLoading(true)
       const response = await fetch("/api/user/plan")
       if (response.ok) {
         const data = await response.json()
@@ -47,6 +48,10 @@ export function UsageDashboard() {
       setLoading(false)
     }
   }
+
+  useEffect(() => {
+    fetchPlanData()
+  }, [refreshTrigger]) // Refresh when refreshTrigger changes
 
   if (loading) {
     return (

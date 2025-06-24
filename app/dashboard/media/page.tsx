@@ -49,6 +49,7 @@ export default function MediaPage() {
   const [deleteFile, setDeleteFile] = useState<MediaFile | null>(null)
   const [showDeleteDialog, setShowDeleteDialog] = useState(false)
   const [deleting, setDeleting] = useState(false)
+  const [refreshTrigger, setRefreshTrigger] = useState(0) // Add refresh trigger
 
   const loadMediaFiles = async () => {
     try {
@@ -74,10 +75,15 @@ export default function MediaPage() {
     loadMediaFiles()
   }, [])
 
+  const triggerRefresh = () => {
+    setRefreshTrigger((prev) => prev + 1)
+  }
+
   const handleUploadComplete = () => {
-    // Reload media files and close dialog
+    // Reload media files, close dialog, and trigger usage refresh
     loadMediaFiles()
     setShowUploadDialog(false)
+    triggerRefresh()
   }
 
   const handlePreview = (file: MediaFile) => {
@@ -106,7 +112,8 @@ export default function MediaPage() {
         setMediaFiles((prev) => prev.filter((f) => f.id !== deleteFile.id))
         setShowDeleteDialog(false)
         setDeleteFile(null)
-        // Show success message (you can add toast notification here)
+        // Trigger usage dashboard refresh
+        triggerRefresh()
         console.log(data.message)
       } else {
         setError(data.error || "Failed to delete file")
@@ -203,8 +210,8 @@ export default function MediaPage() {
           </Button>
         </div>
 
-        {/* Usage Dashboard */}
-        <UsageDashboard />
+        {/* Usage Dashboard with refresh trigger */}
+        <UsageDashboard refreshTrigger={refreshTrigger} />
 
         {/* Loading State */}
         {loading && (
