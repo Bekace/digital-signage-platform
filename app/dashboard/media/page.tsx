@@ -49,7 +49,7 @@ export default function MediaPage() {
   const [deleteFile, setDeleteFile] = useState<MediaFile | null>(null)
   const [showDeleteDialog, setShowDeleteDialog] = useState(false)
   const [deleting, setDeleting] = useState(false)
-  const [refreshTrigger, setRefreshTrigger] = useState(0) // Add refresh trigger
+  const [refreshTrigger, setRefreshTrigger] = useState(0)
 
   const loadMediaFiles = async () => {
     try {
@@ -80,7 +80,6 @@ export default function MediaPage() {
   }
 
   const handleUploadComplete = () => {
-    // Reload media files, close dialog, and trigger usage refresh
     loadMediaFiles()
     setShowUploadDialog(false)
     triggerRefresh()
@@ -108,11 +107,9 @@ export default function MediaPage() {
       const data = await response.json()
 
       if (response.ok) {
-        // Remove file from local state
         setMediaFiles((prev) => prev.filter((f) => f.id !== deleteFile.id))
         setShowDeleteDialog(false)
         setDeleteFile(null)
-        // Trigger usage dashboard refresh
         triggerRefresh()
         console.log(data.message)
       } else {
@@ -138,18 +135,36 @@ export default function MediaPage() {
   const getFileTypeColor = (file: MediaFile) => {
     const isImage = file.mime_type?.startsWith("image/") || file.file_type === "image"
     const isVideo = file.mime_type?.startsWith("video/") || file.file_type === "video"
+    const isPDF = file.mime_type === "application/pdf"
+    const isAudio = file.mime_type?.startsWith("audio/")
+    const isOffice =
+      file.mime_type?.includes("office") ||
+      file.mime_type?.includes("powerpoint") ||
+      file.mime_type?.includes("presentation")
 
     if (isVideo) return "bg-blue-100 text-blue-800"
     if (isImage) return "bg-green-100 text-green-800"
-    return "bg-orange-100 text-orange-800"
+    if (isPDF) return "bg-red-100 text-red-800"
+    if (isAudio) return "bg-purple-100 text-purple-800"
+    if (isOffice) return "bg-orange-100 text-orange-800"
+    return "bg-gray-100 text-gray-800"
   }
 
   const getFileTypeLabel = (file: MediaFile) => {
     const isImage = file.mime_type?.startsWith("image/") || file.file_type === "image"
     const isVideo = file.mime_type?.startsWith("video/") || file.file_type === "video"
+    const isPDF = file.mime_type === "application/pdf"
+    const isAudio = file.mime_type?.startsWith("audio/")
+    const isOffice =
+      file.mime_type?.includes("office") ||
+      file.mime_type?.includes("powerpoint") ||
+      file.mime_type?.includes("presentation")
 
     if (isVideo) return "video"
     if (isImage) return "image"
+    if (isPDF) return "pdf"
+    if (isAudio) return "audio"
+    if (isOffice) return "office"
     return "document"
   }
 
@@ -173,8 +188,39 @@ export default function MediaPage() {
       return file.url
     }
 
-    // For non-images, use placeholder
-    return `/placeholder.svg?height=128&width=200&text=${encodeURIComponent(file.original_name.split(".").pop()?.toUpperCase() || "FILE")}`
+    // Use custom thumbnails based on file type
+    const mimeType = file.mime_type?.toLowerCase() || ""
+    const fileName = file.original_name.toLowerCase()
+
+    // PDF files
+    if (mimeType === "application/pdf" || fileName.endsWith(".pdf")) {
+      return "/thumbnails/pdf.png"
+    }
+
+    // Video files
+    if (mimeType.startsWith("video/") || fileName.match(/\.(mp4|avi|mov|wmv|flv|webm|mkv)$/)) {
+      return "/thumbnails/video.png"
+    }
+
+    // Audio files
+    if (mimeType.startsWith("audio/") || fileName.match(/\.(mp3|wav|flac|aac|ogg|wma)$/)) {
+      return "/thumbnails/audio.png"
+    }
+
+    // Office files (PowerPoint, Word, Excel)
+    if (
+      mimeType.includes("powerpoint") ||
+      mimeType.includes("presentation") ||
+      mimeType.includes("word") ||
+      mimeType.includes("excel") ||
+      mimeType.includes("spreadsheet") ||
+      fileName.match(/\.(ppt|pptx|doc|docx|xls|xlsx)$/)
+    ) {
+      return "/thumbnails/office.png"
+    }
+
+    // Generic fallback for other file types
+    return "/thumbnails/generic.png"
   }
 
   const filteredFiles = mediaFiles.filter((file) => file.original_name.toLowerCase().includes(searchTerm.toLowerCase()))
@@ -210,7 +256,7 @@ export default function MediaPage() {
           </Button>
         </div>
 
-        {/* Usage Dashboard with refresh trigger */}
+        {/* Usage Dashboard */}
         <UsageDashboard refreshTrigger={refreshTrigger} />
 
         {/* Loading State */}
@@ -258,8 +304,8 @@ export default function MediaPage() {
                         className="w-full h-32 object-cover rounded-lg bg-gray-100 cursor-pointer"
                         onClick={() => handlePreview(file)}
                         onError={(e) => {
-                          // Fallback to placeholder if image fails to load
-                          e.currentTarget.src = `/placeholder.svg?height=128&width=200&text=${encodeURIComponent(file.original_name.split(".").pop()?.toUpperCase() || "FILE")}`
+                          // Fallback to generic thumbnail if custom thumbnail fails
+                          e.currentTarget.src = "/thumbnails/generic.png"
                         }}
                       />
                       <div className="absolute top-2 right-2">
