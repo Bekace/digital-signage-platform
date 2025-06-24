@@ -27,7 +27,7 @@ interface PlanData {
 }
 
 interface UsageDashboardProps {
-  refreshTrigger?: number // Add this prop to trigger refreshes
+  refreshTrigger?: number
 }
 
 export function UsageDashboard({ refreshTrigger }: UsageDashboardProps) {
@@ -51,7 +51,7 @@ export function UsageDashboard({ refreshTrigger }: UsageDashboardProps) {
 
   useEffect(() => {
     fetchPlanData()
-  }, [refreshTrigger]) // Refresh when refreshTrigger changes
+  }, [refreshTrigger])
 
   if (loading) {
     return (
