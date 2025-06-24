@@ -71,7 +71,7 @@ export async function POST(request: NextRequest) {
 
     console.log("🔍 Saving to database...")
 
-    // Insert into media_files table (matching what the media page expects)
+    // Insert into media_files table with TEXT url column
     const mediaResult = await sql`
       INSERT INTO media_files (
         user_id, 
@@ -95,7 +95,7 @@ export async function POST(request: NextRequest) {
       RETURNING *
     `
 
-    console.log("✅ Media file saved:", mediaResult[0])
+    console.log("✅ Media file saved successfully!")
 
     // Update user's usage counters
     await sql`
@@ -115,7 +115,8 @@ export async function POST(request: NextRequest) {
       debug: {
         file_type: file.type,
         file_size: file.size,
-        data_url_length: dataUrl.length,
+        base64_length: dataUrl.length,
+        saved_to_db: true,
       },
     })
   } catch (error) {
