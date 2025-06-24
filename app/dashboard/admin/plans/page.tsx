@@ -21,6 +21,7 @@ import {
 import { Checkbox } from "@/components/ui/checkbox"
 import { DashboardLayout } from "@/components/dashboard-layout"
 import { formatBytes, formatNumber } from "@/lib/plans"
+import { useToast } from "@/hooks/use-toast"
 
 interface Plan {
   id: number
@@ -41,14 +42,14 @@ interface Plan {
 
 interface Feature {
   id: number
-  name: string
+  feature_name: string
   description: string
   category: string
   is_active: boolean
 }
 
 const defaultPlan: Omit<Plan, "id" | "created_at" | "updated_at"> = {
-  plan_type: "",
+  plan_type: "custom",
   name: "",
   description: "",
   max_media_files: 5,
@@ -65,10 +66,12 @@ export default function PlansAdminPage() {
   const [plans, setPlans] = useState<Plan[]>([])
   const [features, setFeatures] = useState<Feature[]>([])
   const [loading, setLoading] = useState(true)
+  const [creating, setCreating] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [editingPlan, setEditingPlan] = useState<Plan | null>(null)
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false)
   const [newPlan, setNewPlan] = useState<Omit<Plan, "id" | "created_at" | "updated_at">>(defaultPlan)
+  const { toast } = useToast()
 
   const loadPlans = async () => {
     try {
@@ -81,10 +84,20 @@ export default function PlansAdminPage() {
         setError(null)
       } else {
         setError(data.message || "Failed to load plans")
+        toast({
+          title: "Error",
+          description: data.message || "Failed to load plans",
+          variant: "destructive",
+        })
       }
     } catch (err) {
       setError("Failed to load plans")
       console.error("Error loading plans:", err)
+      toast({
+        title: "Error",
+        description: "Failed to load plans",
+        variant: "destructive",
+      })
     } finally {
       setLoading(false)
     }
@@ -108,8 +121,33 @@ export default function PlansAdminPage() {
     loadFeatures()
   }, [])
 
+  const validatePlan = (plan: Omit<Plan, "id" | "created_at" | "updated_at">): string | null => {
+    if (!plan.plan_type.trim()) return "Plan type is required"
+    if (!plan.name.trim()) return "Plan name is required"
+    if (!plan.description.trim()) return "Plan description is required"
+    if (plan.max_media_files < -1) return "Media files limit must be -1 (unlimited) or positive"
+    if (plan.max_storage_bytes < -1) return "Storage limit must be -1 (unlimited) or positive"
+    if (plan.max_screens < -1) return "Screens limit must be -1 (unlimited) or positive"
+    if (plan.price_monthly < 0) return "Monthly price cannot be negative"
+    if (plan.price_yearly < 0) return "Yearly price cannot be negative"
+    return null
+  }
+
   const handleCreatePlan = async () => {
+    console.log("Creating plan:", newPlan)
+
+    const validationError = validatePlan(newPlan)
+    if (validationError) {
+      toast({
+        title: "Validation Error",
+        description: validationError,
+        variant: "destructive",
+      })
+      return
+    }
+
     try {
+      setCreating(true)
       const response = await fetch("/api/admin/plans", {
         method: "POST",
         headers: {
@@ -119,17 +157,34 @@ export default function PlansAdminPage() {
       })
 
       const data = await response.json()
+      console.log("Create plan response:", data)
 
       if (response.ok) {
         setPlans([...plans, data.plan])
         setIsCreateDialogOpen(false)
         setNewPlan(defaultPlan)
+        toast({
+          title: "Success",
+          description: "Plan created successfully",
+        })
       } else {
         setError(data.message || "Failed to create plan")
+        toast({
+          title: "Error",
+          description: data.message || "Failed to create plan",
+          variant: "destructive",
+        })
       }
     } catch (err) {
-      setError("Failed to create plan")
       console.error("Error creating plan:", err)
+      setError("Failed to create plan")
+      toast({
+        title: "Error",
+        description: "Failed to create plan",
+        variant: "destructive",
+      })
+    } finally {
+      setCreating(false)
     }
   }
 
@@ -148,12 +203,26 @@ export default function PlansAdminPage() {
       if (response.ok) {
         setPlans(plans.map((plan) => (plan.id === planId ? data.plan : plan)))
         setEditingPlan(null)
+        toast({
+          title: "Success",
+          description: "Plan updated successfully",
+        })
       } else {
         setError(data.message || "Failed to update plan")
+        toast({
+          title: "Error",
+          description: data.message || "Failed to update plan",
+          variant: "destructive",
+        })
       }
     } catch (err) {
       setError("Failed to update plan")
       console.error("Error updating plan:", err)
+      toast({
+        title: "Error",
+        description: "Failed to update plan",
+        variant: "destructive",
+      })
     }
   }
 
@@ -169,24 +238,44 @@ export default function PlansAdminPage() {
 
       if (response.ok) {
         setPlans(plans.filter((plan) => plan.id !== planId))
+        toast({
+          title: "Success",
+          description: "Plan deleted successfully",
+        })
       } else {
         setError(data.message || "Failed to delete plan")
+        toast({
+          title: "Error",
+          description: data.message || "Failed to delete plan",
+          variant: "destructive",
+        })
       }
     } catch (err) {
       setError("Failed to delete plan")
       console.error("Error deleting plan:", err)
+      toast({
+        title: "Error",
+        description: "Failed to delete plan",
+        variant: "destructive",
+      })
     }
   }
 
   const formatStorageInput = (bytes: number): string => {
-    if (bytes === -1) return "unlimited"
+    if (bytes === -1) return ""
     return (bytes / (1024 * 1024)).toString() // Convert to MB
   }
 
   const parseStorageInput = (value: string): number => {
-    if (value.toLowerCase() === "unlimited" || value === "-1") return -1
+    if (!value || value.toLowerCase() === "unlimited") return -1
     const mb = Number.parseFloat(value)
     return isNaN(mb) ? 0 : mb * 1024 * 1024 // Convert MB to bytes
+  }
+
+  const parseNumberInput = (value: string): number => {
+    if (!value || value.toLowerCase() === "unlimited") return -1
+    const num = Number.parseInt(value)
+    return isNaN(num) ? 0 : num
   }
 
   if (loading) {
@@ -222,31 +311,34 @@ export default function PlansAdminPage() {
               <div className="grid gap-4 py-4">
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <Label htmlFor="plan_type">Plan Type</Label>
+                    <Label htmlFor="plan_type">Plan Type *</Label>
                     <Input
                       id="plan_type"
                       value={newPlan.plan_type}
                       onChange={(e) => setNewPlan({ ...newPlan, plan_type: e.target.value })}
                       placeholder="e.g., premium"
+                      required
                     />
                   </div>
                   <div>
-                    <Label htmlFor="name">Plan Name</Label>
+                    <Label htmlFor="name">Plan Name *</Label>
                     <Input
                       id="name"
                       value={newPlan.name}
                       onChange={(e) => setNewPlan({ ...newPlan, name: e.target.value })}
                       placeholder="e.g., Premium Plan"
+                      required
                     />
                   </div>
                 </div>
                 <div>
-                  <Label htmlFor="description">Description</Label>
+                  <Label htmlFor="description">Description *</Label>
                   <Textarea
                     id="description"
                     value={newPlan.description}
                     onChange={(e) => setNewPlan({ ...newPlan, description: e.target.value })}
                     placeholder="Plan description..."
+                    required
                   />
                 </div>
                 <div className="grid grid-cols-3 gap-4">
@@ -254,16 +346,11 @@ export default function PlansAdminPage() {
                     <Label htmlFor="max_media_files">Media Files Limit</Label>
                     <Input
                       id="max_media_files"
-                      type="number"
-                      value={newPlan.max_media_files === -1 ? "unlimited" : newPlan.max_media_files}
-                      onChange={(e) =>
-                        setNewPlan({
-                          ...newPlan,
-                          max_media_files: e.target.value === "unlimited" ? -1 : Number.parseInt(e.target.value) || 0,
-                        })
-                      }
-                      placeholder="5"
+                      value={newPlan.max_media_files === -1 ? "" : newPlan.max_media_files}
+                      onChange={(e) => setNewPlan({ ...newPlan, max_media_files: parseNumberInput(e.target.value) })}
+                      placeholder="5 or 'unlimited'"
                     />
+                    <p className="text-xs text-muted-foreground mt-1">Leave empty for unlimited</p>
                   </div>
                   <div>
                     <Label htmlFor="max_storage">Storage Limit (MB)</Label>
@@ -271,23 +358,19 @@ export default function PlansAdminPage() {
                       id="max_storage"
                       value={formatStorageInput(newPlan.max_storage_bytes)}
                       onChange={(e) => setNewPlan({ ...newPlan, max_storage_bytes: parseStorageInput(e.target.value) })}
-                      placeholder="100"
+                      placeholder="100 or 'unlimited'"
                     />
+                    <p className="text-xs text-muted-foreground mt-1">Leave empty for unlimited</p>
                   </div>
                   <div>
                     <Label htmlFor="max_screens">Screens Limit</Label>
                     <Input
                       id="max_screens"
-                      type="number"
-                      value={newPlan.max_screens === -1 ? "unlimited" : newPlan.max_screens}
-                      onChange={(e) =>
-                        setNewPlan({
-                          ...newPlan,
-                          max_screens: e.target.value === "unlimited" ? -1 : Number.parseInt(e.target.value) || 0,
-                        })
-                      }
-                      placeholder="1"
+                      value={newPlan.max_screens === -1 ? "" : newPlan.max_screens}
+                      onChange={(e) => setNewPlan({ ...newPlan, max_screens: parseNumberInput(e.target.value) })}
+                      placeholder="1 or 'unlimited'"
                     />
+                    <p className="text-xs text-muted-foreground mt-1">Leave empty for unlimited</p>
                   </div>
                 </div>
                 <div className="grid grid-cols-2 gap-4">
@@ -297,6 +380,7 @@ export default function PlansAdminPage() {
                       id="price_monthly"
                       type="number"
                       step="0.01"
+                      min="0"
                       value={newPlan.price_monthly}
                       onChange={(e) =>
                         setNewPlan({ ...newPlan, price_monthly: Number.parseFloat(e.target.value) || 0 })
@@ -310,6 +394,7 @@ export default function PlansAdminPage() {
                       id="price_yearly"
                       type="number"
                       step="0.01"
+                      min="0"
                       value={newPlan.price_yearly}
                       onChange={(e) => setNewPlan({ ...newPlan, price_yearly: Number.parseFloat(e.target.value) || 0 })}
                       placeholder="0.00"
@@ -317,31 +402,44 @@ export default function PlansAdminPage() {
                   </div>
                 </div>
                 <div>
-                  <Label>Features</Label>
-                  <div className="grid grid-cols-2 gap-2 mt-2 max-h-40 overflow-y-auto">
-                    {features.map((feature) => (
-                      <div key={feature.id} className="flex items-center space-x-2">
-                        <Checkbox
-                          id={`feature-${feature.id}`}
-                          checked={newPlan.features.includes(feature.name)}
-                          onCheckedChange={(checked) => {
-                            if (checked) {
-                              setNewPlan({ ...newPlan, features: [...newPlan.features, feature.name] })
-                            } else {
-                              setNewPlan({
-                                ...newPlan,
-                                features: newPlan.features.filter((f) => f !== feature.name),
-                              })
-                            }
-                          }}
-                        />
-                        <Label htmlFor={`feature-${feature.id}`} className="text-sm">
-                          {feature.name}
-                        </Label>
-                      </div>
-                    ))}
-                  </div>
+                  <Label htmlFor="sort_order">Sort Order</Label>
+                  <Input
+                    id="sort_order"
+                    type="number"
+                    min="0"
+                    value={newPlan.sort_order}
+                    onChange={(e) => setNewPlan({ ...newPlan, sort_order: Number.parseInt(e.target.value) || 0 })}
+                    placeholder="0"
+                  />
                 </div>
+                {features.length > 0 && (
+                  <div>
+                    <Label>Features</Label>
+                    <div className="grid grid-cols-2 gap-2 mt-2 max-h-40 overflow-y-auto border rounded p-2">
+                      {features.map((feature) => (
+                        <div key={feature.id} className="flex items-center space-x-2">
+                          <Checkbox
+                            id={`feature-${feature.id}`}
+                            checked={newPlan.features.includes(feature.feature_name)}
+                            onCheckedChange={(checked) => {
+                              if (checked) {
+                                setNewPlan({ ...newPlan, features: [...newPlan.features, feature.feature_name] })
+                              } else {
+                                setNewPlan({
+                                  ...newPlan,
+                                  features: newPlan.features.filter((f) => f !== feature.feature_name),
+                                })
+                              }
+                            }}
+                          />
+                          <Label htmlFor={`feature-${feature.id}`} className="text-sm">
+                            {feature.feature_name}
+                          </Label>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
                 <div className="flex items-center space-x-2">
                   <Switch
                     id="is_active"
@@ -352,10 +450,12 @@ export default function PlansAdminPage() {
                 </div>
               </div>
               <div className="flex justify-end space-x-2">
-                <Button variant="outline" onClick={() => setIsCreateDialogOpen(false)}>
+                <Button variant="outline" onClick={() => setIsCreateDialogOpen(false)} disabled={creating}>
                   Cancel
                 </Button>
-                <Button onClick={handleCreatePlan}>Create Plan</Button>
+                <Button onClick={handleCreatePlan} disabled={creating}>
+                  {creating ? "Creating..." : "Create Plan"}
+                </Button>
               </div>
             </DialogContent>
           </Dialog>
@@ -416,91 +516,97 @@ export default function PlansAdminPage() {
             <CardDescription>Manage plan limits, pricing, and features</CardDescription>
           </CardHeader>
           <CardContent>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Plan</TableHead>
-                  <TableHead>Limits</TableHead>
-                  <TableHead>Pricing</TableHead>
-                  <TableHead>Features</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {plans.map((plan) => (
-                  <TableRow key={plan.id}>
-                    <TableCell>
-                      <div>
-                        <div className="font-medium">{plan.name}</div>
-                        <div className="text-sm text-muted-foreground">{plan.description}</div>
-                        <Badge variant="outline" className="mt-1">
-                          {plan.plan_type}
-                        </Badge>
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <div className="space-y-1 text-sm">
-                        <div className="flex items-center">
-                          <FileImage className="h-3 w-3 mr-1" />
-                          {formatNumber(plan.max_media_files)} files
-                        </div>
-                        <div className="flex items-center">
-                          <HardDrive className="h-3 w-3 mr-1" />
-                          {formatBytes(plan.max_storage_bytes)}
-                        </div>
-                        <div className="flex items-center">
-                          <Monitor className="h-3 w-3 mr-1" />
-                          {formatNumber(plan.max_screens)} screens
-                        </div>
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <div className="space-y-1 text-sm">
-                        <div>${plan.price_monthly}/month</div>
-                        <div className="text-muted-foreground">${plan.price_yearly}/year</div>
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <div className="max-w-xs">
-                        <div className="flex flex-wrap gap-1">
-                          {plan.features.slice(0, 3).map((feature, index) => (
-                            <Badge key={index} variant="secondary" className="text-xs">
-                              {feature}
-                            </Badge>
-                          ))}
-                          {plan.features.length > 3 && (
-                            <Badge variant="outline" className="text-xs">
-                              +{plan.features.length - 3} more
-                            </Badge>
-                          )}
-                        </div>
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant={plan.is_active ? "default" : "secondary"}>
-                        {plan.is_active ? "Active" : "Inactive"}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex space-x-2">
-                        <Button variant="outline" size="sm" onClick={() => setEditingPlan(plan)}>
-                          <Edit className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => handleDeletePlan(plan.id)}
-                          className="text-red-600 hover:text-red-700"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    </TableCell>
+            {plans.length === 0 ? (
+              <div className="text-center py-8">
+                <p className="text-muted-foreground">No plans created yet. Create your first plan to get started.</p>
+              </div>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Plan</TableHead>
+                    <TableHead>Limits</TableHead>
+                    <TableHead>Pricing</TableHead>
+                    <TableHead>Features</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>Actions</TableHead>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                </TableHeader>
+                <TableBody>
+                  {plans.map((plan) => (
+                    <TableRow key={plan.id}>
+                      <TableCell>
+                        <div>
+                          <div className="font-medium">{plan.name}</div>
+                          <div className="text-sm text-muted-foreground">{plan.description}</div>
+                          <Badge variant="outline" className="mt-1">
+                            {plan.plan_type}
+                          </Badge>
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <div className="space-y-1 text-sm">
+                          <div className="flex items-center">
+                            <FileImage className="h-3 w-3 mr-1" />
+                            {formatNumber(plan.max_media_files)} files
+                          </div>
+                          <div className="flex items-center">
+                            <HardDrive className="h-3 w-3 mr-1" />
+                            {formatBytes(plan.max_storage_bytes)}
+                          </div>
+                          <div className="flex items-center">
+                            <Monitor className="h-3 w-3 mr-1" />
+                            {formatNumber(plan.max_screens)} screens
+                          </div>
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <div className="space-y-1 text-sm">
+                          <div>${plan.price_monthly}/month</div>
+                          <div className="text-muted-foreground">${plan.price_yearly}/year</div>
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <div className="max-w-xs">
+                          <div className="flex flex-wrap gap-1">
+                            {plan.features.slice(0, 3).map((feature, index) => (
+                              <Badge key={index} variant="secondary" className="text-xs">
+                                {feature}
+                              </Badge>
+                            ))}
+                            {plan.features.length > 3 && (
+                              <Badge variant="outline" className="text-xs">
+                                +{plan.features.length - 3} more
+                              </Badge>
+                            )}
+                          </div>
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant={plan.is_active ? "default" : "secondary"}>
+                          {plan.is_active ? "Active" : "Inactive"}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex space-x-2">
+                          <Button variant="outline" size="sm" onClick={() => setEditingPlan(plan)}>
+                            <Edit className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleDeletePlan(plan.id)}
+                            className="text-red-600 hover:text-red-700"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
           </CardContent>
         </Card>
       </div>
