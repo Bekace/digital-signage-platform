@@ -1,12 +1,25 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { Users, Loader2 } from "lucide-react"
+import { Users, Loader2, UserPlus, Search, Filter, Download } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Input } from "@/components/ui/input"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog"
+import { Label } from "@/components/ui/label"
+import { Checkbox } from "@/components/ui/checkbox"
+import { toast } from "@/hooks/use-toast"
 import { DashboardLayout } from "@/components/dashboard-layout"
 import { formatBytes, formatNumber } from "@/lib/plans"
 
@@ -32,14 +45,22 @@ interface Plan {
   max_screens: number
   price_monthly: number
   is_active: boolean
+  subscriber_count?: number
 }
 
 export default function UsersAdminPage() {
   const [users, setUsers] = useState<User[]>([])
+  const [filteredUsers, setFilteredUsers] = useState<User[]>([])
   const [plans, setPlans] = useState<Plan[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [updatingUser, setUpdatingUser] = useState<number | null>(null)
+  const [searchTerm, setSearchTerm] = useState("")
+  const [selectedPlanFilter, setSelectedPlanFilter] = useState<string>("all")
+  const [selectedUsers, setSelectedUsers] = useState<number[]>([])
+  const [bulkAssignDialogOpen, setBulkAssignDialogOpen] = useState(false)
+  const [bulkAssignPlan, setBulkAssignPlan] = useState("")
+  const [bulkAssigning, setBulkAssigning] = useState(false)
 
   const loadUsers = async () => {
     try {
@@ -79,6 +100,29 @@ export default function UsersAdminPage() {
     loadPlans()
   }, [])
 
+  // Filter users based on search and plan filter
+  useEffect(() => {
+    let filtered = users
+
+    // Search filter
+    if (searchTerm) {
+      filtered = filtered.filter(
+        (user) =>
+          user.firstName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          user.lastName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          user.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          user.company.toLowerCase().includes(searchTerm.toLowerCase()),
+      )
+    }
+
+    // Plan filter
+    if (selectedPlanFilter !== "all") {
+      filtered = filtered.filter((user) => user.plan === selectedPlanFilter)
+    }
+
+    setFilteredUsers(filtered)
+  }, [users, searchTerm, selectedPlanFilter])
+
   const updateUserPlan = async (userId: number, newPlan: string) => {
     try {
       setUpdatingUser(userId)
@@ -94,14 +138,67 @@ export default function UsersAdminPage() {
 
       if (response.ok) {
         setUsers((prev) => prev.map((user) => (user.id === userId ? { ...user, plan: newPlan } : user)))
+        toast({
+          title: "Plan Updated",
+          description: `User plan updated to ${newPlan} successfully.`,
+        })
       } else {
         setError(data.message || "Failed to update user plan")
+        toast({
+          title: "Update Failed",
+          description: data.message || "Failed to update user plan",
+          variant: "destructive",
+        })
       }
     } catch (err) {
       setError("Failed to update user plan")
       console.error("Error updating user plan:", err)
+      toast({
+        title: "Update Failed",
+        description: "Failed to update user plan",
+        variant: "destructive",
+      })
     } finally {
       setUpdatingUser(null)
+    }
+  }
+
+  const handleBulkAssign = async () => {
+    if (!bulkAssignPlan || selectedUsers.length === 0) return
+
+    try {
+      setBulkAssigning(true)
+      const promises = selectedUsers.map((userId) => updateUserPlan(userId, bulkAssignPlan))
+      await Promise.all(promises)
+
+      toast({
+        title: "Bulk Assignment Complete",
+        description: `Successfully assigned ${bulkAssignPlan} plan to ${selectedUsers.length} users.`,
+      })
+
+      setSelectedUsers([])
+      setBulkAssignDialogOpen(false)
+      setBulkAssignPlan("")
+    } catch (err) {
+      toast({
+        title: "Bulk Assignment Failed",
+        description: "Some plan assignments may have failed.",
+        variant: "destructive",
+      })
+    } finally {
+      setBulkAssigning(false)
+    }
+  }
+
+  const toggleUserSelection = (userId: number) => {
+    setSelectedUsers((prev) => (prev.includes(userId) ? prev.filter((id) => id !== userId) : [...prev, userId]))
+  }
+
+  const toggleSelectAll = () => {
+    if (selectedUsers.length === filteredUsers.length) {
+      setSelectedUsers([])
+    } else {
+      setSelectedUsers(filteredUsers.map((user) => user.id))
     }
   }
 
@@ -121,6 +218,32 @@ export default function UsersAdminPage() {
   const getPlanLimits = (planType: string) => {
     const plan = plans.find((p) => p.plan_type === planType)
     return plan || { max_media_files: 5, max_storage_bytes: 104857600, max_screens: 1 }
+  }
+
+  const exportUsers = () => {
+    const csvContent = [
+      ["Name", "Email", "Company", "Plan", "Media Files", "Storage Used", "Admin", "Created"],
+      ...filteredUsers.map((user) => [
+        `${user.firstName} ${user.lastName}`,
+        user.email,
+        user.company || "",
+        user.plan,
+        user.mediaCount.toString(),
+        formatBytes(user.storageUsed),
+        user.isAdmin ? "Yes" : "No",
+        new Date(user.createdAt).toLocaleDateString(),
+      ]),
+    ]
+      .map((row) => row.join(","))
+      .join("\n")
+
+    const blob = new Blob([csvContent], { type: "text/csv" })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement("a")
+    a.href = url
+    a.download = "users-export.csv"
+    a.click()
+    URL.revokeObjectURL(url)
   }
 
   if (loading) {
@@ -150,9 +273,90 @@ export default function UsersAdminPage() {
   return (
     <DashboardLayout>
       <div className="space-y-6">
-        <div className="flex items-center space-x-2">
-          <Users className="h-6 w-6" />
-          <h1 className="text-3xl font-bold">User Management</h1>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center space-x-2">
+            <Users className="h-6 w-6" />
+            <h1 className="text-3xl font-bold">User Management</h1>
+          </div>
+          <div className="flex items-center space-x-2">
+            <Button onClick={exportUsers} variant="outline" size="sm">
+              <Download className="h-4 w-4 mr-2" />
+              Export CSV
+            </Button>
+            {selectedUsers.length > 0 && (
+              <Dialog open={bulkAssignDialogOpen} onOpenChange={setBulkAssignDialogOpen}>
+                <DialogTrigger asChild>
+                  <Button size="sm">
+                    <UserPlus className="h-4 w-4 mr-2" />
+                    Assign Plans ({selectedUsers.length})
+                  </Button>
+                </DialogTrigger>
+                <DialogContent>
+                  <DialogHeader>
+                    <DialogTitle>Bulk Plan Assignment</DialogTitle>
+                    <DialogDescription>
+                      Assign a plan to {selectedUsers.length} selected user{selectedUsers.length > 1 ? "s" : ""}.
+                    </DialogDescription>
+                  </DialogHeader>
+                  <div className="space-y-4">
+                    <div>
+                      <Label htmlFor="bulk-plan">Select Plan</Label>
+                      <Select value={bulkAssignPlan} onValueChange={setBulkAssignPlan}>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Choose a plan" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {plans
+                            .filter((plan) => plan.is_active)
+                            .map((plan) => (
+                              <SelectItem key={plan.plan_type} value={plan.plan_type}>
+                                {plan.name} - ${plan.price_monthly}/month
+                              </SelectItem>
+                            ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                  <DialogFooter>
+                    <Button variant="outline" onClick={() => setBulkAssignDialogOpen(false)}>
+                      Cancel
+                    </Button>
+                    <Button onClick={handleBulkAssign} disabled={!bulkAssignPlan || bulkAssigning}>
+                      {bulkAssigning ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+                      Assign Plans
+                    </Button>
+                  </DialogFooter>
+                </DialogContent>
+              </Dialog>
+            )}
+          </div>
+        </div>
+
+        {/* Search and Filters */}
+        <div className="flex items-center space-x-4">
+          <div className="relative flex-1 max-w-sm">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
+            <Input
+              placeholder="Search users..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="pl-10"
+            />
+          </div>
+          <Select value={selectedPlanFilter} onValueChange={setSelectedPlanFilter}>
+            <SelectTrigger className="w-40">
+              <Filter className="h-4 w-4 mr-2" />
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Plans</SelectItem>
+              {plans.map((plan) => (
+                <SelectItem key={plan.plan_type} value={plan.plan_type}>
+                  {plan.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
 
         {/* Stats Cards */}
@@ -163,7 +367,10 @@ export default function UsersAdminPage() {
               <Users className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{users.length}</div>
+              <div className="text-2xl font-bold">{filteredUsers.length}</div>
+              {selectedUsers.length > 0 && (
+                <p className="text-xs text-muted-foreground">{selectedUsers.length} selected</p>
+              )}
             </CardContent>
           </Card>
           {plans.map((plan) => (
@@ -174,6 +381,7 @@ export default function UsersAdminPage() {
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold">{users.filter((u) => u.plan === plan.plan_type).length}</div>
+                <p className="text-xs text-muted-foreground">${plan.price_monthly}/month</p>
               </CardContent>
             </Card>
           ))}
@@ -183,25 +391,37 @@ export default function UsersAdminPage() {
         <Card>
           <CardHeader>
             <CardTitle>User Management</CardTitle>
-            <CardDescription>Manage user accounts and subscription plans</CardDescription>
+            <CardDescription>Manage user accounts and assign subscription plans</CardDescription>
           </CardHeader>
           <CardContent>
             <Table>
               <TableHeader>
                 <TableRow>
+                  <TableHead className="w-12">
+                    <Checkbox
+                      checked={selectedUsers.length === filteredUsers.length && filteredUsers.length > 0}
+                      onCheckedChange={toggleSelectAll}
+                    />
+                  </TableHead>
                   <TableHead>User</TableHead>
                   <TableHead>Company</TableHead>
-                  <TableHead>Plan</TableHead>
+                  <TableHead>Current Plan</TableHead>
                   <TableHead>Usage</TableHead>
                   <TableHead>Admin</TableHead>
-                  <TableHead>Actions</TableHead>
+                  <TableHead>Assign Plan</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {users.map((user) => {
+                {filteredUsers.map((user) => {
                   const limits = getPlanLimits(user.plan)
                   return (
                     <TableRow key={user.id}>
+                      <TableCell>
+                        <Checkbox
+                          checked={selectedUsers.includes(user.id)}
+                          onCheckedChange={() => toggleUserSelection(user.id)}
+                        />
+                      </TableCell>
                       <TableCell>
                         <div>
                           <div className="font-medium">
@@ -232,14 +452,14 @@ export default function UsersAdminPage() {
                           disabled={updatingUser === user.id}
                         >
                           <SelectTrigger className="w-32">
-                            <SelectValue />
+                            {updatingUser === user.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <SelectValue />}
                           </SelectTrigger>
                           <SelectContent>
                             {plans
                               .filter((plan) => plan.is_active)
                               .map((plan) => (
                                 <SelectItem key={plan.plan_type} value={plan.plan_type}>
-                                  {plan.name}
+                                  {plan.name} - ${plan.price_monthly}/mo
                                 </SelectItem>
                               ))}
                           </SelectContent>

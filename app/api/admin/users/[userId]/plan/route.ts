@@ -23,8 +23,14 @@ export async function PUT(request: NextRequest, { params }: { params: { userId: 
 
     const { plan } = await request.json()
 
-    if (!plan || !["free", "pro", "enterprise"].includes(plan)) {
-      return NextResponse.json({ success: false, message: "Invalid plan" }, { status: 400 })
+    // Get available plans from database
+    const availablePlans = await sql`
+      SELECT plan_type FROM plan_templates WHERE is_active = true
+    `
+    const validPlans = availablePlans.map((p) => p.plan_type)
+
+    if (!plan || !validPlans.includes(plan)) {
+      return NextResponse.json({ success: false, message: "Invalid plan selected" }, { status: 400 })
     }
 
     // Update user plan
@@ -33,6 +39,8 @@ export async function PUT(request: NextRequest, { params }: { params: { userId: 
       SET plan = ${plan}
       WHERE id = ${params.userId}
     `
+
+    console.log(`Admin ${user.id} assigning plan ${plan} to user ${params.userId}`)
 
     return NextResponse.json({
       success: true,
