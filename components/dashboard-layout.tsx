@@ -1,14 +1,46 @@
 "use client"
 
-import type React from "react"
-import { useState, useEffect } from "react"
-import Link from "next/link"
-import { usePathname, useRouter } from "next/navigation"
-import { Monitor, LayoutDashboard, ImageIcon, Play, Settings, Menu, LogOut } from "lucide-react"
-
+import { Home, LayoutDashboard, ListChecks, Settings, Shield, User, Monitor, ImageIcon, Play } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { Sheet, SheetContent } from "@/components/ui/sheet"
-import { useToast } from "@/hooks/use-toast"
+import { Separator } from "@/components/ui/separator"
+import { ScrollArea } from "@/components/ui/scroll-area"
+import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet"
+import { Link } from "lucide-react"
+import { usePathname } from "next/navigation"
+import { useEffect, useState } from "react"
+
+interface SidebarProps {
+  isMobile: boolean
+}
+
+const sidebarNavItems = [
+  {
+    name: "Home",
+    href: "/dashboard",
+    icon: Home,
+  },
+  {
+    name: "Tasks",
+    href: "/dashboard/tasks",
+    icon: ListChecks,
+  },
+  {
+    name: "Settings",
+    href: "/dashboard/settings",
+    icon: Settings,
+  },
+  {
+    name: "Profile",
+    href: "/dashboard/profile",
+    icon: User,
+  },
+  {
+    name: "Admin",
+    href: "/dashboard/admin",
+    icon: Shield,
+    adminOnly: true,
+  },
+]
 
 const navigation = [
   { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
@@ -18,235 +50,89 @@ const navigation = [
   { name: "Settings", href: "/dashboard/settings", icon: Settings },
 ]
 
-interface DashboardLayoutProps {
-  children: React.ReactNode
-}
+// Add admin navigation conditionally
+const adminNavigation = [{ name: "Admin", href: "/dashboard/admin", icon: Shield }]
 
-interface UserProfile {
-  id: string
-  email: string
-  firstName: string
-  lastName: string
-  company?: string
-  plan: string
-  createdAt: string
-}
-
-export function DashboardLayout({ children }: DashboardLayoutProps) {
+export const DashboardLayout = ({ isMobile }: SidebarProps) => {
   const pathname = usePathname()
-  const router = useRouter()
-  const { toast } = useToast()
-  const [sidebarOpen, setSidebarOpen] = useState(false)
-  const [user, setUser] = useState<UserProfile | null>(null)
-  const [isLoggingOut, setIsLoggingOut] = useState(false)
-  const [isLoading, setIsLoading] = useState(true)
+  const [showSidebar, setShowSidebar] = useState(false)
+  const [isAdmin, setIsAdmin] = useState(false)
 
-  // Fetch user profile on mount
   useEffect(() => {
-    fetchUserProfile()
+    // Replace this with your actual logic to check user permissions
+    // For example, you might fetch user data from an API and check their role
+    const checkAdminStatus = async () => {
+      // Simulate an API call or permission check
+      const userIsAdmin = true // Replace with actual logic
+      setIsAdmin(userIsAdmin)
+    }
+
+    checkAdminStatus()
   }, [])
 
-  const fetchUserProfile = async () => {
-    try {
-      setIsLoading(true)
-      const response = await fetch("/api/user/profile")
-      const data = await response.json()
-
-      if (data.success && data.user) {
-        setUser(data.user)
-      } else {
-        console.error("Authentication failed:", data.message)
-        // If not authenticated, redirect to login
-        router.push("/login")
-      }
-    } catch (error) {
-      console.error("Failed to fetch user profile:", error)
-      router.push("/login")
-    } finally {
-      setIsLoading(false)
-    }
-  }
-
-  const handleLogout = async () => {
-    setIsLoggingOut(true)
-    try {
-      const response = await fetch("/api/auth/logout", {
-        method: "POST",
-      })
-
-      const data = await response.json()
-
-      if (data.success) {
-        toast({
-          title: "Logged out successfully",
-          description: "You have been signed out of your account.",
-        })
-        router.push("/login")
-      } else {
-        throw new Error(data.message)
-      }
-    } catch (error) {
-      console.error("Logout error:", error)
-      toast({
-        title: "Logout failed",
-        description: "There was an error signing you out. Please try again.",
-        variant: "destructive",
-      })
-    } finally {
-      setIsLoggingOut(false)
-    }
-  }
-
-  // Safe getters for user data
-  const getUserDisplayName = () => {
-    if (!user || !user.firstName || !user.lastName) return "Loading..."
-    return `${user.firstName} ${user.lastName}`
-  }
-
-  const getUserInitials = () => {
-    if (!user || !user.firstName || !user.lastName) return "??"
-    return `${user.firstName.charAt(0)}${user.lastName.charAt(0)}`.toUpperCase()
-  }
-
-  const getUserEmail = () => {
-    return user?.email || "Loading..."
-  }
-
-  // Show loading state while fetching user data
-  if (isLoading) {
-    return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
-          <p className="text-gray-600">Loading...</p>
-        </div>
-      </div>
-    )
-  }
-
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Mobile sidebar */}
-      <Sheet open={sidebarOpen} onOpenChange={setSidebarOpen}>
-        <SheetContent side="left" className="w-64 p-0">
-          <div className="flex h-full flex-col">
-            <div className="flex h-16 items-center px-6 border-b">
-              <Link href="/" className="flex items-center">
-                <Monitor className="h-6 w-6 mr-2" />
-                <span className="font-bold">SignageCloud</span>
-              </Link>
-            </div>
-            <nav className="flex-1 px-4 py-6 space-y-2">
-              {navigation.map((item) => {
-                const isActive = pathname === item.href
-                return (
-                  <Link
-                    key={item.name}
-                    href={item.href}
-                    className={`flex items-center px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-                      isActive
-                        ? "bg-primary text-primary-foreground"
-                        : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
-                    }`}
-                    onClick={() => setSidebarOpen(false)}
-                  >
-                    <item.icon className="h-4 w-4 mr-3" />
-                    {item.name}
-                  </Link>
-                )
-              })}
-            </nav>
-            <div className="border-t p-4">
-              <div className="flex items-center mb-4">
-                <div className="w-8 h-8 bg-primary rounded-full flex items-center justify-center">
-                  <span className="text-xs font-medium text-primary-foreground">{getUserInitials()}</span>
-                </div>
-                <div className="ml-3 min-w-0 flex-1">
-                  <p className="text-sm font-medium truncate">{getUserDisplayName()}</p>
-                  <p className="text-xs text-gray-500 truncate">{getUserEmail()}</p>
-                </div>
-              </div>
-              <Button variant="ghost" className="w-full justify-start" onClick={handleLogout} disabled={isLoggingOut}>
-                <LogOut className="h-4 w-4 mr-3" />
-                {isLoggingOut ? "Signing out..." : "Sign Out"}
-              </Button>
-            </div>
-          </div>
-        </SheetContent>
-      </Sheet>
-
-      {/* Desktop sidebar */}
-      <div className="hidden lg:fixed lg:inset-y-0 lg:flex lg:w-64 lg:flex-col">
-        <div className="flex flex-col flex-grow bg-white border-r">
-          <div className="flex h-16 items-center px-6 border-b">
-            <Link href="/" className="flex items-center">
-              <Monitor className="h-6 w-6 mr-2" />
-              <span className="font-bold">SignageCloud</span>
-            </Link>
-          </div>
-          <nav className="flex-1 px-4 py-6 space-y-2">
-            {navigation.map((item) => {
-              const isActive = pathname === item.href
-              return (
-                <Link
-                  key={item.name}
-                  href={item.href}
-                  className={`flex items-center px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-                    isActive
-                      ? "bg-primary text-primary-foreground"
-                      : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
-                  }`}
-                >
-                  <item.icon className="h-4 w-4 mr-3" />
-                  {item.name}
-                </Link>
-              )
-            })}
-          </nav>
-          <div className="border-t p-4">
-            <div className="flex items-center mb-4">
-              <div className="w-8 h-8 bg-primary rounded-full flex items-center justify-center">
-                <span className="text-xs font-medium text-primary-foreground">{getUserInitials()}</span>
-              </div>
-              <div className="ml-3 min-w-0 flex-1">
-                <p className="text-sm font-medium truncate">{getUserDisplayName()}</p>
-                <p className="text-xs text-gray-500 truncate">{getUserEmail()}</p>
-              </div>
-            </div>
-            <Button variant="ghost" className="w-full justify-start" onClick={handleLogout} disabled={isLoggingOut}>
-              <LogOut className="h-4 w-4 mr-3" />
-              {isLoggingOut ? "Signing out..." : "Sign Out"}
+    <div className="flex h-screen">
+      {isMobile ? (
+        <Sheet open={showSidebar} onOpenChange={setShowSidebar}>
+          <SheetTrigger asChild>
+            <Button variant="ghost" size="icon" className="md:hidden">
+              <LayoutDashboard className="h-6 w-6" />
             </Button>
-          </div>
-        </div>
+          </SheetTrigger>
+          <SheetContent side="left" className="w-3/4 p-0">
+            <SidebarContent isAdmin={isAdmin} pathname={pathname} />
+          </SheetContent>
+        </Sheet>
+      ) : (
+        <aside className="hidden md:flex md:w-[200px] lg:w-[250px] border-r flex-col">
+          <SidebarContent isAdmin={isAdmin} pathname={pathname} />
+        </aside>
+      )}
+      <main className="flex-1 p-4">
+        {/* Your page content goes here */}
+        <p>Main Content</p>
+      </main>
+    </div>
+  )
+}
+
+interface SidebarContentProps {
+  pathname: string
+  isAdmin: boolean
+}
+
+const SidebarContent = ({ pathname, isAdmin }: SidebarContentProps) => {
+  return (
+    <div className="flex flex-col h-full">
+      <div className="px-4 py-6">
+        <Link href="/" className="flex items-center font-semibold">
+          <LayoutDashboard className="h-6 w-6 mr-2" />
+          Acme Corp
+        </Link>
       </div>
-
-      {/* Main content */}
-      <div className="lg:pl-64">
-        {/* Top bar */}
-        <div className="sticky top-0 z-40 flex h-16 items-center gap-x-4 border-b bg-white px-4 shadow-sm sm:gap-x-6 sm:px-6 lg:px-8">
-          <Button variant="ghost" size="sm" className="lg:hidden" onClick={() => setSidebarOpen(true)}>
-            <Menu className="h-5 w-5" />
-          </Button>
-
-          <div className="flex flex-1 gap-x-4 self-stretch lg:gap-x-6">
-            <div className="flex flex-1"></div>
-            <div className="flex items-center gap-x-4 lg:gap-x-6">
-              <div className="hidden lg:flex lg:items-center lg:gap-x-2">
-                <div className="w-8 h-8 bg-primary rounded-full flex items-center justify-center">
-                  <span className="text-xs font-medium text-primary-foreground">{getUserInitials()}</span>
-                </div>
-                <span className="text-sm font-medium">{getUserDisplayName()}</span>
-              </div>
-            </div>
-          </div>
+      <Separator />
+      <ScrollArea className="flex-1 space-y-4 p-4">
+        <div className="space-y-1">
+          {sidebarNavItems.map((item) => {
+            if (item.adminOnly && !isAdmin) {
+              return null
+            }
+            const isActive = pathname === item.href
+            return (
+              <Button
+                variant={isActive ? "secondary" : "ghost"}
+                href={item.href}
+                asChild
+                className="w-full justify-start gap-2"
+                key={item.href}
+              >
+                <item.icon className="h-4 w-4" />
+                {item.name}
+              </Button>
+            )
+          })}
         </div>
-
-        {/* Page content */}
-        <main className="py-10">
-          <div className="px-4 sm:px-6 lg:px-8">{children}</div>
-        </main>
-      </div>
+      </ScrollArea>
     </div>
   )
 }
