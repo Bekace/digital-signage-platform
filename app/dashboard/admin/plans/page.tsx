@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { Plus, Edit, Trash2, DollarSign, HardDrive, Monitor, FileImage } from "lucide-react"
+import { Plus, Edit, Trash2, DollarSign, HardDrive, Monitor, FileImage, Users } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
@@ -36,6 +36,7 @@ interface Plan {
   features: string[]
   is_active: boolean
   sort_order: number
+  subscriber_count: number
   created_at: string
   updated_at: string
 }
@@ -48,7 +49,7 @@ interface Feature {
   is_active: boolean
 }
 
-const defaultPlan: Omit<Plan, "id" | "created_at" | "updated_at"> = {
+const defaultPlan: Omit<Plan, "id" | "created_at" | "updated_at" | "subscriber_count"> = {
   plan_type: "custom",
   name: "",
   description: "",
@@ -72,7 +73,8 @@ export default function PlansAdminPage() {
   const [editingPlan, setEditingPlan] = useState<Plan | null>(null)
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false)
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
-  const [newPlan, setNewPlan] = useState<Omit<Plan, "id" | "created_at" | "updated_at">>(defaultPlan)
+  const [newPlan, setNewPlan] =
+    useState<Omit<Plan, "id" | "created_at" | "updated_at" | "subscriber_count">>(defaultPlan)
   const { toast } = useToast()
 
   const loadPlans = async () => {
@@ -123,7 +125,7 @@ export default function PlansAdminPage() {
     loadFeatures()
   }, [])
 
-  const validatePlan = (plan: Omit<Plan, "id" | "created_at" | "updated_at">): string | null => {
+  const validatePlan = (plan: Omit<Plan, "id" | "created_at" | "updated_at" | "subscriber_count">): string | null => {
     if (!plan.plan_type.trim()) return "Plan type is required"
     if (!plan.name.trim()) return "Plan name is required"
     if (!plan.description.trim()) return "Plan description is required"
@@ -250,6 +252,17 @@ export default function PlansAdminPage() {
   }
 
   const handleDeletePlan = async (planId: number) => {
+    const plan = plans.find((p) => p.id === planId)
+
+    if (plan && plan.subscriber_count > 0) {
+      toast({
+        title: "Cannot Delete Plan",
+        description: `This plan has ${plan.subscriber_count} active subscribers. Please migrate users to another plan first.`,
+        variant: "destructive",
+      })
+      return
+    }
+
     if (!confirm("Are you sure you want to delete this plan? This action cannot be undone.")) return
 
     try {
@@ -445,6 +458,8 @@ export default function PlansAdminPage() {
     </div>
   )
 
+  const totalSubscribers = plans.reduce((sum, plan) => sum + plan.subscriber_count, 0)
+
   if (loading) {
     return (
       <DashboardLayout>
@@ -542,6 +557,15 @@ export default function PlansAdminPage() {
           </Card>
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Total Subscribers</CardTitle>
+              <Users className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">{totalSubscribers}</div>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">Avg Monthly Price</CardTitle>
               <DollarSign className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
@@ -551,15 +575,6 @@ export default function PlansAdminPage() {
               </div>
             </CardContent>
           </Card>
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Features Available</CardTitle>
-              <DollarSign className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{features.length}</div>
-            </CardContent>
-          </Card>
         </div>
 
         {/* Plans Table */}
@@ -567,7 +582,7 @@ export default function PlansAdminPage() {
           <CardHeader>
             <CardTitle>Subscription Plans</CardTitle>
             <CardDescription>
-              These are your active subscription plans. The first 3 were created from your database setup.
+              Manage your subscription plans. The subscriber count shows how many users are currently on each plan.
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -583,6 +598,7 @@ export default function PlansAdminPage() {
                     <TableHead>Limits</TableHead>
                     <TableHead>Pricing</TableHead>
                     <TableHead>Features</TableHead>
+                    <TableHead>Subscribers</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead>Actions</TableHead>
                   </TableRow>
@@ -638,6 +654,17 @@ export default function PlansAdminPage() {
                         </div>
                       </TableCell>
                       <TableCell>
+                        <div className="flex items-center space-x-2">
+                          <Users className="h-4 w-4 text-muted-foreground" />
+                          <span className="font-medium">{plan.subscriber_count}</span>
+                          {plan.subscriber_count > 0 && (
+                            <Badge variant="secondary" className="text-xs">
+                              Active
+                            </Badge>
+                          )}
+                        </div>
+                      </TableCell>
+                      <TableCell>
                         <Badge variant={plan.is_active ? "default" : "secondary"}>
                           {plan.is_active ? "Active" : "Inactive"}
                         </Badge>
@@ -657,6 +684,10 @@ export default function PlansAdminPage() {
                             size="sm"
                             onClick={() => handleDeletePlan(plan.id)}
                             className="text-red-600 hover:text-red-700"
+                            disabled={plan.subscriber_count > 0}
+                            title={
+                              plan.subscriber_count > 0 ? "Cannot delete plan with active subscribers" : "Delete plan"
+                            }
                           >
                             <Trash2 className="h-4 w-4" />
                           </Button>

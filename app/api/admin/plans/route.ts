@@ -31,18 +31,31 @@ export async function GET() {
 
     // Check if plan_templates table exists
     try {
-      const plans = await sql`
-        SELECT * FROM plan_templates 
-        ORDER BY sort_order ASC, created_at ASC
+      // Get plans with subscriber counts
+      const plansWithCounts = await sql`
+        SELECT 
+          pt.*,
+          COALESCE(user_counts.subscriber_count, 0) as subscriber_count
+        FROM plan_templates pt
+        LEFT JOIN (
+          SELECT 
+            plan_type,
+            COUNT(*) as subscriber_count
+          FROM users 
+          WHERE plan_type IS NOT NULL
+          GROUP BY plan_type
+        ) user_counts ON pt.plan_type = user_counts.plan_type
+        ORDER BY pt.sort_order ASC, pt.created_at ASC
       `
 
-      console.log("Admin plans API: Found", plans.length, "plans")
+      console.log("Admin plans API: Found", plansWithCounts.length, "plans with subscriber counts")
 
       return NextResponse.json({
         success: true,
-        plans: plans.map((plan) => ({
+        plans: plansWithCounts.map((plan) => ({
           ...plan,
           features: typeof plan.features === "string" ? JSON.parse(plan.features) : plan.features || [],
+          subscriber_count: Number(plan.subscriber_count) || 0,
         })),
       })
     } catch (tableErr) {
@@ -132,6 +145,7 @@ export async function POST(request: NextRequest) {
       plan: {
         ...newPlan[0],
         features: typeof newPlan[0].features === "string" ? JSON.parse(newPlan[0].features) : newPlan[0].features || [],
+        subscriber_count: 0, // New plans start with 0 subscribers
       },
       message: "Plan created successfully",
     })

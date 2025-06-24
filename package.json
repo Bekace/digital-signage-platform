@@ -9,6 +9,7 @@
     "start": "next start"
   },
   "dependencies": {
+    "@auth/core": "latest",
     "@hookform/resolvers": "^3.9.1",
     "@neondatabase/serverless": "latest",
     "@radix-ui/react-accordion": "latest",
@@ -53,7 +54,9 @@
     "jsonwebtoken": "latest",
     "lucide-react": "^0.454.0",
     "next": "14.2.16",
+    "next-auth": "latest",
     "next-themes": "latest",
+    "nodemailer": "latest",
     "react": "^18",
     "react-day-picker": "latest",
     "react-dom": "^18",
