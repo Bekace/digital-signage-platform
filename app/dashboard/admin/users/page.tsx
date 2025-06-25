@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { Users, Loader2, UserPlus, Search, Filter, Download, Eye, EyeOff, AlertCircle } from "lucide-react"
+import { Users, Loader2, UserPlus, Search, Filter, Download, Eye, EyeOff, AlertCircle, Trash2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
@@ -17,6 +17,17 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog"
 import { Label } from "@/components/ui/label"
 import { Checkbox } from "@/components/ui/checkbox"
 import { toast } from "@/hooks/use-toast"
@@ -63,6 +74,7 @@ export default function UsersAdminPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [updatingUser, setUpdatingUser] = useState<number | null>(null)
+  const [deletingUser, setDeletingUser] = useState<number | null>(null)
   const [searchTerm, setSearchTerm] = useState("")
   const [selectedPlanFilter, setSelectedPlanFilter] = useState<string>("all")
   const [selectedUsers, setSelectedUsers] = useState<number[]>([])
@@ -219,6 +231,43 @@ export default function UsersAdminPage() {
     }
   }
 
+  const deleteUser = async (userId: number) => {
+    try {
+      setDeletingUser(userId)
+      const response = await fetch(`/api/admin/users/${userId}`, {
+        method: "DELETE",
+      })
+
+      const data = await response.json()
+
+      if (response.ok) {
+        // Remove user from state immediately
+        setUsers((prev) => prev.filter((user) => user.id !== userId))
+        setSelectedUsers((prev) => prev.filter((id) => id !== userId))
+
+        toast({
+          title: "User Deleted",
+          description: data.message || "User deleted successfully.",
+        })
+      } else {
+        toast({
+          title: "Delete Failed",
+          description: data.message || "Failed to delete user",
+          variant: "destructive",
+        })
+      }
+    } catch (err) {
+      console.error("Error deleting user:", err)
+      toast({
+        title: "Delete Failed",
+        description: "Failed to delete user",
+        variant: "destructive",
+      })
+    } finally {
+      setDeletingUser(null)
+    }
+  }
+
   const handleBulkAssign = async () => {
     if (!bulkAssignPlan || selectedUsers.length === 0) return
 
@@ -303,7 +352,7 @@ export default function UsersAdminPage() {
   }
 
   const createUser = async () => {
-    console.log("Create user clicked", newUser) // Debug log
+    console.log("Create user clicked", newUser)
 
     // Clear previous validation errors
     setValidationErrors({})
@@ -324,31 +373,36 @@ export default function UsersAdminPage() {
       })
 
       const data = await response.json()
-      console.log("API response:", data) // Debug log
+      console.log("API response:", data)
 
       if (response.ok && data.success) {
+        // Create the new user object with proper structure
+        const newUserData: User = {
+          id: data.user.id,
+          email: data.user.email,
+          firstName: data.user.firstName,
+          lastName: data.user.lastName,
+          company: data.user.company || "",
+          plan: data.user.plan,
+          createdAt: data.user.createdAt,
+          isAdmin: data.user.isAdmin || false,
+          mediaCount: 0,
+          storageUsed: 0,
+        }
+
         // Add the new user to the beginning of the users array
-        setUsers((prev) => [data.user, ...prev])
+        setUsers((prev) => [newUserData, ...prev])
 
         // Close dialog and reset form
         setCreateUserDialogOpen(false)
-        setNewUser({
-          firstName: "",
-          lastName: "",
-          email: "",
-          company: "",
-          plan: "",
-          password: "",
-          isAdmin: false,
-        })
-        setValidationErrors({})
+        resetForm()
 
         toast({
           title: "User Created",
           description: `User ${data.user.firstName} ${data.user.lastName} created successfully.`,
         })
       } else {
-        console.error("API error:", data) // Debug log
+        console.error("API error:", data)
         toast({
           title: "Creation Failed",
           description: data.message || "Failed to create user",
@@ -356,7 +410,7 @@ export default function UsersAdminPage() {
         })
       }
     } catch (err) {
-      console.error("Network error:", err) // Debug log
+      console.error("Network error:", err)
       toast({
         title: "Creation Failed",
         description: "Network error: Failed to create user",
@@ -421,7 +475,6 @@ export default function UsersAdminPage() {
             <Button
               size="sm"
               onClick={() => {
-                console.log("Button clicked!") // Debug log
                 setCreateUserDialogOpen(true)
               }}
             >
@@ -430,180 +483,179 @@ export default function UsersAdminPage() {
             </Button>
 
             {/* Create User Dialog */}
-            {createUserDialogOpen && (
-              <Dialog open={createUserDialogOpen} onOpenChange={setCreateUserDialogOpen}>
-                <DialogContent className="max-w-md">
-                  <DialogHeader>
-                    <DialogTitle>Create New User</DialogTitle>
-                    <DialogDescription>Add a new user to the system and assign them a plan.</DialogDescription>
-                  </DialogHeader>
-                  <div className="space-y-4">
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <Label htmlFor="firstName">First Name *</Label>
-                        <Input
-                          id="firstName"
-                          value={newUser.firstName}
-                          onChange={(e) => {
-                            setNewUser((prev) => ({ ...prev, firstName: e.target.value }))
-                            if (validationErrors.firstName) {
-                              setValidationErrors((prev) => ({ ...prev, firstName: undefined }))
-                            }
-                          }}
-                          placeholder="John"
-                          className={validationErrors.firstName ? "border-red-500" : ""}
-                        />
-                        {validationErrors.firstName && (
-                          <div className="flex items-center mt-1 text-sm text-red-600">
-                            <AlertCircle className="h-4 w-4 mr-1" />
-                            {validationErrors.firstName}
-                          </div>
-                        )}
-                      </div>
-                      <div>
-                        <Label htmlFor="lastName">Last Name *</Label>
-                        <Input
-                          id="lastName"
-                          value={newUser.lastName}
-                          onChange={(e) => {
-                            setNewUser((prev) => ({ ...prev, lastName: e.target.value }))
-                            if (validationErrors.lastName) {
-                              setValidationErrors((prev) => ({ ...prev, lastName: undefined }))
-                            }
-                          }}
-                          placeholder="Doe"
-                          className={validationErrors.lastName ? "border-red-500" : ""}
-                        />
-                        {validationErrors.lastName && (
-                          <div className="flex items-center mt-1 text-sm text-red-600">
-                            <AlertCircle className="h-4 w-4 mr-1" />
-                            {validationErrors.lastName}
-                          </div>
-                        )}
-                      </div>
-                    </div>
+            <Dialog open={createUserDialogOpen} onOpenChange={setCreateUserDialogOpen}>
+              <DialogContent className="max-w-md">
+                <DialogHeader>
+                  <DialogTitle>Create New User</DialogTitle>
+                  <DialogDescription>Add a new user to the system and assign them a plan.</DialogDescription>
+                </DialogHeader>
+                <div className="space-y-4">
+                  <div className="grid grid-cols-2 gap-4">
                     <div>
-                      <Label htmlFor="email">Email *</Label>
+                      <Label htmlFor="firstName">First Name *</Label>
                       <Input
-                        id="email"
-                        type="email"
-                        value={newUser.email}
+                        id="firstName"
+                        value={newUser.firstName}
                         onChange={(e) => {
-                          setNewUser((prev) => ({ ...prev, email: e.target.value }))
-                          if (validationErrors.email) {
-                            setValidationErrors((prev) => ({ ...prev, email: undefined }))
+                          setNewUser((prev) => ({ ...prev, firstName: e.target.value }))
+                          if (validationErrors.firstName) {
+                            setValidationErrors((prev) => ({ ...prev, firstName: undefined }))
                           }
                         }}
-                        placeholder="john@example.com"
-                        className={validationErrors.email ? "border-red-500" : ""}
+                        placeholder="John"
+                        className={validationErrors.firstName ? "border-red-500" : ""}
                       />
-                      {validationErrors.email && (
+                      {validationErrors.firstName && (
                         <div className="flex items-center mt-1 text-sm text-red-600">
                           <AlertCircle className="h-4 w-4 mr-1" />
-                          {validationErrors.email}
+                          {validationErrors.firstName}
                         </div>
                       )}
                     </div>
                     <div>
-                      <Label htmlFor="company">Company</Label>
+                      <Label htmlFor="lastName">Last Name *</Label>
                       <Input
-                        id="company"
-                        value={newUser.company}
-                        onChange={(e) => setNewUser((prev) => ({ ...prev, company: e.target.value }))}
-                        placeholder="Company Name"
-                      />
-                    </div>
-                    <div>
-                      <Label htmlFor="password">Password *</Label>
-                      <div className="relative">
-                        <Input
-                          id="password"
-                          type={showPassword ? "text" : "password"}
-                          value={newUser.password}
-                          onChange={(e) => {
-                            setNewUser((prev) => ({ ...prev, password: e.target.value }))
-                            if (validationErrors.password) {
-                              setValidationErrors((prev) => ({ ...prev, password: undefined }))
-                            }
-                          }}
-                          placeholder="Minimum 6 characters"
-                          className={validationErrors.password ? "border-red-500" : ""}
-                        />
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
-                          onClick={() => setShowPassword(!showPassword)}
-                        >
-                          {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                        </Button>
-                      </div>
-                      {validationErrors.password && (
-                        <div className="flex items-center mt-1 text-sm text-red-600">
-                          <AlertCircle className="h-4 w-4 mr-1" />
-                          {validationErrors.password}
-                        </div>
-                      )}
-                    </div>
-                    <div>
-                      <Label htmlFor="plan">Plan *</Label>
-                      <Select
-                        value={newUser.plan}
-                        onValueChange={(value) => {
-                          setNewUser((prev) => ({ ...prev, plan: value }))
-                          if (validationErrors.plan) {
-                            setValidationErrors((prev) => ({ ...prev, plan: undefined }))
+                        id="lastName"
+                        value={newUser.lastName}
+                        onChange={(e) => {
+                          setNewUser((prev) => ({ ...prev, lastName: e.target.value }))
+                          if (validationErrors.lastName) {
+                            setValidationErrors((prev) => ({ ...prev, lastName: undefined }))
                           }
                         }}
-                      >
-                        <SelectTrigger className={validationErrors.plan ? "border-red-500" : ""}>
-                          <SelectValue placeholder="Select a plan" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {plans
-                            .filter((plan) => plan.is_active)
-                            .map((plan) => (
-                              <SelectItem key={plan.plan_type} value={plan.plan_type}>
-                                {plan.name} - ${plan.price_monthly}/month
-                              </SelectItem>
-                            ))}
-                        </SelectContent>
-                      </Select>
-                      {validationErrors.plan && (
+                        placeholder="Doe"
+                        className={validationErrors.lastName ? "border-red-500" : ""}
+                      />
+                      {validationErrors.lastName && (
                         <div className="flex items-center mt-1 text-sm text-red-600">
                           <AlertCircle className="h-4 w-4 mr-1" />
-                          {validationErrors.plan}
+                          {validationErrors.lastName}
                         </div>
                       )}
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      <Checkbox
-                        id="isAdmin"
-                        checked={newUser.isAdmin}
-                        onCheckedChange={(checked) => setNewUser((prev) => ({ ...prev, isAdmin: !!checked }))}
-                      />
-                      <Label htmlFor="isAdmin">Make this user an administrator</Label>
                     </div>
                   </div>
-                  <DialogFooter>
-                    <Button
-                      variant="outline"
-                      onClick={() => {
-                        setCreateUserDialogOpen(false)
-                        resetForm()
+                  <div>
+                    <Label htmlFor="email">Email *</Label>
+                    <Input
+                      id="email"
+                      type="email"
+                      value={newUser.email}
+                      onChange={(e) => {
+                        setNewUser((prev) => ({ ...prev, email: e.target.value }))
+                        if (validationErrors.email) {
+                          setValidationErrors((prev) => ({ ...prev, email: undefined }))
+                        }
+                      }}
+                      placeholder="john@example.com"
+                      className={validationErrors.email ? "border-red-500" : ""}
+                    />
+                    {validationErrors.email && (
+                      <div className="flex items-center mt-1 text-sm text-red-600">
+                        <AlertCircle className="h-4 w-4 mr-1" />
+                        {validationErrors.email}
+                      </div>
+                    )}
+                  </div>
+                  <div>
+                    <Label htmlFor="company">Company</Label>
+                    <Input
+                      id="company"
+                      value={newUser.company}
+                      onChange={(e) => setNewUser((prev) => ({ ...prev, company: e.target.value }))}
+                      placeholder="Company Name"
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="password">Password *</Label>
+                    <div className="relative">
+                      <Input
+                        id="password"
+                        type={showPassword ? "text" : "password"}
+                        value={newUser.password}
+                        onChange={(e) => {
+                          setNewUser((prev) => ({ ...prev, password: e.target.value }))
+                          if (validationErrors.password) {
+                            setValidationErrors((prev) => ({ ...prev, password: undefined }))
+                          }
+                        }}
+                        placeholder="Minimum 6 characters"
+                        className={validationErrors.password ? "border-red-500" : ""}
+                      />
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
+                        onClick={() => setShowPassword(!showPassword)}
+                      >
+                        {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                      </Button>
+                    </div>
+                    {validationErrors.password && (
+                      <div className="flex items-center mt-1 text-sm text-red-600">
+                        <AlertCircle className="h-4 w-4 mr-1" />
+                        {validationErrors.password}
+                      </div>
+                    )}
+                  </div>
+                  <div>
+                    <Label htmlFor="plan">Plan *</Label>
+                    <Select
+                      value={newUser.plan}
+                      onValueChange={(value) => {
+                        setNewUser((prev) => ({ ...prev, plan: value }))
+                        if (validationErrors.plan) {
+                          setValidationErrors((prev) => ({ ...prev, plan: undefined }))
+                        }
                       }}
                     >
-                      Cancel
-                    </Button>
-                    <Button onClick={createUser} disabled={creatingUser}>
-                      {creatingUser ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
-                      Create User
-                    </Button>
-                  </DialogFooter>
-                </DialogContent>
-              </Dialog>
-            )}
+                      <SelectTrigger className={validationErrors.plan ? "border-red-500" : ""}>
+                        <SelectValue placeholder="Select a plan" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {plans
+                          .filter((plan) => plan.is_active)
+                          .map((plan) => (
+                            <SelectItem key={plan.plan_type} value={plan.plan_type}>
+                              {plan.name} - ${plan.price_monthly}/month
+                            </SelectItem>
+                          ))}
+                      </SelectContent>
+                    </Select>
+                    {validationErrors.plan && (
+                      <div className="flex items-center mt-1 text-sm text-red-600">
+                        <AlertCircle className="h-4 w-4 mr-1" />
+                        {validationErrors.plan}
+                      </div>
+                    )}
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <Checkbox
+                      id="isAdmin"
+                      checked={newUser.isAdmin}
+                      onCheckedChange={(checked) => setNewUser((prev) => ({ ...prev, isAdmin: !!checked }))}
+                    />
+                    <Label htmlFor="isAdmin">Make this user an administrator</Label>
+                  </div>
+                </div>
+                <DialogFooter>
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      setCreateUserDialogOpen(false)
+                      resetForm()
+                    }}
+                  >
+                    Cancel
+                  </Button>
+                  <Button onClick={createUser} disabled={creatingUser}>
+                    {creatingUser ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+                    Create User
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
+
             {selectedUsers.length > 0 && (
               <Dialog open={bulkAssignDialogOpen} onOpenChange={setBulkAssignDialogOpen}>
                 <DialogTrigger asChild>
@@ -688,7 +740,7 @@ export default function UsersAdminPage() {
               <Users className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{filteredUsers.length}</div>
+              <div className="text-2xl font-bold">{users.length}</div>
               {selectedUsers.length > 0 && (
                 <p className="text-xs text-muted-foreground">{selectedUsers.length} selected</p>
               )}
@@ -730,6 +782,7 @@ export default function UsersAdminPage() {
                   <TableHead>Usage</TableHead>
                   <TableHead>Admin</TableHead>
                   <TableHead>Assign Plan</TableHead>
+                  <TableHead>Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -785,6 +838,56 @@ export default function UsersAdminPage() {
                               ))}
                           </SelectContent>
                         </Select>
+                      </TableCell>
+                      <TableCell>
+                        <AlertDialog>
+                          <AlertDialogTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              disabled={deletingUser === user.id}
+                              className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                            >
+                              {deletingUser === user.id ? (
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                              ) : (
+                                <Trash2 className="h-4 w-4" />
+                              )}
+                            </Button>
+                          </AlertDialogTrigger>
+                          <AlertDialogContent>
+                            <AlertDialogHeader>
+                              <AlertDialogTitle>Delete User</AlertDialogTitle>
+                              <AlertDialogDescription>
+                                Are you sure you want to delete{" "}
+                                <strong>
+                                  {user.firstName} {user.lastName}
+                                </strong>
+                                ?
+                                <br />
+                                <br />
+                                This will permanently delete:
+                                <ul className="list-disc list-inside mt-2 space-y-1">
+                                  <li>User account and profile</li>
+                                  <li>All media files ({user.mediaCount} files)</li>
+                                  <li>All playlists and devices</li>
+                                  <li>All associated data</li>
+                                </ul>
+                                <br />
+                                <strong>This action cannot be undone.</strong>
+                              </AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                              <AlertDialogCancel>Cancel</AlertDialogCancel>
+                              <AlertDialogAction
+                                onClick={() => deleteUser(user.id)}
+                                className="bg-red-600 hover:bg-red-700"
+                              >
+                                Delete User
+                              </AlertDialogAction>
+                            </AlertDialogFooter>
+                          </AlertDialogContent>
+                        </AlertDialog>
                       </TableCell>
                     </TableRow>
                   )
