@@ -112,11 +112,11 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
       {/* Mobile Sidebar */}
       <Sheet open={sidebarOpen} onOpenChange={setSidebarOpen}>
         <SheetTrigger asChild>
-          <Button variant="ghost" size="icon" className="md:hidden fixed top-4 left-4 z-50">
+          <Button variant="ghost" size="icon" className="md:hidden fixed top-4 right-4 z-50">
             <Menu className="h-6 w-6" />
           </Button>
         </SheetTrigger>
-        <SheetContent side="left" className="w-64 p-0">
+        <SheetContent side="right" className="w-64 p-0">
           <div className="flex flex-col h-full">
             <div className="flex items-center justify-between p-4">
               <h1 className="text-xl font-semibold">Digital Signage</h1>

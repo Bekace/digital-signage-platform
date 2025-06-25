@@ -86,8 +86,8 @@ export function DashboardHeader() {
   }
 
   return (
-    <header className="bg-white border-b border-gray-200 px-4 py-3">
-      <div className="flex items-center justify-between">
+    <header className="bg-white border-b border-gray-200 px-4 py-3 md:px-4 pr-16 md:pr-4">
+      <div className="flex items-center justify-between md:justify-between">
         <div className="flex-1">
           <h2 className="text-lg font-semibold text-gray-900">{user?.companyName || "Digital Signage Platform"}</h2>
         </div>
