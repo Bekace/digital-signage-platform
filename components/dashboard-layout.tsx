@@ -9,6 +9,8 @@ import { Separator } from "@/components/ui/separator"
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet"
 import { usePathname } from "next/navigation"
 import Link from "next/link"
+import { DashboardHeader } from "@/components/dashboard-header"
+import { DashboardFooter } from "@/components/dashboard-footer"
 
 interface DashboardLayoutProps {
   children: React.ReactNode
@@ -144,11 +146,13 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
 
       {/* Main Content */}
       <div className="flex flex-col flex-1 overflow-hidden">
+        <DashboardHeader />
         <main className="flex-1 relative overflow-y-auto focus:outline-none">
           <div className="py-6">
             <div className="max-w-7xl mx-auto px-4 sm:px-6 md:px-8">{children}</div>
           </div>
         </main>
+        <DashboardFooter />
       </div>
     </div>
   )
