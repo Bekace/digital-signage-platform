@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { Users, Loader2, UserPlus, Search, Filter, Download, Eye, EyeOff } from "lucide-react"
+import { Users, Loader2, UserPlus, Search, Filter, Download, Eye, EyeOff, AlertCircle } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
@@ -48,6 +48,14 @@ interface Plan {
   subscriber_count?: number
 }
 
+interface ValidationErrors {
+  firstName?: string
+  lastName?: string
+  email?: string
+  password?: string
+  plan?: string
+}
+
 export default function UsersAdminPage() {
   const [users, setUsers] = useState<User[]>([])
   const [filteredUsers, setFilteredUsers] = useState<User[]>([])
@@ -74,6 +82,7 @@ export default function UsersAdminPage() {
   })
   const [showPassword, setShowPassword] = useState(false)
   const [creatingUser, setCreatingUser] = useState(false)
+  const [validationErrors, setValidationErrors] = useState<ValidationErrors>({})
 
   const loadUsers = async () => {
     try {
@@ -135,6 +144,40 @@ export default function UsersAdminPage() {
 
     setFilteredUsers(filtered)
   }, [users, searchTerm, selectedPlanFilter])
+
+  const validateForm = (): boolean => {
+    const errors: ValidationErrors = {}
+
+    if (!newUser.firstName?.trim()) {
+      errors.firstName = "First name is required"
+    }
+
+    if (!newUser.lastName?.trim()) {
+      errors.lastName = "Last name is required"
+    }
+
+    if (!newUser.email?.trim()) {
+      errors.email = "Email is required"
+    } else {
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+      if (!emailRegex.test(newUser.email.trim())) {
+        errors.email = "Please enter a valid email address"
+      }
+    }
+
+    if (!newUser.password?.trim()) {
+      errors.password = "Password is required"
+    } else if (newUser.password.length < 6) {
+      errors.password = "Password must be at least 6 characters long"
+    }
+
+    if (!newUser.plan) {
+      errors.plan = "Plan selection is required"
+    }
+
+    setValidationErrors(errors)
+    return Object.keys(errors).length === 0
+  }
 
   const updateUserPlan = async (userId: number, newPlan: string) => {
     try {
@@ -262,69 +305,11 @@ export default function UsersAdminPage() {
   const createUser = async () => {
     console.log("Create user clicked", newUser) // Debug log
 
-    // Enhanced client-side validation
-    if (!newUser.firstName?.trim()) {
-      toast({
-        title: "Validation Error",
-        description: "First name is required",
-        variant: "destructive",
-      })
-      return
-    }
+    // Clear previous validation errors
+    setValidationErrors({})
 
-    if (!newUser.lastName?.trim()) {
-      toast({
-        title: "Validation Error",
-        description: "Last name is required",
-        variant: "destructive",
-      })
-      return
-    }
-
-    if (!newUser.email?.trim()) {
-      toast({
-        title: "Validation Error",
-        description: "Email is required",
-        variant: "destructive",
-      })
-      return
-    }
-
-    // Email format validation
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
-    if (!emailRegex.test(newUser.email.trim())) {
-      toast({
-        title: "Validation Error",
-        description: `Invalid email format: "${newUser.email}". Please enter a valid email like user@example.com`,
-        variant: "destructive",
-      })
-      return
-    }
-
-    if (!newUser.password?.trim()) {
-      toast({
-        title: "Validation Error",
-        description: "Password is required",
-        variant: "destructive",
-      })
-      return
-    }
-
-    if (newUser.password.length < 6) {
-      toast({
-        title: "Validation Error",
-        description: "Password must be at least 6 characters long",
-        variant: "destructive",
-      })
-      return
-    }
-
-    if (!newUser.plan) {
-      toast({
-        title: "Validation Error",
-        description: "Plan selection is required",
-        variant: "destructive",
-      })
+    // Validate form
+    if (!validateForm()) {
       return
     }
 
@@ -342,7 +327,10 @@ export default function UsersAdminPage() {
       console.log("API response:", data) // Debug log
 
       if (response.ok && data.success) {
+        // Add the new user to the beginning of the users array
         setUsers((prev) => [data.user, ...prev])
+
+        // Close dialog and reset form
         setCreateUserDialogOpen(false)
         setNewUser({
           firstName: "",
@@ -353,6 +341,8 @@ export default function UsersAdminPage() {
           password: "",
           isAdmin: false,
         })
+        setValidationErrors({})
+
         toast({
           title: "User Created",
           description: `User ${data.user.firstName} ${data.user.lastName} created successfully.`,
@@ -375,6 +365,20 @@ export default function UsersAdminPage() {
     } finally {
       setCreatingUser(false)
     }
+  }
+
+  const resetForm = () => {
+    setNewUser({
+      firstName: "",
+      lastName: "",
+      email: "",
+      company: "",
+      plan: "",
+      password: "",
+      isAdmin: false,
+    })
+    setValidationErrors({})
+    setShowPassword(false)
   }
 
   if (loading) {
@@ -425,7 +429,7 @@ export default function UsersAdminPage() {
               Add User
             </Button>
 
-            {/* Create User Dialog - moved outside of other dialogs */}
+            {/* Create User Dialog */}
             {createUserDialogOpen && (
               <Dialog open={createUserDialogOpen} onOpenChange={setCreateUserDialogOpen}>
                 <DialogContent className="max-w-md">
@@ -440,18 +444,42 @@ export default function UsersAdminPage() {
                         <Input
                           id="firstName"
                           value={newUser.firstName}
-                          onChange={(e) => setNewUser((prev) => ({ ...prev, firstName: e.target.value }))}
+                          onChange={(e) => {
+                            setNewUser((prev) => ({ ...prev, firstName: e.target.value }))
+                            if (validationErrors.firstName) {
+                              setValidationErrors((prev) => ({ ...prev, firstName: undefined }))
+                            }
+                          }}
                           placeholder="John"
+                          className={validationErrors.firstName ? "border-red-500" : ""}
                         />
+                        {validationErrors.firstName && (
+                          <div className="flex items-center mt-1 text-sm text-red-600">
+                            <AlertCircle className="h-4 w-4 mr-1" />
+                            {validationErrors.firstName}
+                          </div>
+                        )}
                       </div>
                       <div>
                         <Label htmlFor="lastName">Last Name *</Label>
                         <Input
                           id="lastName"
                           value={newUser.lastName}
-                          onChange={(e) => setNewUser((prev) => ({ ...prev, lastName: e.target.value }))}
+                          onChange={(e) => {
+                            setNewUser((prev) => ({ ...prev, lastName: e.target.value }))
+                            if (validationErrors.lastName) {
+                              setValidationErrors((prev) => ({ ...prev, lastName: undefined }))
+                            }
+                          }}
                           placeholder="Doe"
+                          className={validationErrors.lastName ? "border-red-500" : ""}
                         />
+                        {validationErrors.lastName && (
+                          <div className="flex items-center mt-1 text-sm text-red-600">
+                            <AlertCircle className="h-4 w-4 mr-1" />
+                            {validationErrors.lastName}
+                          </div>
+                        )}
                       </div>
                     </div>
                     <div>
@@ -460,9 +488,21 @@ export default function UsersAdminPage() {
                         id="email"
                         type="email"
                         value={newUser.email}
-                        onChange={(e) => setNewUser((prev) => ({ ...prev, email: e.target.value }))}
+                        onChange={(e) => {
+                          setNewUser((prev) => ({ ...prev, email: e.target.value }))
+                          if (validationErrors.email) {
+                            setValidationErrors((prev) => ({ ...prev, email: undefined }))
+                          }
+                        }}
                         placeholder="john@example.com"
+                        className={validationErrors.email ? "border-red-500" : ""}
                       />
+                      {validationErrors.email && (
+                        <div className="flex items-center mt-1 text-sm text-red-600">
+                          <AlertCircle className="h-4 w-4 mr-1" />
+                          {validationErrors.email}
+                        </div>
+                      )}
                     </div>
                     <div>
                       <Label htmlFor="company">Company</Label>
@@ -480,8 +520,14 @@ export default function UsersAdminPage() {
                           id="password"
                           type={showPassword ? "text" : "password"}
                           value={newUser.password}
-                          onChange={(e) => setNewUser((prev) => ({ ...prev, password: e.target.value }))}
+                          onChange={(e) => {
+                            setNewUser((prev) => ({ ...prev, password: e.target.value }))
+                            if (validationErrors.password) {
+                              setValidationErrors((prev) => ({ ...prev, password: undefined }))
+                            }
+                          }}
                           placeholder="Minimum 6 characters"
+                          className={validationErrors.password ? "border-red-500" : ""}
                         />
                         <Button
                           type="button"
@@ -493,14 +539,25 @@ export default function UsersAdminPage() {
                           {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                         </Button>
                       </div>
+                      {validationErrors.password && (
+                        <div className="flex items-center mt-1 text-sm text-red-600">
+                          <AlertCircle className="h-4 w-4 mr-1" />
+                          {validationErrors.password}
+                        </div>
+                      )}
                     </div>
                     <div>
                       <Label htmlFor="plan">Plan *</Label>
                       <Select
                         value={newUser.plan}
-                        onValueChange={(value) => setNewUser((prev) => ({ ...prev, plan: value }))}
+                        onValueChange={(value) => {
+                          setNewUser((prev) => ({ ...prev, plan: value }))
+                          if (validationErrors.plan) {
+                            setValidationErrors((prev) => ({ ...prev, plan: undefined }))
+                          }
+                        }}
                       >
-                        <SelectTrigger>
+                        <SelectTrigger className={validationErrors.plan ? "border-red-500" : ""}>
                           <SelectValue placeholder="Select a plan" />
                         </SelectTrigger>
                         <SelectContent>
@@ -513,6 +570,12 @@ export default function UsersAdminPage() {
                             ))}
                         </SelectContent>
                       </Select>
+                      {validationErrors.plan && (
+                        <div className="flex items-center mt-1 text-sm text-red-600">
+                          <AlertCircle className="h-4 w-4 mr-1" />
+                          {validationErrors.plan}
+                        </div>
+                      )}
                     </div>
                     <div className="flex items-center space-x-2">
                       <Checkbox
@@ -528,15 +591,7 @@ export default function UsersAdminPage() {
                       variant="outline"
                       onClick={() => {
                         setCreateUserDialogOpen(false)
-                        setNewUser({
-                          firstName: "",
-                          lastName: "",
-                          email: "",
-                          company: "",
-                          plan: "",
-                          password: "",
-                          isAdmin: false,
-                        })
+                        resetForm()
                       }}
                     >
                       Cancel
