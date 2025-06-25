@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Progress } from "@/components/ui/progress"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Crown, Upload, Monitor, HardDrive, Zap } from "lucide-react"
+import { Crown, Upload, Monitor, HardDrive, Zap, RefreshCw } from "lucide-react"
 import { formatBytes, formatNumber, getUsagePercentage, PLAN_NAMES } from "@/lib/plans"
 
 interface PlanData {
@@ -33,17 +33,31 @@ interface UsageDashboardProps {
 export function UsageDashboard({ refreshTrigger }: UsageDashboardProps) {
   const [planData, setPlanData] = useState<PlanData | null>(null)
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
 
   const fetchPlanData = async () => {
     try {
       setLoading(true)
+      setError(null)
+
+      console.log("🔄 Fetching real plan data...")
       const response = await fetch("/api/user/plan")
-      if (response.ok) {
-        const data = await response.json()
-        setPlanData(data)
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`)
       }
+
+      const data = await response.json()
+      console.log("📊 Real plan data received:", data)
+
+      if (data.error) {
+        throw new Error(data.error)
+      }
+
+      setPlanData(data)
     } catch (error) {
-      console.error("Error fetching plan data:", error)
+      console.error("❌ Error fetching plan data:", error)
+      setError(error instanceof Error ? error.message : "Failed to load plan data")
     } finally {
       setLoading(false)
     }
@@ -53,14 +67,43 @@ export function UsageDashboard({ refreshTrigger }: UsageDashboardProps) {
     fetchPlanData()
   }, [refreshTrigger])
 
+  const handleRefresh = () => {
+    fetchPlanData()
+  }
+
   if (loading) {
     return (
       <Card>
         <CardContent className="p-6">
           <div className="animate-pulse space-y-4">
-            <div className="h-4 bg-gray-200 rounded w-1/4"></div>
-            <div className="h-2 bg-gray-200 rounded"></div>
-            <div className="h-2 bg-gray-200 rounded w-3/4"></div>
+            <div className="flex items-center justify-between">
+              <div className="h-4 bg-gray-200 rounded w-1/4"></div>
+              <div className="h-8 w-8 bg-gray-200 rounded"></div>
+            </div>
+            <div className="space-y-3">
+              <div className="h-2 bg-gray-200 rounded"></div>
+              <div className="h-2 bg-gray-200 rounded w-3/4"></div>
+              <div className="h-2 bg-gray-200 rounded w-1/2"></div>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+    )
+  }
+
+  if (error) {
+    return (
+      <Card className="border-red-200 bg-red-50">
+        <CardContent className="p-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="font-medium text-red-900">Failed to Load Plan Data</h3>
+              <p className="text-sm text-red-700 mt-1">{error}</p>
+            </div>
+            <Button variant="outline" size="sm" onClick={handleRefresh}>
+              <RefreshCw className="h-4 w-4 mr-2" />
+              Retry
+            </Button>
           </div>
         </CardContent>
       </Card>
@@ -71,7 +114,7 @@ export function UsageDashboard({ refreshTrigger }: UsageDashboardProps) {
     return (
       <Card>
         <CardContent className="p-6">
-          <p className="text-gray-500">Unable to load plan information</p>
+          <p className="text-gray-500">No plan data available</p>
         </CardContent>
       </Card>
     )
@@ -81,6 +124,11 @@ export function UsageDashboard({ refreshTrigger }: UsageDashboardProps) {
   const isPro = usage.plan_type === "pro"
   const isEnterprise = usage.plan_type === "enterprise"
   const isFree = usage.plan_type === "free"
+
+  // Calculate usage percentages
+  const mediaUsagePercent = getUsagePercentage(usage.media_files_count, limits.max_media_files)
+  const storageUsagePercent = getUsagePercentage(usage.storage_used_bytes, limits.max_storage_bytes)
+  const screensUsagePercent = getUsagePercentage(usage.screens_count, limits.max_screens)
 
   return (
     <div className="space-y-6">
@@ -106,19 +154,24 @@ export function UsageDashboard({ refreshTrigger }: UsageDashboardProps) {
                 <p className="text-sm text-gray-600">{limits.features.join(" • ")}</p>
               </div>
             </div>
-            {isFree && (
-              <Button>
-                <Zap className="h-4 w-4 mr-2" />
-                Upgrade Plan
+            <div className="flex items-center space-x-2">
+              <Button variant="ghost" size="sm" onClick={handleRefresh}>
+                <RefreshCw className="h-4 w-4" />
               </Button>
-            )}
+              {isFree && (
+                <Button>
+                  <Zap className="h-4 w-4 mr-2" />
+                  Upgrade Plan
+                </Button>
+              )}
+            </div>
           </div>
         </CardHeader>
       </Card>
 
-      {/* Usage Stats */}
+      {/* Real Usage Stats */}
       <div className="grid gap-4 md:grid-cols-3">
-        {/* Media Files */}
+        {/* Media Files - Real Data */}
         <Card>
           <CardContent className="p-4">
             <div className="flex items-center space-x-3">
@@ -133,15 +186,16 @@ export function UsageDashboard({ refreshTrigger }: UsageDashboardProps) {
                   </p>
                 </div>
                 <Progress
-                  value={getUsagePercentage(usage.media_files_count, limits.max_media_files)}
-                  className="mt-2"
+                  value={mediaUsagePercent}
+                  className={`mt-2 ${mediaUsagePercent > 80 ? "bg-red-100" : mediaUsagePercent > 60 ? "bg-yellow-100" : ""}`}
                 />
+                {mediaUsagePercent > 80 && <p className="text-xs text-red-600 mt-1">Running low on media files</p>}
               </div>
             </div>
           </CardContent>
         </Card>
 
-        {/* Storage */}
+        {/* Storage - Real Data */}
         <Card>
           <CardContent className="p-4">
             <div className="flex items-center space-x-3">
@@ -156,15 +210,16 @@ export function UsageDashboard({ refreshTrigger }: UsageDashboardProps) {
                   </p>
                 </div>
                 <Progress
-                  value={getUsagePercentage(usage.storage_used_bytes, limits.max_storage_bytes)}
-                  className="mt-2"
+                  value={storageUsagePercent}
+                  className={`mt-2 ${storageUsagePercent > 80 ? "bg-red-100" : storageUsagePercent > 60 ? "bg-yellow-100" : ""}`}
                 />
+                {storageUsagePercent > 80 && <p className="text-xs text-red-600 mt-1">Running low on storage</p>}
               </div>
             </div>
           </CardContent>
         </Card>
 
-        {/* Screens */}
+        {/* Screens - Real Data */}
         <Card>
           <CardContent className="p-4">
             <div className="flex items-center space-x-3">
@@ -178,7 +233,11 @@ export function UsageDashboard({ refreshTrigger }: UsageDashboardProps) {
                     {formatNumber(usage.screens_count)} / {formatNumber(limits.max_screens)}
                   </p>
                 </div>
-                <Progress value={getUsagePercentage(usage.screens_count, limits.max_screens)} className="mt-2" />
+                <Progress
+                  value={screensUsagePercent}
+                  className={`mt-2 ${screensUsagePercent > 80 ? "bg-red-100" : screensUsagePercent > 60 ? "bg-yellow-100" : ""}`}
+                />
+                {screensUsagePercent > 80 && <p className="text-xs text-red-600 mt-1">Running low on screen slots</p>}
               </div>
             </div>
           </CardContent>
@@ -186,18 +245,32 @@ export function UsageDashboard({ refreshTrigger }: UsageDashboardProps) {
       </div>
 
       {/* Upgrade Prompt for Free Users */}
-      {isFree && (usage.media_files_count >= 3 || usage.storage_used_bytes > limits.max_storage_bytes * 0.8) && (
+      {isFree && (usage.media_files_count >= 3 || storageUsagePercent > 80) && (
         <Card className="border-orange-200 bg-orange-50">
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
                 <h3 className="font-medium text-orange-900">You're running low on space!</h3>
-                <p className="text-sm text-orange-700">Upgrade to Pro for 500 media files and 5GB storage.</p>
+                <p className="text-sm text-orange-700">
+                  Upgrade to Pro for {formatNumber(500)} media files and {formatBytes(5 * 1024 * 1024 * 1024)} storage.
+                </p>
               </div>
               <Button variant="outline" className="border-orange-300 text-orange-700 hover:bg-orange-100">
                 Upgrade Now
               </Button>
             </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Debug Info (only in development) */}
+      {process.env.NODE_ENV === "development" && (
+        <Card className="border-gray-200 bg-gray-50">
+          <CardContent className="p-4">
+            <details>
+              <summary className="text-sm font-medium cursor-pointer">Debug: Raw Plan Data</summary>
+              <pre className="text-xs mt-2 overflow-auto">{JSON.stringify(planData, null, 2)}</pre>
+            </details>
           </CardContent>
         </Card>
       )}
