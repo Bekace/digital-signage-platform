@@ -83,14 +83,14 @@ export async function POST(request: Request) {
     // Hash password
     const hashedPassword = await bcrypt.hash(password, 12)
 
-    // Create new user
+    // Create new user - using password_hash column instead of password
     const newUser = await sql`
       INSERT INTO users (
         first_name, 
         last_name, 
         email, 
         company, 
-        password, 
+        password_hash, 
         plan, 
         is_admin,
         created_at
