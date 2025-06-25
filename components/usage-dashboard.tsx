@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Crown, Upload, Monitor, HardDrive, Zap, RefreshCw } from "lucide-react"
 import { formatBytes, formatNumber, getUsagePercentage, PLAN_NAMES } from "@/lib/plans"
+import { usePlanStore } from "@/lib/plan-store"
 
 interface PlanData {
   usage: {
@@ -31,7 +32,8 @@ interface UsageDashboardProps {
 }
 
 export function UsageDashboard({ refreshTrigger }: UsageDashboardProps) {
-  const [planData, setPlanData] = useState<PlanData | null>(null)
+  const { planData: globalPlanData, setPlanData: setGlobalPlanData, shouldRefresh } = usePlanStore()
+  const [planData, setPlanData] = useState<PlanData | null>(globalPlanData)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -41,7 +43,12 @@ export function UsageDashboard({ refreshTrigger }: UsageDashboardProps) {
       setError(null)
 
       console.log("🔄 Fetching real plan data...")
-      const response = await fetch("/api/user/plan")
+      const response = await fetch("/api/user/plan", {
+        cache: "no-store", // Ensure fresh data
+        headers: {
+          "Cache-Control": "no-cache",
+        },
+      })
 
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}: ${response.statusText}`)
@@ -55,6 +62,7 @@ export function UsageDashboard({ refreshTrigger }: UsageDashboardProps) {
       }
 
       setPlanData(data)
+      setGlobalPlanData(data) // Update global store
     } catch (error) {
       console.error("❌ Error fetching plan data:", error)
       setError(error instanceof Error ? error.message : "Failed to load plan data")
@@ -63,9 +71,36 @@ export function UsageDashboard({ refreshTrigger }: UsageDashboardProps) {
     }
   }
 
+  // Add this after the existing fetchPlanData function
+  const forceRefresh = async () => {
+    console.log("🔄 Force refreshing plan data...")
+    await fetchPlanData()
+  }
+
+  // Update the useEffect to also listen for plan changes
   useEffect(() => {
+    // Always fetch fresh data when refreshTrigger changes
+    console.log("📊 Usage dashboard refresh triggered:", refreshTrigger)
     fetchPlanData()
   }, [refreshTrigger])
+
+  // Also refresh if global store indicates we should
+  useEffect(() => {
+    if (shouldRefresh()) {
+      console.log("🔄 Global store indicates refresh needed")
+      fetchPlanData()
+    }
+  }, [shouldRefresh])
+
+  // Add a second useEffect to periodically check for updates
+  useEffect(() => {
+    const interval = setInterval(() => {
+      console.log("⏰ Periodic refresh of usage data")
+      fetchPlanData()
+    }, 30000) // Refresh every 30 seconds
+
+    return () => clearInterval(interval)
+  }, [])
 
   const handleRefresh = () => {
     fetchPlanData()
@@ -155,7 +190,7 @@ export function UsageDashboard({ refreshTrigger }: UsageDashboardProps) {
               </div>
             </div>
             <div className="flex items-center space-x-2">
-              <Button variant="ghost" size="sm" onClick={handleRefresh}>
+              <Button variant="ghost" size="sm" onClick={forceRefresh}>
                 <RefreshCw className="h-4 w-4" />
               </Button>
               {isFree && (

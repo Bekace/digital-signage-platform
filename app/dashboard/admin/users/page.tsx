@@ -321,6 +321,7 @@ export default function UsersAdminPage() {
 
       if (response.ok) {
         setUsers((prev) => prev.map((user) => (user.id === userId ? { ...user, plan: newPlan } : user)))
+        triggerRefresh() // Add this line to refresh usage data
         toast({
           title: "Plan Updated",
           description: `User plan updated to ${newPlan} successfully.`,

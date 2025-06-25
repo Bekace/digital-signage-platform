@@ -82,7 +82,7 @@ export default function MediaPage() {
   const handleUploadComplete = () => {
     loadMediaFiles()
     setShowUploadDialog(false)
-    triggerRefresh()
+    triggerRefresh() // This should trigger usage dashboard refresh
   }
 
   const handlePreview = (file: MediaFile) => {
@@ -110,7 +110,7 @@ export default function MediaPage() {
         setMediaFiles((prev) => prev.filter((f) => f.id !== deleteFile.id))
         setShowDeleteDialog(false)
         setDeleteFile(null)
-        triggerRefresh()
+        triggerRefresh() // This should refresh usage data
         console.log(data.message)
       } else {
         setError(data.error || "Failed to delete file")
