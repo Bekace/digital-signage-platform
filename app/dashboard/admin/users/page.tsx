@@ -47,6 +47,7 @@ import { toast } from "@/hooks/use-toast"
 import { DashboardLayout } from "@/components/dashboard-layout"
 import { formatBytes, formatNumber } from "@/lib/plans"
 import { DebugPanel } from "@/components/debug-panel"
+import { DebugAPIComparison } from "@/components/debug-api-comparison"
 import { debugLogger } from "@/lib/debug"
 
 interface User {
@@ -129,6 +130,7 @@ export default function UsersAdminPage() {
   const [updatingUserEdit, setUpdatingUserEdit] = useState(false)
   const [editValidationErrors, setEditValidationErrors] = useState<ValidationErrors>({})
 
+  // EXACT MEDIA PATTERN - NOT ASYNC!
   const loadUsers = async () => {
     try {
       debugLogger.apiCall("GET", "/api/admin/users")
@@ -141,12 +143,14 @@ export default function UsersAdminPage() {
       debugLogger.apiResponse("/api/admin/users", response.ok, {
         status: response.status,
         userCount: data.users?.length || 0,
+        fullResponse: data,
       })
 
       if (response.ok) {
         debugLogger.stateChange("UsersPage", "Users loaded successfully", {
           userCount: data.users?.length || 0,
           previousCount: users.length,
+          newUsers: data.users,
         })
         setUsers(data.users || [])
         setError(null)
@@ -200,58 +204,30 @@ export default function UsersAdminPage() {
     setRefreshTrigger(newTrigger)
   }
 
-  const handleUserCreated = async () => {
-    debugLogger.userAction("Handle user created - START")
-
-    try {
-      debugLogger.stateChange("UsersPage", "Reloading users after creation")
-      await loadUsers()
-
-      debugLogger.stateChange("UsersPage", "Closing create dialog")
-      setCreateUserDialogOpen(false)
-
-      debugLogger.userAction("Triggering refresh after user creation")
-      triggerRefresh()
-
-      debugLogger.userAction("Handle user created - SUCCESS")
-    } catch (error) {
-      debugLogger.userAction("Handle user created - ERROR", { error: error.message })
-    }
+  // EXACT MEDIA PATTERN - NOT ASYNC!
+  const handleUserCreated = () => {
+    debugLogger.userAction("Handle user created - START (MEDIA PATTERN)")
+    loadUsers()
+    setCreateUserDialogOpen(false)
+    triggerRefresh()
+    debugLogger.userAction("Handle user created - END (MEDIA PATTERN)")
   }
 
-  const handleUserUpdated = async () => {
-    debugLogger.userAction("Handle user updated - START")
-
-    try {
-      debugLogger.stateChange("UsersPage", "Reloading users after update")
-      await loadUsers()
-
-      debugLogger.stateChange("UsersPage", "Closing edit dialog")
-      setEditUserDialogOpen(false)
-
-      debugLogger.userAction("Triggering refresh after user update")
-      triggerRefresh()
-
-      debugLogger.userAction("Handle user updated - SUCCESS")
-    } catch (error) {
-      debugLogger.userAction("Handle user updated - ERROR", { error: error.message })
-    }
+  // EXACT MEDIA PATTERN - NOT ASYNC!
+  const handleUserUpdated = () => {
+    debugLogger.userAction("Handle user updated - START (MEDIA PATTERN)")
+    loadUsers()
+    setEditUserDialogOpen(false)
+    triggerRefresh()
+    debugLogger.userAction("Handle user updated - END (MEDIA PATTERN)")
   }
 
-  const handleUserDeleted = async () => {
-    debugLogger.userAction("Handle user deleted - START")
-
-    try {
-      debugLogger.stateChange("UsersPage", "Reloading users after deletion")
-      await loadUsers()
-
-      debugLogger.userAction("Triggering refresh after user deletion")
-      triggerRefresh()
-
-      debugLogger.userAction("Handle user deleted - SUCCESS")
-    } catch (error) {
-      debugLogger.userAction("Handle user deleted - ERROR", { error: error.message })
-    }
+  // EXACT MEDIA PATTERN - NOT ASYNC!
+  const handleUserDeleted = () => {
+    debugLogger.userAction("Handle user deleted - START (MEDIA PATTERN)")
+    loadUsers()
+    triggerRefresh()
+    debugLogger.userAction("Handle user deleted - END (MEDIA PATTERN)")
   }
 
   // Debug dialog state changes
@@ -388,7 +364,7 @@ export default function UsersAdminPage() {
           title: "User Deleted",
           description: data.message || "User deleted successfully.",
         })
-        await handleUserDeleted()
+        handleUserDeleted() // NOT ASYNC - EXACT MEDIA PATTERN
       } else {
         toast({
           title: "Delete Failed",
@@ -539,38 +515,13 @@ export default function UsersAdminPage() {
           description: `User ${data.user.firstName} ${data.user.lastName} created successfully.`,
         })
 
-        // Add the new user to the existing list immediately (optimistic update)
-        const newUserForList: User = {
-          id: data.user.id,
-          email: data.user.email,
-          firstName: data.user.firstName,
-          lastName: data.user.lastName,
-          company: data.user.company || "",
-          plan: data.user.plan,
-          createdAt: data.user.createdAt,
-          isAdmin: data.user.isAdmin,
-          mediaCount: 0,
-          storageUsed: 0,
-        }
-
-        // Update the users list immediately
-        setUsers((prev) => [newUserForList, ...prev])
-
         // Reset form
         debugLogger.stateChange("CreateUser", "Resetting form")
         resetCreateForm()
 
-        // Close dialog
-        debugLogger.stateChange("CreateUser", "Closing dialog")
-        setCreateUserDialogOpen(false)
-
-        // Trigger refresh for any other components
-        triggerRefresh()
-
-        // Then reload from server to ensure consistency (but don't await it)
-        setTimeout(() => {
-          loadUsers()
-        }, 500)
+        // EXACT MEDIA PATTERN - NOT ASYNC!
+        debugLogger.userAction("Create user - CALLING HANDLER (MEDIA PATTERN)")
+        handleUserCreated() // NOT AWAITED - EXACT MEDIA PATTERN
 
         debugLogger.userAction("Create user - COMPLETE SUCCESS")
       } else {
@@ -650,38 +601,13 @@ export default function UsersAdminPage() {
           description: `User ${data.user.firstName} ${data.user.lastName} updated successfully.`,
         })
 
-        // Update the user in the existing list immediately (optimistic update)
-        setUsers((prev) =>
-          prev.map((user) =>
-            user.id === editingUser?.id
-              ? {
-                  ...user,
-                  firstName: data.user.firstName,
-                  lastName: data.user.lastName,
-                  email: data.user.email,
-                  company: data.user.company || "",
-                  plan: data.user.plan,
-                  isAdmin: data.user.isAdmin,
-                }
-              : user,
-          ),
-        )
-
         // Reset form
         debugLogger.stateChange("EditUser", "Resetting form")
         resetEditForm()
 
-        // Close dialog
-        debugLogger.stateChange("EditUser", "Closing dialog")
-        setEditUserDialogOpen(false)
-
-        // Trigger refresh for any other components
-        triggerRefresh()
-
-        // Then reload from server to ensure consistency (but don't await it)
-        setTimeout(() => {
-          loadUsers()
-        }, 500)
+        // EXACT MEDIA PATTERN - NOT ASYNC!
+        debugLogger.userAction("Update user - CALLING HANDLER (MEDIA PATTERN)")
+        handleUserUpdated() // NOT AWAITED - EXACT MEDIA PATTERN
 
         debugLogger.userAction("Update user - COMPLETE SUCCESS")
       } else {
@@ -746,6 +672,7 @@ export default function UsersAdminPage() {
           <span className="ml-2">Loading users...</span>
         </div>
         <DebugPanel />
+        <DebugAPIComparison />
       </DashboardLayout>
     )
   }
@@ -760,6 +687,7 @@ export default function UsersAdminPage() {
           </Button>
         </div>
         <DebugPanel />
+        <DebugAPIComparison />
       </DashboardLayout>
     )
   }
@@ -1406,6 +1334,7 @@ export default function UsersAdminPage() {
         </Card>
       </div>
       <DebugPanel />
+      <DebugAPIComparison />
     </DashboardLayout>
   )
 }
