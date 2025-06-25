@@ -5,9 +5,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Progress } from "@/components/ui/progress"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Crown, Upload, Monitor, HardDrive, Zap, RefreshCw, AlertTriangle } from "lucide-react"
+import { Crown, Upload, Monitor, HardDrive, Zap, RefreshCw, AlertTriangle, Bug } from "lucide-react"
 import { formatBytes, formatNumber, getUsagePercentage, PLAN_NAMES } from "@/lib/plans"
-import { usePlanStore } from "@/lib/plan-store"
 
 interface PlanData {
   usage: {
@@ -17,20 +16,27 @@ interface PlanData {
     plan_type: string
   }
   limits: {
+    id: number
     plan_type: string
+    name: string
     max_media_files: number
     max_storage_bytes: number
     max_screens: number
     price_monthly: number
+    price_yearly: number
     features: string[]
   }
   plan_expires_at?: string
   debug?: {
+    user_id: string
+    user_email: string
+    user_plan_type_from_db: string
+    plan_template_found: string
+    plan_template_name: string
     user_table_media_count: number
     actual_media_count: number
-    user_table_storage: number
+    user_table_storage: string
     actual_storage: number
-    plan_type: string
     timestamp: string
   }
 }
@@ -40,8 +46,7 @@ interface UsageDashboardProps {
 }
 
 export function UsageDashboard({ refreshTrigger }: UsageDashboardProps) {
-  const { planData: globalPlanData, setPlanData: setGlobalPlanData, shouldRefresh } = usePlanStore()
-  const [planData, setPlanData] = useState<PlanData | null>(globalPlanData)
+  const [planData, setPlanData] = useState<PlanData | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [lastRefresh, setLastRefresh] = useState<string>("")
@@ -51,34 +56,56 @@ export function UsageDashboard({ refreshTrigger }: UsageDashboardProps) {
       setLoading(true)
       setError(null)
 
-      console.log("🔄 [USAGE DASHBOARD] Fetching plan data...", { force, refreshTrigger })
+      console.log("🔄 [USAGE DASHBOARD] === FETCHING PLAN DATA ===")
+      console.log("🔄 [USAGE DASHBOARD] Force:", force, "RefreshTrigger:", refreshTrigger)
 
-      // Add cache busting and force refresh headers
-      const response = await fetch("/api/user/plan", {
+      // Clear any cached data
+      const timestamp = new Date().getTime()
+      const response = await fetch(`/api/user/plan?t=${timestamp}`, {
         method: "GET",
         headers: {
           "Cache-Control": "no-cache, no-store, must-revalidate",
           Pragma: "no-cache",
           Expires: "0",
         },
-        // Add timestamp to force new request
         cache: "no-store",
       })
+
+      console.log("📡 [USAGE DASHBOARD] Response status:", response.status)
 
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}: ${response.statusText}`)
       }
 
       const data = await response.json()
-      console.log("📊 [USAGE DASHBOARD] Plan data received:", data)
+      console.log("📊 [USAGE DASHBOARD] === RECEIVED DATA ===")
+      console.log("📊 [USAGE DASHBOARD] Full response:", data)
+
+      if (data.debug) {
+        console.log("🐛 [USAGE DASHBOARD] Debug info:")
+        console.log("   - User ID:", data.debug.user_id)
+        console.log("   - User Email:", data.debug.user_email)
+        console.log("   - User Plan Type (DB):", data.debug.user_plan_type_from_db)
+        console.log("   - Plan Template Found:", data.debug.plan_template_found)
+        console.log("   - Plan Template Name:", data.debug.plan_template_name)
+      }
 
       if (data.error) {
         throw new Error(data.error)
       }
 
+      // Check for plan mismatch
+      if (data.usage && data.limits && data.usage.plan_type !== data.limits.plan_type) {
+        console.log("🚨 [USAGE DASHBOARD] PLAN MISMATCH DETECTED!")
+        console.log("   - Usage Plan Type:", data.usage.plan_type)
+        console.log("   - Limits Plan Type:", data.limits.plan_type)
+        console.log("   - Limits Plan Name:", data.limits.name)
+        setError(`Plan mismatch detected: User has ${data.usage.plan_type} but showing ${data.limits.plan_type} limits`)
+      }
+
       setPlanData(data)
-      setGlobalPlanData(data) // Update global store
       setLastRefresh(new Date().toLocaleTimeString())
+      console.log("✅ [USAGE DASHBOARD] Data set successfully")
     } catch (error) {
       console.error("❌ [USAGE DASHBOARD] Error:", error)
       setError(error instanceof Error ? error.message : "Failed to load plan data")
@@ -87,36 +114,15 @@ export function UsageDashboard({ refreshTrigger }: UsageDashboardProps) {
     }
   }
 
-  // Add this after the existing fetchPlanData function
   const forceRefresh = async () => {
-    console.log("🔄 Force refreshing plan data...")
+    console.log("🔄 [USAGE DASHBOARD] Force refresh triggered")
     await fetchPlanData(true)
   }
 
-  // Update the useEffect to also listen for plan changes
   useEffect(() => {
-    // Always fetch fresh data when refreshTrigger changes
-    console.log("📊 Usage dashboard refresh triggered:", refreshTrigger)
+    console.log("📊 [USAGE DASHBOARD] useEffect triggered - refreshTrigger:", refreshTrigger)
     fetchPlanData(true)
   }, [refreshTrigger])
-
-  // Also refresh if global store indicates we should
-  useEffect(() => {
-    if (shouldRefresh()) {
-      console.log("🔄 Global store indicates refresh needed")
-      fetchPlanData(true)
-    }
-  }, [shouldRefresh])
-
-  // Add a second useEffect to periodically check for updates
-  useEffect(() => {
-    const interval = setInterval(() => {
-      console.log("⏰ Periodic refresh of usage data")
-      fetchPlanData(true)
-    }, 30000) // Refresh every 30 seconds
-
-    return () => clearInterval(interval)
-  }, [])
 
   const handleRefresh = () => {
     fetchPlanData(true)
@@ -148,7 +154,7 @@ export function UsageDashboard({ refreshTrigger }: UsageDashboardProps) {
         <CardContent className="p-6">
           <div className="flex items-center justify-between">
             <div>
-              <h3 className="font-medium text-red-900">Failed to Load Plan Data</h3>
+              <h3 className="font-medium text-red-900">Plan Data Error</h3>
               <p className="text-sm text-red-700 mt-1">{error}</p>
               {lastRefresh && <p className="text-xs text-red-600 mt-1">Last successful refresh: {lastRefresh}</p>}
             </div>
@@ -183,6 +189,9 @@ export function UsageDashboard({ refreshTrigger }: UsageDashboardProps) {
   const isEnterprise = usage.plan_type === "enterprise"
   const isFree = usage.plan_type === "free"
 
+  // Check for plan mismatch
+  const planMismatch = usage.plan_type !== limits.plan_type
+
   // Calculate usage percentages
   const mediaUsagePercent = getUsagePercentage(usage.media_files_count, limits.max_media_files)
   const storageUsagePercent = getUsagePercentage(usage.storage_used_bytes, limits.max_storage_bytes)
@@ -195,6 +204,30 @@ export function UsageDashboard({ refreshTrigger }: UsageDashboardProps) {
 
   return (
     <div className="space-y-6">
+      {/* Plan Mismatch Warning */}
+      {planMismatch && (
+        <Card className="border-red-200 bg-red-50">
+          <CardContent className="p-4">
+            <div className="flex items-center space-x-3">
+              <Bug className="h-5 w-5 text-red-600" />
+              <div>
+                <h3 className="font-medium text-red-900">Plan Data Mismatch Detected</h3>
+                <p className="text-sm text-red-700">
+                  User plan: <strong>{usage.plan_type}</strong> but showing limits for:{" "}
+                  <strong>{limits.plan_type}</strong> ({limits.name})
+                </p>
+                {debug && (
+                  <p className="text-xs text-red-600 mt-1">
+                    User: {debug.user_email} | DB Plan: {debug.user_plan_type_from_db} | Template:{" "}
+                    {debug.plan_template_found}
+                  </p>
+                )}
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Plan Header */}
       <Card>
         <CardHeader>
@@ -209,10 +242,11 @@ export function UsageDashboard({ refreshTrigger }: UsageDashboardProps) {
               </div>
               <div>
                 <CardTitle className="flex items-center space-x-2">
-                  <span>{PLAN_NAMES[usage.plan_type as keyof typeof PLAN_NAMES]} Plan</span>
+                  <span>{limits.name || PLAN_NAMES[usage.plan_type as keyof typeof PLAN_NAMES]} Plan</span>
                   <Badge variant={isFree ? "secondary" : "default"}>
                     {isFree ? "Free" : `$${limits.price_monthly}/month`}
                   </Badge>
+                  {planMismatch && <Badge variant="destructive">MISMATCH</Badge>}
                 </CardTitle>
                 <p className="text-sm text-gray-600">{limits.features.join(" • ")}</p>
                 {lastRefresh && <p className="text-xs text-gray-500 mt-1">Last updated: {lastRefresh}</p>}
@@ -334,38 +368,43 @@ export function UsageDashboard({ refreshTrigger }: UsageDashboardProps) {
         </Card>
       </div>
 
-      {/* Upgrade Prompt for Free Users */}
-      {isFree && (usage.media_files_count >= 3 || storageUsagePercent > 80) && (
-        <Card className="border-orange-200 bg-orange-50">
-          <CardContent className="p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <h3 className="font-medium text-orange-900">You're running low on space!</h3>
-                <p className="text-sm text-orange-700">
-                  Upgrade to Pro for {formatNumber(500)} media files and {formatBytes(5 * 1024 * 1024 * 1024)} storage.
-                </p>
-              </div>
-              <Button variant="outline" className="border-orange-300 text-orange-700 hover:bg-orange-100">
-                Upgrade Now
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Debug Info (only in development) */}
-      {debug && process.env.NODE_ENV === "development" && (
+      {/* Debug Info (always show if there's debug data) */}
+      {debug && (
         <Card className="border-gray-200 bg-gray-50">
           <CardContent className="p-4">
             <details>
-              <summary className="text-sm font-medium cursor-pointer">Debug: Plan Data Sync</summary>
-              <div className="text-xs mt-2 space-y-1">
-                <div>User Table Media Count: {debug.user_table_media_count}</div>
-                <div>Actual Media Count: {debug.actual_media_count}</div>
-                <div>User Table Storage: {formatBytes(debug.user_table_storage)}</div>
-                <div>Actual Storage: {formatBytes(debug.actual_storage)}</div>
-                <div>Plan Type: {debug.plan_type}</div>
-                <div>Timestamp: {debug.timestamp}</div>
+              <summary className="text-sm font-medium cursor-pointer">🐛 Debug: Plan Data Details</summary>
+              <div className="text-xs mt-2 space-y-1 font-mono">
+                <div>
+                  <strong>User ID:</strong> {debug.user_id}
+                </div>
+                <div>
+                  <strong>User Email:</strong> {debug.user_email}
+                </div>
+                <div>
+                  <strong>User Plan (DB):</strong> {debug.user_plan_type_from_db}
+                </div>
+                <div>
+                  <strong>Plan Template Found:</strong> {debug.plan_template_found}
+                </div>
+                <div>
+                  <strong>Plan Template Name:</strong> {debug.plan_template_name}
+                </div>
+                <div>
+                  <strong>Media Count (User Table):</strong> {debug.user_table_media_count}
+                </div>
+                <div>
+                  <strong>Media Count (Actual):</strong> {debug.actual_media_count}
+                </div>
+                <div>
+                  <strong>Storage (User Table):</strong> {debug.user_table_storage}
+                </div>
+                <div>
+                  <strong>Storage (Actual):</strong> {debug.actual_storage}
+                </div>
+                <div>
+                  <strong>Timestamp:</strong> {debug.timestamp}
+                </div>
               </div>
             </details>
           </CardContent>
