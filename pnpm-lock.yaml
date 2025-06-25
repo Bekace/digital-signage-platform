@@ -196,11 +196,8 @@ importers:
         version: 3.24.1
     devDependencies:
       '@types/bcryptjs':
-        specifier: ^2.4.6
+        specifier: ^2.4.2
         version: 2.4.6
-      '@types/jsonwebtoken':
-        specifier: ^9.0.5
-        version: 9.0.5
       '@types/node':
         specifier: ^22
         version: 22.0.0
@@ -1358,9 +1355,6 @@ packages:
 
   '@types/istanbul-reports@3.0.4':
     resolution: {integrity: sha512-pk2B1NWalF9toCRu6gjBzR69syFjP4Od8WRAX+0mmf9lAjCRicLOWc+ZrxZHx/0XRjotgkF9t6iaMJ+aXcOdZQ==}
-
-  '@types/jsonwebtoken@9.0.5':
-    resolution: {integrity: sha512-VRLSGzik+Unrup6BsouBeHsf4d1hOEgYWTm/7Nmw1sXoN1+tRly/Gy/po3yeahnP4jfnQWWAhQAqcNfH7ngOkA==}
 
   '@types/node@22.0.0':
     resolution: {integrity: sha512-VT7KSYudcPOzP5Q0wfbowyNLaVR8QWUdw+088uFWwfvpY6uCWaXpqV6ieLAu9WBcnTa7H4Z5RLK8I5t2FuOcqw==}
@@ -4403,10 +4397,6 @@ snapshots:
   '@types/istanbul-reports@3.0.4':
     dependencies:
       '@types/istanbul-lib-report': 3.0.3
-
-  '@types/jsonwebtoken@9.0.5':
-    dependencies:
-      '@types/node': 22.15.32
 
   '@types/node@22.0.0':
     dependencies:
