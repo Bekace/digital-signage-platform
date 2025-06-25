@@ -40,6 +40,59 @@ interface Feature {
   created_at: string
 }
 
+interface FeatureFormProps {
+  feature: any
+  setFeature: (feature: any) => void
+}
+
+const FeatureForm = ({ feature, setFeature }: FeatureFormProps) => (
+  <div className="grid gap-4 py-4">
+    <div>
+      <Label htmlFor="feature_name">Feature Name *</Label>
+      <Input
+        id="feature_name"
+        value={feature.feature_name}
+        onChange={(e) => setFeature({ ...feature, feature_name: e.target.value })}
+        placeholder="e.g., Advanced Analytics"
+        required
+      />
+    </div>
+    <div>
+      <Label htmlFor="description">Description *</Label>
+      <Textarea
+        id="description"
+        value={feature.description}
+        onChange={(e) => setFeature({ ...feature, description: e.target.value })}
+        placeholder="Describe what this feature provides..."
+        required
+      />
+    </div>
+    <div>
+      <Label htmlFor="category">Category *</Label>
+      <Select value={feature.category} onValueChange={(value) => setFeature({ ...feature, category: value })}>
+        <SelectTrigger>
+          <SelectValue placeholder="Select a category" />
+        </SelectTrigger>
+        <SelectContent>
+          {categories.map((cat) => (
+            <SelectItem key={cat.value} value={cat.value}>
+              {cat.label}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </div>
+    <div className="flex items-center space-x-2">
+      <Switch
+        id="is_active"
+        checked={feature.is_active}
+        onCheckedChange={(checked) => setFeature({ ...feature, is_active: checked })}
+      />
+      <Label htmlFor="is_active">Active</Label>
+    </div>
+  </div>
+)
+
 const defaultFeature = {
   feature_name: "",
   description: "",
@@ -356,54 +409,6 @@ export default function FeaturesAdminPage() {
       prev.includes(featureId) ? prev.filter((id) => id !== featureId) : [...prev, featureId],
     )
   }
-
-  const FeatureForm = ({ feature, setFeature }: { feature: any; setFeature: any }) => (
-    <div className="grid gap-4 py-4">
-      <div>
-        <Label htmlFor="feature_name">Feature Name *</Label>
-        <Input
-          id="feature_name"
-          value={feature.feature_name}
-          onChange={(e) => setFeature({ ...feature, feature_name: e.target.value })}
-          placeholder="e.g., Advanced Analytics"
-          required
-        />
-      </div>
-      <div>
-        <Label htmlFor="description">Description *</Label>
-        <Textarea
-          id="description"
-          value={feature.description}
-          onChange={(e) => setFeature({ ...feature, description: e.target.value })}
-          placeholder="Describe what this feature provides..."
-          required
-        />
-      </div>
-      <div>
-        <Label htmlFor="category">Category *</Label>
-        <Select value={feature.category} onValueChange={(value) => setFeature({ ...feature, category: value })}>
-          <SelectTrigger>
-            <SelectValue placeholder="Select a category" />
-          </SelectTrigger>
-          <SelectContent>
-            {categories.map((cat) => (
-              <SelectItem key={cat.value} value={cat.value}>
-                {cat.label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
-      <div className="flex items-center space-x-2">
-        <Switch
-          id="is_active"
-          checked={feature.is_active}
-          onCheckedChange={(checked) => setFeature({ ...feature, is_active: checked })}
-        />
-        <Label htmlFor="is_active">Active</Label>
-      </div>
-    </div>
-  )
 
   if (loading) {
     return (
