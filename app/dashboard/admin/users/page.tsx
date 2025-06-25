@@ -81,6 +81,7 @@ export default function UsersAdminPage() {
   const [bulkAssignDialogOpen, setBulkAssignDialogOpen] = useState(false)
   const [bulkAssignPlan, setBulkAssignPlan] = useState("")
   const [bulkAssigning, setBulkAssigning] = useState(false)
+  const [refreshTrigger, setRefreshTrigger] = useState(0)
 
   const [createUserDialogOpen, setCreateUserDialogOpen] = useState(false)
   const [newUser, setNewUser] = useState({
@@ -133,6 +134,21 @@ export default function UsersAdminPage() {
     loadUsers()
     loadPlans()
   }, [])
+
+  const triggerRefresh = () => {
+    setRefreshTrigger((prev) => prev + 1)
+  }
+
+  const handleUserCreated = () => {
+    loadUsers()
+    setCreateUserDialogOpen(false)
+    triggerRefresh()
+  }
+
+  const handleUserDeleted = () => {
+    loadUsers()
+    triggerRefresh()
+  }
 
   // Filter users based on search and plan filter
   useEffect(() => {
@@ -241,14 +257,11 @@ export default function UsersAdminPage() {
       const data = await response.json()
 
       if (response.ok) {
-        // Remove user from state immediately
-        setUsers((prev) => prev.filter((user) => user.id !== userId))
-        setSelectedUsers((prev) => prev.filter((id) => id !== userId))
-
         toast({
           title: "User Deleted",
           description: data.message || "User deleted successfully.",
         })
+        handleUserDeleted()
       } else {
         toast({
           title: "Delete Failed",
@@ -376,31 +389,16 @@ export default function UsersAdminPage() {
       console.log("API response:", data)
 
       if (response.ok && data.success) {
-        // Create the new user object with proper structure
-        const newUserData: User = {
-          id: data.user.id,
-          email: data.user.email,
-          firstName: data.user.firstName,
-          lastName: data.user.lastName,
-          company: data.user.company || "",
-          plan: data.user.plan,
-          createdAt: data.user.createdAt,
-          isAdmin: data.user.isAdmin || false,
-          mediaCount: 0,
-          storageUsed: 0,
-        }
-
-        // Add the new user to the beginning of the users array
-        setUsers((prev) => [newUserData, ...prev])
-
-        // Close dialog and reset form
-        setCreateUserDialogOpen(false)
-        resetForm()
-
         toast({
           title: "User Created",
           description: `User ${data.user.firstName} ${data.user.lastName} created successfully.`,
         })
+
+        // Reset form
+        resetForm()
+
+        // Use the same pattern as media upload
+        handleUserCreated()
       } else {
         console.error("API error:", data)
         toast({
