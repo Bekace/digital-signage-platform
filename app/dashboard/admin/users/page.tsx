@@ -281,8 +281,9 @@ export default function UsersAdminPage() {
       })
 
       const data = await response.json()
+      console.log("API response:", data) // Debug log
 
-      if (response.ok) {
+      if (response.ok && data.success) {
         setUsers((prev) => [data.user, ...prev])
         setCreateUserDialogOpen(false)
         setNewUser({
@@ -299,6 +300,7 @@ export default function UsersAdminPage() {
           description: `User ${data.user.firstName} ${data.user.lastName} created successfully.`,
         })
       } else {
+        console.error("API error:", data) // Debug log
         toast({
           title: "Creation Failed",
           description: data.message || "Failed to create user",
@@ -306,9 +308,10 @@ export default function UsersAdminPage() {
         })
       }
     } catch (err) {
+      console.error("Network error:", err) // Debug log
       toast({
         title: "Creation Failed",
-        description: "Failed to create user",
+        description: "Network error: Failed to create user",
         variant: "destructive",
       })
     } finally {

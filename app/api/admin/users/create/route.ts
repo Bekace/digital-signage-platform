@@ -19,17 +19,29 @@ export async function POST(request: Request) {
     }
 
     const body = await request.json()
+    console.log("Received user data:", body) // Debug log
     const { firstName, lastName, email, company, plan, password, isAdmin } = body
 
     // Validation
-    if (!firstName?.trim() || !lastName?.trim() || !email?.trim() || !password?.trim() || !plan) {
-      return NextResponse.json(
-        { success: false, message: "First name, last name, email, password, and plan are required" },
-        { status: 400 },
-      )
+    if (!firstName?.trim()) {
+      return NextResponse.json({ success: false, message: "First name is required" }, { status: 400 })
+    }
+    if (!lastName?.trim()) {
+      return NextResponse.json({ success: false, message: "Last name is required" }, { status: 400 })
+    }
+    if (!email?.trim()) {
+      return NextResponse.json({ success: false, message: "Email is required" }, { status: 400 })
+    }
+    if (!password?.trim()) {
+      return NextResponse.json({ success: false, message: "Password is required" }, { status: 400 })
+    }
+    if (!plan) {
+      return NextResponse.json({ success: false, message: "Plan is required" }, { status: 400 })
     }
 
-    if (!email.includes("@") || !email.includes(".")) {
+    // Email format validation
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+    if (!emailRegex.test(email.trim())) {
       return NextResponse.json({ success: false, message: "Please enter a valid email address" }, { status: 400 })
     }
 
@@ -41,14 +53,23 @@ export async function POST(request: Request) {
     }
 
     // Check if user already exists
-    const existingUser = await sql`SELECT id FROM users WHERE email = ${email.toLowerCase()}`
+    const existingUser = await sql`SELECT id FROM users WHERE email = ${email.toLowerCase().trim()}`
     if (existingUser.length > 0) {
       return NextResponse.json({ success: false, message: "A user with this email already exists" }, { status: 400 })
     }
 
-    // Verify plan exists
-    const planCheck = await sql`SELECT id FROM plan_templates WHERE plan_type = ${plan} AND is_active = true`
-    if (planCheck.length === 0) {
+    // Verify plan exists - check both plan_templates and fallback to hardcoded plans
+    let planExists = false
+    try {
+      const planCheck = await sql`SELECT id FROM plan_templates WHERE plan_type = ${plan} AND is_active = true`
+      planExists = planCheck.length > 0
+    } catch (err) {
+      // Fallback to hardcoded plan validation if table doesn't exist
+      const validPlans = ["free", "pro", "enterprise"]
+      planExists = validPlans.includes(plan)
+    }
+
+    if (!planExists) {
       return NextResponse.json({ success: false, message: "Invalid plan selected" }, { status: 400 })
     }
 
@@ -69,7 +90,7 @@ export async function POST(request: Request) {
       ) VALUES (
         ${firstName.trim()}, 
         ${lastName.trim()}, 
-        ${email.toLowerCase()}, 
+        ${email.toLowerCase().trim()}, 
         ${company?.trim() || null}, 
         ${hashedPassword}, 
         ${plan},
@@ -77,6 +98,8 @@ export async function POST(request: Request) {
         NOW()
       ) RETURNING id, first_name, last_name, email, company, plan, is_admin, created_at
     `
+
+    console.log("User created successfully:", newUser[0]) // Debug log
 
     return NextResponse.json({
       success: true,
@@ -96,6 +119,12 @@ export async function POST(request: Request) {
     })
   } catch (error) {
     console.error("Create user error:", error)
-    return NextResponse.json({ success: false, message: "Internal server error: " + error.message }, { status: 500 })
+    return NextResponse.json(
+      {
+        success: false,
+        message: "Internal server error: " + (error.message || "Unknown error"),
+      },
+      { status: 500 },
+    )
   }
 }
