@@ -126,14 +126,14 @@ export default function UsersAdminPage() {
   useEffect(() => {
     let filtered = users
 
-    // Search filter
+    // Search filter - with null safety
     if (searchTerm) {
       filtered = filtered.filter(
         (user) =>
-          user.firstName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          user.lastName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          user.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          user.company.toLowerCase().includes(searchTerm.toLowerCase()),
+          (user.firstName || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
+          (user.lastName || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
+          (user.email || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
+          (user.company || "").toLowerCase().includes(searchTerm.toLowerCase()),
       )
     }
 
