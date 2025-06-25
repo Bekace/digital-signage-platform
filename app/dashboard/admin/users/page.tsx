@@ -261,10 +261,68 @@ export default function UsersAdminPage() {
 
   const createUser = async () => {
     console.log("Create user clicked", newUser) // Debug log
-    if (!newUser.firstName || !newUser.lastName || !newUser.email || !newUser.password || !newUser.plan) {
+
+    // Enhanced client-side validation
+    if (!newUser.firstName?.trim()) {
       toast({
         title: "Validation Error",
-        description: "Please fill in all required fields",
+        description: "First name is required",
+        variant: "destructive",
+      })
+      return
+    }
+
+    if (!newUser.lastName?.trim()) {
+      toast({
+        title: "Validation Error",
+        description: "Last name is required",
+        variant: "destructive",
+      })
+      return
+    }
+
+    if (!newUser.email?.trim()) {
+      toast({
+        title: "Validation Error",
+        description: "Email is required",
+        variant: "destructive",
+      })
+      return
+    }
+
+    // Email format validation
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+    if (!emailRegex.test(newUser.email.trim())) {
+      toast({
+        title: "Validation Error",
+        description: `Invalid email format: "${newUser.email}". Please enter a valid email like user@example.com`,
+        variant: "destructive",
+      })
+      return
+    }
+
+    if (!newUser.password?.trim()) {
+      toast({
+        title: "Validation Error",
+        description: "Password is required",
+        variant: "destructive",
+      })
+      return
+    }
+
+    if (newUser.password.length < 6) {
+      toast({
+        title: "Validation Error",
+        description: "Password must be at least 6 characters long",
+        variant: "destructive",
+      })
+      return
+    }
+
+    if (!newUser.plan) {
+      toast({
+        title: "Validation Error",
+        description: "Plan selection is required",
         variant: "destructive",
       })
       return

@@ -22,7 +22,7 @@ export async function POST(request: Request) {
     console.log("Received user data:", body) // Debug log
     const { firstName, lastName, email, company, plan, password, isAdmin } = body
 
-    // Validation
+    // Validation with detailed messages
     if (!firstName?.trim()) {
       return NextResponse.json({ success: false, message: "First name is required" }, { status: 400 })
     }
@@ -39,10 +39,17 @@ export async function POST(request: Request) {
       return NextResponse.json({ success: false, message: "Plan is required" }, { status: 400 })
     }
 
-    // Email format validation
+    // Email format validation with more detailed error
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
-    if (!emailRegex.test(email.trim())) {
-      return NextResponse.json({ success: false, message: "Please enter a valid email address" }, { status: 400 })
+    const trimmedEmail = email.trim()
+    if (!emailRegex.test(trimmedEmail)) {
+      return NextResponse.json(
+        {
+          success: false,
+          message: `Invalid email format: "${trimmedEmail}". Please enter a valid email like user@example.com`,
+        },
+        { status: 400 },
+      )
     }
 
     if (password.length < 6) {
@@ -53,7 +60,7 @@ export async function POST(request: Request) {
     }
 
     // Check if user already exists
-    const existingUser = await sql`SELECT id FROM users WHERE email = ${email.toLowerCase().trim()}`
+    const existingUser = await sql`SELECT id FROM users WHERE email = ${trimmedEmail.toLowerCase()}`
     if (existingUser.length > 0) {
       return NextResponse.json({ success: false, message: "A user with this email already exists" }, { status: 400 })
     }
@@ -70,7 +77,7 @@ export async function POST(request: Request) {
     }
 
     if (!planExists) {
-      return NextResponse.json({ success: false, message: "Invalid plan selected" }, { status: 400 })
+      return NextResponse.json({ success: false, message: `Invalid plan selected: "${plan}"` }, { status: 400 })
     }
 
     // Hash password
@@ -90,7 +97,7 @@ export async function POST(request: Request) {
       ) VALUES (
         ${firstName.trim()}, 
         ${lastName.trim()}, 
-        ${email.toLowerCase().trim()}, 
+        ${trimmedEmail.toLowerCase()}, 
         ${company?.trim() || null}, 
         ${hashedPassword}, 
         ${plan},
