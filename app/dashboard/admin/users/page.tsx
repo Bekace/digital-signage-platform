@@ -1,7 +1,19 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { Users, Loader2, UserPlus, Search, Filter, Download, Eye, EyeOff, AlertCircle, Trash2 } from "lucide-react"
+import {
+  Users,
+  Loader2,
+  UserPlus,
+  Search,
+  Filter,
+  Download,
+  Eye,
+  EyeOff,
+  AlertCircle,
+  Trash2,
+  Edit,
+} from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
@@ -28,6 +40,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Label } from "@/components/ui/label"
 import { Checkbox } from "@/components/ui/checkbox"
 import { toast } from "@/hooks/use-toast"
@@ -83,6 +96,7 @@ export default function UsersAdminPage() {
   const [bulkAssigning, setBulkAssigning] = useState(false)
   const [refreshTrigger, setRefreshTrigger] = useState(0)
 
+  // Create User Dialog State
   const [createUserDialogOpen, setCreateUserDialogOpen] = useState(false)
   const [newUser, setNewUser] = useState({
     firstName: "",
@@ -96,6 +110,22 @@ export default function UsersAdminPage() {
   const [showPassword, setShowPassword] = useState(false)
   const [creatingUser, setCreatingUser] = useState(false)
   const [validationErrors, setValidationErrors] = useState<ValidationErrors>({})
+
+  // Edit User Dialog State
+  const [editUserDialogOpen, setEditUserDialogOpen] = useState(false)
+  const [editingUser, setEditingUser] = useState<User | null>(null)
+  const [editUser, setEditUser] = useState({
+    firstName: "",
+    lastName: "",
+    email: "",
+    company: "",
+    plan: "",
+    password: "",
+    isAdmin: false,
+  })
+  const [showEditPassword, setShowEditPassword] = useState(false)
+  const [updatingUserEdit, setUpdatingUserEdit] = useState(false)
+  const [editValidationErrors, setEditValidationErrors] = useState<ValidationErrors>({})
 
   const loadUsers = async () => {
     try {
@@ -145,6 +175,12 @@ export default function UsersAdminPage() {
     triggerRefresh()
   }
 
+  const handleUserUpdated = () => {
+    loadUsers()
+    setEditUserDialogOpen(false)
+    triggerRefresh()
+  }
+
   const handleUserDeleted = () => {
     loadUsers()
     triggerRefresh()
@@ -173,38 +209,36 @@ export default function UsersAdminPage() {
     setFilteredUsers(filtered)
   }, [users, searchTerm, selectedPlanFilter])
 
-  const validateForm = (): boolean => {
-    const errors: ValidationErrors = {}
+  const validateForm = (formData: any, errors: ValidationErrors): boolean => {
+    const newErrors: ValidationErrors = {}
 
-    if (!newUser.firstName?.trim()) {
-      errors.firstName = "First name is required"
+    if (!formData.firstName?.trim()) {
+      newErrors.firstName = "First name is required"
     }
 
-    if (!newUser.lastName?.trim()) {
-      errors.lastName = "Last name is required"
+    if (!formData.lastName?.trim()) {
+      newErrors.lastName = "Last name is required"
     }
 
-    if (!newUser.email?.trim()) {
-      errors.email = "Email is required"
+    if (!formData.email?.trim()) {
+      newErrors.email = "Email is required"
     } else {
       const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
-      if (!emailRegex.test(newUser.email.trim())) {
-        errors.email = "Please enter a valid email address"
+      if (!emailRegex.test(formData.email.trim())) {
+        newErrors.email = "Please enter a valid email address"
       }
     }
 
-    if (!newUser.password?.trim()) {
-      errors.password = "Password is required"
-    } else if (newUser.password.length < 6) {
-      errors.password = "Password must be at least 6 characters long"
+    if (formData.password && formData.password.trim() && formData.password.length < 6) {
+      newErrors.password = "Password must be at least 6 characters long"
     }
 
-    if (!newUser.plan) {
-      errors.plan = "Plan selection is required"
+    if (!formData.plan) {
+      newErrors.plan = "Plan selection is required"
     }
 
-    setValidationErrors(errors)
-    return Object.keys(errors).length === 0
+    Object.assign(errors, newErrors)
+    return Object.keys(newErrors).length === 0
   }
 
   const updateUserPlan = async (userId: number, newPlan: string) => {
@@ -371,7 +405,14 @@ export default function UsersAdminPage() {
     setValidationErrors({})
 
     // Validate form
-    if (!validateForm()) {
+    if (!validateForm(newUser, validationErrors)) {
+      setValidationErrors({ ...validationErrors })
+      return
+    }
+
+    // Additional validation for create (password required)
+    if (!newUser.password?.trim()) {
+      setValidationErrors({ ...validationErrors, password: "Password is required" })
       return
     }
 
@@ -395,7 +436,7 @@ export default function UsersAdminPage() {
         })
 
         // Reset form
-        resetForm()
+        resetCreateForm()
 
         // Use the same pattern as media upload
         handleUserCreated()
@@ -419,7 +460,79 @@ export default function UsersAdminPage() {
     }
   }
 
-  const resetForm = () => {
+  const openEditDialog = (user: User) => {
+    setEditingUser(user)
+    setEditUser({
+      firstName: user.firstName,
+      lastName: user.lastName,
+      email: user.email,
+      company: user.company || "",
+      plan: user.plan,
+      password: "",
+      isAdmin: user.isAdmin,
+    })
+    setEditValidationErrors({})
+    setShowEditPassword(false)
+    setEditUserDialogOpen(true)
+  }
+
+  const updateUser = async () => {
+    console.log("Update user clicked", editUser)
+
+    // Clear previous validation errors
+    setEditValidationErrors({})
+
+    // Validate form
+    if (!validateForm(editUser, editValidationErrors)) {
+      setEditValidationErrors({ ...editValidationErrors })
+      return
+    }
+
+    try {
+      setUpdatingUserEdit(true)
+      const response = await fetch(`/api/admin/users/${editingUser?.id}/edit`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(editUser),
+      })
+
+      const data = await response.json()
+      console.log("Edit API response:", data)
+
+      if (response.ok && data.success) {
+        toast({
+          title: "User Updated",
+          description: `User ${data.user.firstName} ${data.user.lastName} updated successfully.`,
+        })
+
+        // Reset form
+        resetEditForm()
+
+        // Use the same pattern as media upload
+        handleUserUpdated()
+      } else {
+        console.error("Edit API error:", data)
+        toast({
+          title: "Update Failed",
+          description: data.message || "Failed to update user",
+          variant: "destructive",
+        })
+      }
+    } catch (err) {
+      console.error("Edit Network error:", err)
+      toast({
+        title: "Update Failed",
+        description: "Network error: Failed to update user",
+        variant: "destructive",
+      })
+    } finally {
+      setUpdatingUserEdit(false)
+    }
+  }
+
+  const resetCreateForm = () => {
     setNewUser({
       firstName: "",
       lastName: "",
@@ -431,6 +544,21 @@ export default function UsersAdminPage() {
     })
     setValidationErrors({})
     setShowPassword(false)
+  }
+
+  const resetEditForm = () => {
+    setEditUser({
+      firstName: "",
+      lastName: "",
+      email: "",
+      company: "",
+      plan: "",
+      password: "",
+      isAdmin: false,
+    })
+    setEditValidationErrors({})
+    setShowEditPassword(false)
+    setEditingUser(null)
   }
 
   if (loading) {
@@ -641,7 +769,7 @@ export default function UsersAdminPage() {
                     variant="outline"
                     onClick={() => {
                       setCreateUserDialogOpen(false)
-                      resetForm()
+                      resetCreateForm()
                     }}
                   >
                     Cancel
@@ -649,6 +777,182 @@ export default function UsersAdminPage() {
                   <Button onClick={createUser} disabled={creatingUser}>
                     {creatingUser ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
                     Create User
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
+
+            {/* Edit User Dialog */}
+            <Dialog open={editUserDialogOpen} onOpenChange={setEditUserDialogOpen}>
+              <DialogContent className="max-w-md">
+                <DialogHeader>
+                  <DialogTitle>Edit User</DialogTitle>
+                  <DialogDescription>
+                    Update user information and settings for {editingUser?.firstName} {editingUser?.lastName}.
+                  </DialogDescription>
+                </DialogHeader>
+                <div className="space-y-4">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <Label htmlFor="editFirstName">First Name *</Label>
+                      <Input
+                        id="editFirstName"
+                        value={editUser.firstName}
+                        onChange={(e) => {
+                          setEditUser((prev) => ({ ...prev, firstName: e.target.value }))
+                          if (editValidationErrors.firstName) {
+                            setEditValidationErrors((prev) => ({ ...prev, firstName: undefined }))
+                          }
+                        }}
+                        placeholder="John"
+                        className={editValidationErrors.firstName ? "border-red-500" : ""}
+                      />
+                      {editValidationErrors.firstName && (
+                        <div className="flex items-center mt-1 text-sm text-red-600">
+                          <AlertCircle className="h-4 w-4 mr-1" />
+                          {editValidationErrors.firstName}
+                        </div>
+                      )}
+                    </div>
+                    <div>
+                      <Label htmlFor="editLastName">Last Name *</Label>
+                      <Input
+                        id="editLastName"
+                        value={editUser.lastName}
+                        onChange={(e) => {
+                          setEditUser((prev) => ({ ...prev, lastName: e.target.value }))
+                          if (editValidationErrors.lastName) {
+                            setEditValidationErrors((prev) => ({ ...prev, lastName: undefined }))
+                          }
+                        }}
+                        placeholder="Doe"
+                        className={editValidationErrors.lastName ? "border-red-500" : ""}
+                      />
+                      {editValidationErrors.lastName && (
+                        <div className="flex items-center mt-1 text-sm text-red-600">
+                          <AlertCircle className="h-4 w-4 mr-1" />
+                          {editValidationErrors.lastName}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                  <div>
+                    <Label htmlFor="editEmail">Email *</Label>
+                    <Input
+                      id="editEmail"
+                      type="email"
+                      value={editUser.email}
+                      onChange={(e) => {
+                        setEditUser((prev) => ({ ...prev, email: e.target.value }))
+                        if (editValidationErrors.email) {
+                          setEditValidationErrors((prev) => ({ ...prev, email: undefined }))
+                        }
+                      }}
+                      placeholder="john@example.com"
+                      className={editValidationErrors.email ? "border-red-500" : ""}
+                    />
+                    {editValidationErrors.email && (
+                      <div className="flex items-center mt-1 text-sm text-red-600">
+                        <AlertCircle className="h-4 w-4 mr-1" />
+                        {editValidationErrors.email}
+                      </div>
+                    )}
+                  </div>
+                  <div>
+                    <Label htmlFor="editCompany">Company</Label>
+                    <Input
+                      id="editCompany"
+                      value={editUser.company}
+                      onChange={(e) => setEditUser((prev) => ({ ...prev, company: e.target.value }))}
+                      placeholder="Company Name"
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="editPassword">Password (leave blank to keep current)</Label>
+                    <div className="relative">
+                      <Input
+                        id="editPassword"
+                        type={showEditPassword ? "text" : "password"}
+                        value={editUser.password}
+                        onChange={(e) => {
+                          setEditUser((prev) => ({ ...prev, password: e.target.value }))
+                          if (editValidationErrors.password) {
+                            setEditValidationErrors((prev) => ({ ...prev, password: undefined }))
+                          }
+                        }}
+                        placeholder="New password (optional)"
+                        className={editValidationErrors.password ? "border-red-500" : ""}
+                      />
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
+                        onClick={() => setShowEditPassword(!showEditPassword)}
+                      >
+                        {showEditPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                      </Button>
+                    </div>
+                    {editValidationErrors.password && (
+                      <div className="flex items-center mt-1 text-sm text-red-600">
+                        <AlertCircle className="h-4 w-4 mr-1" />
+                        {editValidationErrors.password}
+                      </div>
+                    )}
+                  </div>
+                  <div>
+                    <Label htmlFor="editPlan">Plan *</Label>
+                    <Select
+                      value={editUser.plan}
+                      onValueChange={(value) => {
+                        setEditUser((prev) => ({ ...prev, plan: value }))
+                        if (editValidationErrors.plan) {
+                          setEditValidationErrors((prev) => ({ ...prev, plan: undefined }))
+                        }
+                      }}
+                    >
+                      <SelectTrigger className={editValidationErrors.plan ? "border-red-500" : ""}>
+                        <SelectValue placeholder="Select a plan" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {plans
+                          .filter((plan) => plan.is_active)
+                          .map((plan) => (
+                            <SelectItem key={plan.plan_type} value={plan.plan_type}>
+                              {plan.name} - ${plan.price_monthly}/month
+                            </SelectItem>
+                          ))}
+                      </SelectContent>
+                    </Select>
+                    {editValidationErrors.plan && (
+                      <div className="flex items-center mt-1 text-sm text-red-600">
+                        <AlertCircle className="h-4 w-4 mr-1" />
+                        {editValidationErrors.plan}
+                      </div>
+                    )}
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <Checkbox
+                      id="editIsAdmin"
+                      checked={editUser.isAdmin}
+                      onCheckedChange={(checked) => setEditUser((prev) => ({ ...prev, isAdmin: !!checked }))}
+                    />
+                    <Label htmlFor="editIsAdmin">Administrator privileges</Label>
+                  </div>
+                </div>
+                <DialogFooter>
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      setEditUserDialogOpen(false)
+                      resetEditForm()
+                    }}
+                  >
+                    Cancel
+                  </Button>
+                  <Button onClick={updateUser} disabled={updatingUserEdit}>
+                    {updatingUserEdit ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+                    Update User
                   </Button>
                 </DialogFooter>
               </DialogContent>
@@ -838,54 +1142,66 @@ export default function UsersAdminPage() {
                         </Select>
                       </TableCell>
                       <TableCell>
-                        <AlertDialog>
-                          <AlertDialogTrigger asChild>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              disabled={deletingUser === user.id}
-                              className="text-red-600 hover:text-red-700 hover:bg-red-50"
-                            >
-                              {deletingUser === user.id ? (
-                                <Loader2 className="h-4 w-4 animate-spin" />
-                              ) : (
-                                <Trash2 className="h-4 w-4" />
-                              )}
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" size="sm">
+                              <Edit className="h-4 w-4" />
                             </Button>
-                          </AlertDialogTrigger>
-                          <AlertDialogContent>
-                            <AlertDialogHeader>
-                              <AlertDialogTitle>Delete User</AlertDialogTitle>
-                              <AlertDialogDescription>
-                                Are you sure you want to delete{" "}
-                                <strong>
-                                  {user.firstName} {user.lastName}
-                                </strong>
-                                ?
-                                <br />
-                                <br />
-                                This will permanently delete:
-                                <ul className="list-disc list-inside mt-2 space-y-1">
-                                  <li>User account and profile</li>
-                                  <li>All media files ({user.mediaCount} files)</li>
-                                  <li>All playlists and devices</li>
-                                  <li>All associated data</li>
-                                </ul>
-                                <br />
-                                <strong>This action cannot be undone.</strong>
-                              </AlertDialogDescription>
-                            </AlertDialogHeader>
-                            <AlertDialogFooter>
-                              <AlertDialogCancel>Cancel</AlertDialogCancel>
-                              <AlertDialogAction
-                                onClick={() => deleteUser(user.id)}
-                                className="bg-red-600 hover:bg-red-700"
-                              >
-                                Delete User
-                              </AlertDialogAction>
-                            </AlertDialogFooter>
-                          </AlertDialogContent>
-                        </AlertDialog>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem onClick={() => openEditDialog(user)}>
+                              <Edit className="h-4 w-4 mr-2" />
+                              Edit User
+                            </DropdownMenuItem>
+                            <AlertDialog>
+                              <AlertDialogTrigger asChild>
+                                <DropdownMenuItem
+                                  onSelect={(e) => e.preventDefault()}
+                                  className="text-red-600 focus:text-red-600"
+                                >
+                                  <Trash2 className="h-4 w-4 mr-2" />
+                                  Delete User
+                                </DropdownMenuItem>
+                              </AlertDialogTrigger>
+                              <AlertDialogContent>
+                                <AlertDialogHeader>
+                                  <AlertDialogTitle>Delete User</AlertDialogTitle>
+                                  <AlertDialogDescription>
+                                    Are you sure you want to delete{" "}
+                                    <strong>
+                                      {user.firstName} {user.lastName}
+                                    </strong>
+                                    ?
+                                    <br />
+                                    <br />
+                                    This will permanently delete:
+                                    <ul className="list-disc list-inside mt-2 space-y-1">
+                                      <li>User account and profile</li>
+                                      <li>All media files ({user.mediaCount} files)</li>
+                                      <li>All playlists and devices</li>
+                                      <li>All associated data</li>
+                                    </ul>
+                                    <br />
+                                    <strong>This action cannot be undone.</strong>
+                                  </AlertDialogDescription>
+                                </AlertDialogHeader>
+                                <AlertDialogFooter>
+                                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                  <AlertDialogAction
+                                    onClick={() => deleteUser(user.id)}
+                                    className="bg-red-600 hover:bg-red-700"
+                                    disabled={deletingUser === user.id}
+                                  >
+                                    {deletingUser === user.id ? (
+                                      <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                                    ) : null}
+                                    Delete User
+                                  </AlertDialogAction>
+                                </AlertDialogFooter>
+                              </AlertDialogContent>
+                            </AlertDialog>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
                       </TableCell>
                     </TableRow>
                   )
