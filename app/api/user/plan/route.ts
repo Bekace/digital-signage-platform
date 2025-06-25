@@ -9,33 +9,79 @@ export const runtime = "nodejs"
 export async function GET(request: NextRequest) {
   try {
     console.log("🔍 [PLAN API] === STARTING PLAN FETCH ===")
+    console.log("🔍 [PLAN API] Request URL:", request.url)
+    console.log("🔍 [PLAN API] Environment check:", {
+      hasDbUrl: !!process.env.DATABASE_URL,
+      hasJwtSecret: !!process.env.JWT_SECRET,
+    })
 
-    const user = await getCurrentUser()
-    console.log("🔍 [PLAN API] Current user:", user ? { id: user.id, email: user.email } : "NO USER")
+    // Test database connection first
+    let sql
+    try {
+      sql = getDb()
+      console.log("✅ [PLAN API] Database connection established")
+    } catch (dbError) {
+      console.error("❌ [PLAN API] Database connection failed:", dbError)
+      return NextResponse.json(
+        {
+          success: false,
+          message: "Database connection failed",
+          error: dbError instanceof Error ? dbError.message : "Unknown database error",
+        },
+        { status: 500 },
+      )
+    }
+
+    // Get current user with detailed error handling
+    let user
+    try {
+      user = await getCurrentUser()
+      console.log("🔍 [PLAN API] Current user:", user ? { id: user.id, email: user.email } : "NO USER")
+    } catch (authError) {
+      console.error("❌ [PLAN API] Authentication error:", authError)
+      return NextResponse.json(
+        {
+          success: false,
+          message: "Authentication failed",
+          error: authError instanceof Error ? authError.message : "Unknown auth error",
+        },
+        { status: 500 },
+      )
+    }
 
     if (!user) {
       console.log("❌ [PLAN API] No user authenticated")
       return NextResponse.json({ success: false, message: "Not authenticated" }, { status: 401 })
     }
 
-    const sql = getDb()
-
     // Get user's current plan and usage with detailed logging
     console.log("🔍 [PLAN API] Querying user data for ID:", user.id)
-    const userData = await sql`
-      SELECT 
-        id,
-        email,
-        plan_type,
-        media_files_count,
-        storage_used_bytes,
-        created_at,
-        updated_at
-      FROM users 
-      WHERE id = ${user.id}
-    `
-
-    console.log("📊 [PLAN API] User data query result:", userData)
+    let userData
+    try {
+      userData = await sql`
+        SELECT 
+          id,
+          email,
+          plan_type,
+          media_files_count,
+          storage_used_bytes,
+          created_at,
+          updated_at
+        FROM users 
+        WHERE id = ${user.id}
+      `
+      console.log("📊 [PLAN API] User data query result:", userData)
+    } catch (userQueryError) {
+      console.error("❌ [PLAN API] User query failed:", userQueryError)
+      return NextResponse.json(
+        {
+          success: false,
+          message: "Failed to fetch user data",
+          error: userQueryError instanceof Error ? userQueryError.message : "Unknown user query error",
+        },
+        { status: 500 },
+      )
+    }
 
     if (userData.length === 0) {
       console.log("❌ [PLAN API] User not found in database")
@@ -53,69 +99,132 @@ export async function GET(request: NextRequest) {
 
     // Get actual media count and storage from media table
     console.log("🔍 [PLAN API] Querying actual media data for user:", user.id)
-    const actualMediaData = await sql`
-      SELECT 
-        COUNT(*) as actual_count,
-        COALESCE(SUM(file_size), 0) as actual_storage
-      FROM media_files 
-      WHERE user_id = ${user.id} AND deleted_at IS NULL
-    `
-
-    console.log("📊 [PLAN API] Actual media data:", actualMediaData[0])
+    let actualMediaData
+    try {
+      actualMediaData = await sql`
+        SELECT 
+          COUNT(*) as actual_count,
+          COALESCE(SUM(file_size), 0) as actual_storage
+        FROM media_files 
+        WHERE user_id = ${user.id} AND deleted_at IS NULL
+      `
+      console.log("📊 [PLAN API] Actual media data:", actualMediaData[0])
+    } catch (mediaQueryError) {
+      console.error("❌ [PLAN API] Media query failed:", mediaQueryError)
+      // Continue with zeros if media table doesn't exist or has issues
+      actualMediaData = [{ actual_count: 0, actual_storage: 0 }]
+      console.log("⚠️ [PLAN API] Using fallback media data:", actualMediaData[0])
+    }
 
     // Get screens count
     console.log("🔍 [PLAN API] Querying screens count for user:", user.id)
-    const screensData = await sql`
-      SELECT COUNT(*) as screens_count
-      FROM screens 
-      WHERE user_id = ${user.id}
-    `
-
-    console.log("📊 [PLAN API] Screens data:", screensData[0])
+    let screensData
+    try {
+      screensData = await sql`
+        SELECT COUNT(*) as screens_count
+        FROM screens 
+        WHERE user_id = ${user.id}
+      `
+      console.log("📊 [PLAN API] Screens data:", screensData[0])
+    } catch (screensQueryError) {
+      console.error("❌ [PLAN API] Screens query failed:", screensQueryError)
+      // Continue with zero if screens table doesn't exist or has issues
+      screensData = [{ screens_count: 0 }]
+      console.log("⚠️ [PLAN API] Using fallback screens data:", screensData[0])
+    }
 
     // Get plan limits from plan_templates table
     const userPlanType = userRecord.plan_type || "free"
     console.log("🔍 [PLAN API] Looking up plan template for plan_type:", userPlanType)
 
-    const planLimits = await sql`
-      SELECT 
-        id,
-        plan_type,
-        name,
-        max_media_files,
-        max_storage_bytes,
-        max_screens,
-        price_monthly,
-        price_yearly,
-        features,
-        is_active
-      FROM plan_templates 
-      WHERE plan_type = ${userPlanType} AND is_active = true
-      LIMIT 1
-    `
+    let planLimits
+    try {
+      planLimits = await sql`
+        SELECT 
+          id,
+          plan_type,
+          name,
+          max_media_files,
+          max_storage_bytes,
+          max_screens,
+          price_monthly,
+          price_yearly,
+          features,
+          is_active
+        FROM plan_templates 
+        WHERE plan_type = ${userPlanType} AND is_active = true
+        LIMIT 1
+      `
+      console.log("📊 [PLAN API] Plan template query result:", planLimits)
+    } catch (planQueryError) {
+      console.error("❌ [PLAN API] Plan template query failed:", planQueryError)
 
-    console.log("📊 [PLAN API] Plan template query result:", planLimits)
+      // Check if plan_templates table exists
+      try {
+        const tableCheck = await sql`
+          SELECT table_name 
+          FROM information_schema.tables 
+          WHERE table_name = 'plan_templates'
+        `
+        console.log("📊 [PLAN API] Plan templates table check:", tableCheck)
+
+        if (tableCheck.length === 0) {
+          console.log("❌ [PLAN API] plan_templates table does not exist")
+          return NextResponse.json(
+            {
+              success: false,
+              message: "Plan templates table not found. Please run database setup.",
+              error: "Missing plan_templates table",
+            },
+            { status: 500 },
+          )
+        }
+      } catch (tableCheckError) {
+        console.error("❌ [PLAN API] Table check failed:", tableCheckError)
+      }
+
+      return NextResponse.json(
+        {
+          success: false,
+          message: "Failed to fetch plan template",
+          error: planQueryError instanceof Error ? planQueryError.message : "Unknown plan query error",
+        },
+        { status: 500 },
+      )
+    }
 
     if (planLimits.length === 0) {
       console.log("❌ [PLAN API] No active plan template found for:", userPlanType)
       console.log("🔍 [PLAN API] Checking all available plan templates...")
 
-      const allPlans = await sql`
-        SELECT plan_type, name, is_active FROM plan_templates ORDER BY plan_type
-      `
-      console.log("📊 [PLAN API] All available plans:", allPlans)
+      try {
+        const allPlans = await sql`
+          SELECT plan_type, name, is_active FROM plan_templates ORDER BY plan_type
+        `
+        console.log("📊 [PLAN API] All available plans:", allPlans)
 
-      return NextResponse.json(
-        {
-          success: false,
-          message: `Plan template not found for plan type: ${userPlanType}`,
-          debug: {
-            user_plan_type: userPlanType,
-            available_plans: allPlans,
+        return NextResponse.json(
+          {
+            success: false,
+            message: `Plan template not found for plan type: ${userPlanType}`,
+            debug: {
+              user_plan_type: userPlanType,
+              available_plans: allPlans,
+            },
           },
-        },
-        { status: 404 },
-      )
+          { status: 404 },
+        )
+      } catch (allPlansError) {
+        console.error("❌ [PLAN API] Failed to fetch all plans:", allPlansError)
+        return NextResponse.json(
+          {
+            success: false,
+            message: `Plan template not found and unable to list available plans`,
+            error: allPlansError instanceof Error ? allPlansError.message : "Unknown error",
+          },
+          { status: 500 },
+        )
+      }
     }
 
     const limits = planLimits[0]
@@ -143,14 +252,19 @@ export async function GET(request: NextRequest) {
         `🔄 [PLAN API] Syncing user data - Media: ${userTableMediaCount} → ${actualMediaCount}, Storage: ${userTableStorage} → ${actualStorageUsed}`,
       )
 
-      await sql`
-        UPDATE users 
-        SET 
-          media_files_count = ${actualMediaCount},
-          storage_used_bytes = ${actualStorageUsed}
-        WHERE id = ${user.id}
-      `
-      console.log("✅ [PLAN API] User data synced")
+      try {
+        await sql`
+          UPDATE users 
+          SET 
+            media_files_count = ${actualMediaCount},
+            storage_used_bytes = ${actualStorageUsed}
+          WHERE id = ${user.id}
+        `
+        console.log("✅ [PLAN API] User data synced")
+      } catch (updateError) {
+        console.error("❌ [PLAN API] Failed to sync user data:", updateError)
+        // Continue without failing the request
+      }
     }
 
     const responseData = {
@@ -197,7 +311,20 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json(responseData)
   } catch (error) {
-    console.error("❌ [PLAN API] ERROR:", error)
-    return NextResponse.json({ success: false, message: "Failed to fetch user plan data" }, { status: 500 })
+    console.error("❌ [PLAN API] UNEXPECTED ERROR:", error)
+    console.error("❌ [PLAN API] Error stack:", error instanceof Error ? error.stack : "No stack trace")
+
+    return NextResponse.json(
+      {
+        success: false,
+        message: "Failed to fetch user plan data",
+        error: error instanceof Error ? error.message : "Unknown error",
+        debug: {
+          timestamp: new Date().toISOString(),
+          errorType: error instanceof Error ? error.constructor.name : typeof error,
+        },
+      },
+      { status: 500 },
+    )
   }
 }
