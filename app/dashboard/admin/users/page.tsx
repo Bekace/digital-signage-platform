@@ -353,133 +353,141 @@ export default function UsersAdminPage() {
               <Download className="h-4 w-4 mr-2" />
               Export CSV
             </Button>
-            <Dialog open={createUserDialogOpen} onOpenChange={setCreateUserDialogOpen}>
-              <DialogTrigger asChild>
-                <Button size="sm" onClick={() => setCreateUserDialogOpen(true)}>
-                  <UserPlus className="h-4 w-4 mr-2" />
-                  Add User
-                </Button>
-              </DialogTrigger>
-              <DialogContent className="max-w-md">
-                <DialogHeader>
-                  <DialogTitle>Create New User</DialogTitle>
-                  <DialogDescription>Add a new user to the system and assign them a plan.</DialogDescription>
-                </DialogHeader>
-                <div className="space-y-4">
-                  <div className="grid grid-cols-2 gap-4">
+            <Button
+              size="sm"
+              onClick={() => {
+                console.log("Button clicked!") // Debug log
+                setCreateUserDialogOpen(true)
+              }}
+            >
+              <UserPlus className="h-4 w-4 mr-2" />
+              Add User
+            </Button>
+
+            {/* Create User Dialog - moved outside of other dialogs */}
+            {createUserDialogOpen && (
+              <Dialog open={createUserDialogOpen} onOpenChange={setCreateUserDialogOpen}>
+                <DialogContent className="max-w-md">
+                  <DialogHeader>
+                    <DialogTitle>Create New User</DialogTitle>
+                    <DialogDescription>Add a new user to the system and assign them a plan.</DialogDescription>
+                  </DialogHeader>
+                  <div className="space-y-4">
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <Label htmlFor="firstName">First Name *</Label>
+                        <Input
+                          id="firstName"
+                          value={newUser.firstName}
+                          onChange={(e) => setNewUser((prev) => ({ ...prev, firstName: e.target.value }))}
+                          placeholder="John"
+                        />
+                      </div>
+                      <div>
+                        <Label htmlFor="lastName">Last Name *</Label>
+                        <Input
+                          id="lastName"
+                          value={newUser.lastName}
+                          onChange={(e) => setNewUser((prev) => ({ ...prev, lastName: e.target.value }))}
+                          placeholder="Doe"
+                        />
+                      </div>
+                    </div>
                     <div>
-                      <Label htmlFor="firstName">First Name *</Label>
+                      <Label htmlFor="email">Email *</Label>
                       <Input
-                        id="firstName"
-                        value={newUser.firstName}
-                        onChange={(e) => setNewUser((prev) => ({ ...prev, firstName: e.target.value }))}
-                        placeholder="John"
+                        id="email"
+                        type="email"
+                        value={newUser.email}
+                        onChange={(e) => setNewUser((prev) => ({ ...prev, email: e.target.value }))}
+                        placeholder="john@example.com"
                       />
                     </div>
                     <div>
-                      <Label htmlFor="lastName">Last Name *</Label>
+                      <Label htmlFor="company">Company</Label>
                       <Input
-                        id="lastName"
-                        value={newUser.lastName}
-                        onChange={(e) => setNewUser((prev) => ({ ...prev, lastName: e.target.value }))}
-                        placeholder="Doe"
+                        id="company"
+                        value={newUser.company}
+                        onChange={(e) => setNewUser((prev) => ({ ...prev, company: e.target.value }))}
+                        placeholder="Company Name"
                       />
                     </div>
-                  </div>
-                  <div>
-                    <Label htmlFor="email">Email *</Label>
-                    <Input
-                      id="email"
-                      type="email"
-                      value={newUser.email}
-                      onChange={(e) => setNewUser((prev) => ({ ...prev, email: e.target.value }))}
-                      placeholder="john@example.com"
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="company">Company</Label>
-                    <Input
-                      id="company"
-                      value={newUser.company}
-                      onChange={(e) => setNewUser((prev) => ({ ...prev, company: e.target.value }))}
-                      placeholder="Company Name"
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="password">Password *</Label>
-                    <div className="relative">
-                      <Input
-                        id="password"
-                        type={showPassword ? "text" : "password"}
-                        value={newUser.password}
-                        onChange={(e) => setNewUser((prev) => ({ ...prev, password: e.target.value }))}
-                        placeholder="Minimum 6 characters"
-                      />
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
-                        onClick={() => setShowPassword(!showPassword)}
+                    <div>
+                      <Label htmlFor="password">Password *</Label>
+                      <div className="relative">
+                        <Input
+                          id="password"
+                          type={showPassword ? "text" : "password"}
+                          value={newUser.password}
+                          onChange={(e) => setNewUser((prev) => ({ ...prev, password: e.target.value }))}
+                          placeholder="Minimum 6 characters"
+                        />
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
+                          onClick={() => setShowPassword(!showPassword)}
+                        >
+                          {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                        </Button>
+                      </div>
+                    </div>
+                    <div>
+                      <Label htmlFor="plan">Plan *</Label>
+                      <Select
+                        value={newUser.plan}
+                        onValueChange={(value) => setNewUser((prev) => ({ ...prev, plan: value }))}
                       >
-                        {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                      </Button>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select a plan" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {plans
+                            .filter((plan) => plan.is_active)
+                            .map((plan) => (
+                              <SelectItem key={plan.plan_type} value={plan.plan_type}>
+                                {plan.name} - ${plan.price_monthly}/month
+                              </SelectItem>
+                            ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <Checkbox
+                        id="isAdmin"
+                        checked={newUser.isAdmin}
+                        onCheckedChange={(checked) => setNewUser((prev) => ({ ...prev, isAdmin: !!checked }))}
+                      />
+                      <Label htmlFor="isAdmin">Make this user an administrator</Label>
                     </div>
                   </div>
-                  <div>
-                    <Label htmlFor="plan">Plan *</Label>
-                    <Select
-                      value={newUser.plan}
-                      onValueChange={(value) => setNewUser((prev) => ({ ...prev, plan: value }))}
+                  <DialogFooter>
+                    <Button
+                      variant="outline"
+                      onClick={() => {
+                        setCreateUserDialogOpen(false)
+                        setNewUser({
+                          firstName: "",
+                          lastName: "",
+                          email: "",
+                          company: "",
+                          plan: "",
+                          password: "",
+                          isAdmin: false,
+                        })
+                      }}
                     >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select a plan" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {plans
-                          .filter((plan) => plan.is_active)
-                          .map((plan) => (
-                            <SelectItem key={plan.plan_type} value={plan.plan_type}>
-                              {plan.name} - ${plan.price_monthly}/month
-                            </SelectItem>
-                          ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    <Checkbox
-                      id="isAdmin"
-                      checked={newUser.isAdmin}
-                      onCheckedChange={(checked) => setNewUser((prev) => ({ ...prev, isAdmin: !!checked }))}
-                    />
-                    <Label htmlFor="isAdmin">Make this user an administrator</Label>
-                  </div>
-                </div>
-                <DialogFooter>
-                  <Button
-                    variant="outline"
-                    onClick={() => {
-                      setCreateUserDialogOpen(false)
-                      setNewUser({
-                        firstName: "",
-                        lastName: "",
-                        email: "",
-                        company: "",
-                        plan: "",
-                        password: "",
-                        isAdmin: false,
-                      })
-                    }}
-                  >
-                    Cancel
-                  </Button>
-                  <Button onClick={createUser} disabled={creatingUser}>
-                    {creatingUser ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
-                    Create User
-                  </Button>
-                </DialogFooter>
-              </DialogContent>
-            </Dialog>
+                      Cancel
+                    </Button>
+                    <Button onClick={createUser} disabled={creatingUser}>
+                      {creatingUser ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+                      Create User
+                    </Button>
+                  </DialogFooter>
+                </DialogContent>
+              </Dialog>
+            )}
             {selectedUsers.length > 0 && (
               <Dialog open={bulkAssignDialogOpen} onOpenChange={setBulkAssignDialogOpen}>
                 <DialogTrigger asChild>
