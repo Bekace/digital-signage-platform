@@ -4,49 +4,67 @@ import { getDb } from "@/lib/db"
 
 export async function GET() {
   try {
-    console.log("🔍 Fetching user plan...")
+    console.log("🔍 [PLAN API] Starting plan fetch...")
 
     const user = await getCurrentUser()
     if (!user) {
-      console.log("❌ No user found")
+      console.log("❌ [PLAN API] No user found")
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    console.log("✅ User found:", user.email)
+    console.log("✅ [PLAN API] User found:", { id: user.id, email: user.email })
 
     const sql = getDb()
 
-    // Get user's current usage and plan
-    console.log("🔍 Querying user data...")
+    // Get user's current usage and plan with detailed logging
+    console.log("🔍 [PLAN API] Querying user data for ID:", user.id)
     const userResult = await sql`
-      SELECT plan_type, media_files_count, storage_used_bytes, screens_count, plan_expires_at
+      SELECT 
+        id,
+        email,
+        plan_type, 
+        media_files_count, 
+        storage_used_bytes, 
+        screens_count, 
+        plan_expires_at,
+        created_at,
+        updated_at
       FROM users 
       WHERE id = ${user.id}
     `
 
-    console.log("📊 User query result:", userResult)
+    console.log("📊 [PLAN API] Raw user query result:", userResult)
 
     if (userResult.length === 0) {
-      console.log("❌ User not found in database")
+      console.log("❌ [PLAN API] User not found in database")
       return NextResponse.json({ error: "User not found" }, { status: 404 })
     }
 
     const userData = userResult[0]
-    console.log("✅ User data:", userData)
+    console.log("✅ [PLAN API] User data retrieved:", {
+      id: userData.id,
+      email: userData.email,
+      plan_type: userData.plan_type,
+      media_files_count: userData.media_files_count,
+      storage_used_bytes: userData.storage_used_bytes,
+      screens_count: userData.screens_count,
+    })
 
-    // Get plan limits
-    console.log("🔍 Querying plan limits...")
+    // Get plan limits with detailed logging
+    const planType = userData.plan_type || "free"
+    console.log("🔍 [PLAN API] Looking up plan limits for:", planType)
+
     const planResult = await sql`
       SELECT * FROM plan_limits 
-      WHERE plan_type = ${userData.plan_type || "free"}
+      WHERE plan_type = ${planType}
     `
 
-    console.log("📊 Plan query result:", planResult)
+    console.log("📊 [PLAN API] Plan limits query result:", planResult)
 
     if (planResult.length === 0) {
-      console.log("❌ Plan not found, using default free plan")
+      console.log("❌ [PLAN API] Plan not found, using default free plan")
       // Return default free plan if not found
-      return NextResponse.json({
+      const defaultResponse = {
         usage: {
           media_files_count: userData.media_files_count || 0,
           storage_used_bytes: userData.storage_used_bytes || 0,
@@ -62,27 +80,67 @@ export async function GET() {
           features: ["Basic templates", "Limited storage", "Community support"],
         },
         plan_expires_at: userData.plan_expires_at,
-      })
+      }
+      console.log("📤 [PLAN API] Returning default response:", defaultResponse)
+      return NextResponse.json(defaultResponse)
     }
 
     const planLimits = planResult[0]
-    console.log("✅ Plan limits:", planLimits)
+    console.log("✅ [PLAN API] Plan limits found:", planLimits)
+
+    // Also get real-time media count to ensure accuracy
+    console.log("🔍 [PLAN API] Getting real-time media count...")
+    const mediaCountResult = await sql`
+      SELECT 
+        COUNT(*) as actual_media_count,
+        COALESCE(SUM(file_size), 0) as actual_storage_used
+      FROM media_files 
+      WHERE user_id = ${user.id} AND deleted_at IS NULL
+    `
+
+    console.log("📊 [PLAN API] Real-time media stats:", mediaCountResult[0])
+
+    const actualStats = mediaCountResult[0]
+    const actualMediaCount = Number(actualStats.actual_media_count)
+    const actualStorageUsed = Number(actualStats.actual_storage_used)
+
+    // Check if user table needs updating
+    if (actualMediaCount !== userData.media_files_count || actualStorageUsed !== userData.storage_used_bytes) {
+      console.log("🔄 [PLAN API] Updating user stats in database...")
+      await sql`
+        UPDATE users 
+        SET 
+          media_files_count = ${actualMediaCount},
+          storage_used_bytes = ${actualStorageUsed},
+          updated_at = NOW()
+        WHERE id = ${user.id}
+      `
+      console.log("✅ [PLAN API] User stats updated")
+    }
 
     const response = {
       usage: {
-        media_files_count: userData.media_files_count || 0,
-        storage_used_bytes: userData.storage_used_bytes || 0,
+        media_files_count: actualMediaCount,
+        storage_used_bytes: actualStorageUsed,
         screens_count: userData.screens_count || 0,
         plan_type: userData.plan_type || "free",
       },
       limits: planLimits,
       plan_expires_at: userData.plan_expires_at,
+      debug: {
+        user_table_media_count: userData.media_files_count,
+        actual_media_count: actualMediaCount,
+        user_table_storage: userData.storage_used_bytes,
+        actual_storage: actualStorageUsed,
+        plan_type: planType,
+        timestamp: new Date().toISOString(),
+      },
     }
 
-    console.log("✅ Returning response:", response)
+    console.log("📤 [PLAN API] Final response:", response)
     return NextResponse.json(response)
   } catch (error) {
-    console.error("❌ Error fetching user plan:", error)
+    console.error("❌ [PLAN API] Error:", error)
     return NextResponse.json(
       {
         error: "Failed to fetch plan information",
