@@ -2,7 +2,19 @@
 
 import { useState, useEffect } from "react"
 import Image from "next/image"
-import { Upload, Search, Filter, MoreHorizontal, Download, Trash2, Eye, Video, FileText, Loader2 } from "lucide-react"
+import {
+  Upload,
+  Search,
+  Filter,
+  MoreHorizontal,
+  Download,
+  Trash2,
+  Eye,
+  Video,
+  FileText,
+  Loader2,
+  ExternalLink,
+} from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
@@ -23,6 +35,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
+import { GoogleSlidesDialog } from "@/components/google-slides-dialog"
 
 interface MediaFile {
   id: number
@@ -50,6 +63,7 @@ export default function MediaPage() {
   const [showDeleteDialog, setShowDeleteDialog] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [refreshTrigger, setRefreshTrigger] = useState(0)
+  const [showGoogleSlidesDialog, setShowGoogleSlidesDialog] = useState(false)
 
   const loadMediaFiles = async () => {
     try {
@@ -83,6 +97,12 @@ export default function MediaPage() {
     loadMediaFiles()
     setShowUploadDialog(false)
     triggerRefresh() // This should trigger usage dashboard refresh
+  }
+
+  const handleGoogleSlidesAdded = () => {
+    loadMediaFiles()
+    setShowGoogleSlidesDialog(false)
+    triggerRefresh()
   }
 
   const handlePreview = (file: MediaFile) => {
@@ -126,8 +146,10 @@ export default function MediaPage() {
   const getFileIcon = (file: MediaFile) => {
     const isImage = file.mime_type?.startsWith("image/") || file.file_type === "image"
     const isVideo = file.mime_type?.startsWith("video/") || file.file_type === "video"
+    const isPresentation = file.file_type === "presentation"
 
     if (isVideo) return <Video className="h-4 w-4" />
+    if (isPresentation) return <ExternalLink className="h-4 w-4" />
     if (isImage) return <Image className="h-4 w-4" />
     return <FileText className="h-4 w-4" />
   }
@@ -137,12 +159,14 @@ export default function MediaPage() {
     const isVideo = file.mime_type?.startsWith("video/") || file.file_type === "video"
     const isPDF = file.mime_type === "application/pdf"
     const isAudio = file.mime_type?.startsWith("audio/")
+    const isPresentation = file.file_type === "presentation"
     const isOffice =
       file.mime_type?.includes("office") ||
       file.mime_type?.includes("powerpoint") ||
       file.mime_type?.includes("presentation")
 
     if (isVideo) return "bg-blue-100 text-blue-800"
+    if (isPresentation) return "bg-purple-100 text-purple-800"
     if (isImage) return "bg-green-100 text-green-800"
     if (isPDF) return "bg-red-100 text-red-800"
     if (isAudio) return "bg-purple-100 text-purple-800"
@@ -155,12 +179,14 @@ export default function MediaPage() {
     const isVideo = file.mime_type?.startsWith("video/") || file.file_type === "video"
     const isPDF = file.mime_type === "application/pdf"
     const isAudio = file.mime_type?.startsWith("audio/")
+    const isPresentation = file.file_type === "presentation"
     const isOffice =
       file.mime_type?.includes("office") ||
       file.mime_type?.includes("powerpoint") ||
       file.mime_type?.includes("presentation")
 
     if (isVideo) return "video"
+    if (isPresentation) return "slides"
     if (isImage) return "image"
     if (isPDF) return "pdf"
     if (isAudio) return "audio"
@@ -182,10 +208,14 @@ export default function MediaPage() {
 
   const getThumbnail = (file: MediaFile) => {
     const isImage = file.mime_type?.startsWith("image/") || file.file_type === "image"
+    const isPresentation = file.file_type === "presentation"
 
     if (isImage) {
-      // For images, use the actual image as thumbnail
       return file.url
+    }
+
+    if (isPresentation) {
+      return "/thumbnails/slides.png"
     }
 
     // Use custom thumbnails based on file type
@@ -233,10 +263,26 @@ export default function MediaPage() {
             <h1 className="text-3xl font-bold">Media Library</h1>
             <p className="text-gray-600">Upload and manage your digital content</p>
           </div>
-          <Button onClick={() => setShowUploadDialog(true)}>
-            <Upload className="h-4 w-4 mr-2" />
-            Upload Media
-          </Button>
+          <div className="flex gap-2">
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button>
+                  <Upload className="h-4 w-4 mr-2" />
+                  Add Media
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onClick={() => setShowUploadDialog(true)}>
+                  <Upload className="h-4 w-4 mr-2" />
+                  Upload Files
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => setShowGoogleSlidesDialog(true)}>
+                  <ExternalLink className="h-4 w-4 mr-2" />
+                  Add Google Slides
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
         </div>
 
         {/* Search and Filter */}
@@ -409,6 +455,11 @@ export default function MediaPage() {
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
+        <GoogleSlidesDialog
+          open={showGoogleSlidesDialog}
+          onOpenChange={setShowGoogleSlidesDialog}
+          onSlidesAdded={handleGoogleSlidesAdded}
+        />
       </div>
     </DashboardLayout>
   )

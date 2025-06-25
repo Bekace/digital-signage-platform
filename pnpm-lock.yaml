@@ -173,6 +173,9 @@ importers:
       react-native-video:
         specifier: latest
         version: 6.15.0(react-native@0.80.0(@babel/core@7.27.4)(@types/react@18.0.0)(bufferutil@4.0.9)(react@18.0.0))(react@18.0.0)
+      react-native-webview:
+        specifier: latest
+        version: 13.15.0(react-native@0.80.0(@babel/core@7.27.4)(@types/react@18.0.0)(bufferutil@4.0.9)(react@18.0.0))(react@18.0.0)
       react-resizable-panels:
         specifier: latest
         version: 3.0.3(react-dom@18.0.0(react@18.0.0))(react@18.0.0)
@@ -2645,6 +2648,12 @@ packages:
 
   react-native-video@6.15.0:
     resolution: {integrity: sha512-zgaNCMA50uS5hvgySmX1GhB0gJUke1iYhBGcXtIYhvYVtUb9Wp7enrazABb3D5xZOer5kpRraS9V79UpedxBGg==}
+    peerDependencies:
+      react: '*'
+      react-native: '*'
+
+  react-native-webview@13.15.0:
+    resolution: {integrity: sha512-Vzjgy8mmxa/JO6l5KZrsTC7YemSdq+qB01diA0FqjUTaWGAGwuykpJ73MDj3+mzBSlaDxAEugHzTtkUQkQEQeQ==}
     peerDependencies:
       react: '*'
       react-native: '*'
@@ -5800,6 +5809,13 @@ snapshots:
 
   react-native-video@6.15.0(react-native@0.80.0(@babel/core@7.27.4)(@types/react@18.0.0)(bufferutil@4.0.9)(react@18.0.0))(react@18.0.0):
     dependencies:
+      react: 18.0.0
+      react-native: 0.80.0(@babel/core@7.27.4)(@types/react@18.0.0)(bufferutil@4.0.9)(react@18.0.0)
+
+  react-native-webview@13.15.0(react-native@0.80.0(@babel/core@7.27.4)(@types/react@18.0.0)(bufferutil@4.0.9)(react@18.0.0))(react@18.0.0):
+    dependencies:
+      escape-string-regexp: 4.0.0
+      invariant: 2.2.4
       react: 18.0.0
       react-native: 0.80.0(@babel/core@7.27.4)(@types/react@18.0.0)(bufferutil@4.0.9)(react@18.0.0)
 

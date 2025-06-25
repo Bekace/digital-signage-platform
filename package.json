@@ -64,6 +64,7 @@
     "react-native-safe-area-context": "latest",
     "react-native-screens": "latest",
     "react-native-video": "latest",
+    "react-native-webview": "latest",
     "react-resizable-panels": "latest",
     "recharts": "latest",
     "resend": "latest",

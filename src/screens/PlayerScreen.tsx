@@ -7,6 +7,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage"
 import { DeviceManager } from "../services/DeviceManager"
 import { PlaylistManager } from "../services/PlaylistManager"
 import StatusBar from "../components/StatusBar"
+import { WebView } from "react-native-webview"
 
 const { width: screenWidth, height: screenHeight } = Dimensions.get("window")
 
@@ -207,6 +208,35 @@ export default function PlayerScreen() {
           <View style={styles.webpageContainer}>
             <Text style={styles.webpageTitle}>{currentItem.title}</Text>
             <Text style={styles.webpageUrl}>{currentItem.url}</Text>
+          </View>
+        )
+      case "presentation":
+        if (currentItem.media_source === "google_slides") {
+          return (
+            <WebView
+              source={{ uri: currentItem.url }}
+              style={styles.fullScreen}
+              javaScriptEnabled={true}
+              domStorageEnabled={true}
+              startInLoadingState={true}
+              onError={(error) => {
+                console.error("Google Slides load error:", error)
+                nextItem()
+              }}
+              onLoadEnd={() => {
+                // Auto-advance after the specified duration
+                const settings = currentItem.embed_settings ? JSON.parse(currentItem.embed_settings) : {}
+                const duration = (settings.duration || 30) * 1000
+                setTimeout(() => {
+                  nextItem()
+                }, duration)
+              }}
+            />
+          )
+        }
+        return (
+          <View style={styles.unsupported}>
+            <Text style={styles.unsupportedText}>Unsupported presentation type</Text>
           </View>
         )
 
