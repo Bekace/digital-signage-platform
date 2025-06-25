@@ -284,8 +284,9 @@ export default function UsersAdminPage() {
       newErrors.email = "Email is required"
     } else {
       const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
-      if (!emailRegex.test(formData.email.trim())) {
-        newErrors.email = "Please enter a valid email address"
+      const trimmedEmail = formData.email.trim().toLowerCase()
+      if (!emailRegex.test(trimmedEmail)) {
+        newErrors.email = "Please enter a valid email address (e.g., user@example.com)"
       }
     }
 
@@ -527,11 +528,18 @@ export default function UsersAdminPage() {
       } else {
         debugLogger.userAction("Create user - API ERROR", data)
         console.error("API error:", data)
-        toast({
-          title: "Creation Failed",
-          description: data.message || "Failed to create user",
-          variant: "destructive",
-        })
+
+        // Check if it's a duplicate email error
+        if (data.message && data.message.toLowerCase().includes("already exists")) {
+          setValidationErrors({ email: data.message })
+        } else {
+          toast({
+            title: "Creation Failed",
+            description: data.message || "Failed to create user",
+            variant: "destructive",
+          })
+        }
+        return
       }
     } catch (err) {
       debugLogger.userAction("Create user - NETWORK ERROR", { error: err.message })
@@ -613,11 +621,18 @@ export default function UsersAdminPage() {
       } else {
         debugLogger.userAction("Update user - API ERROR", data)
         console.error("Edit API error:", data)
-        toast({
-          title: "Update Failed",
-          description: data.message || "Failed to update user",
-          variant: "destructive",
-        })
+
+        // Check if it's a duplicate email error
+        if (data.message && data.message.toLowerCase().includes("already in use")) {
+          setEditValidationErrors({ email: data.message })
+        } else {
+          toast({
+            title: "Update Failed",
+            description: data.message || "Failed to update user",
+            variant: "destructive",
+          })
+        }
+        return
       }
     } catch (err) {
       debugLogger.userAction("Update user - NETWORK ERROR", { error: err.message })

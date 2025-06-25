@@ -54,16 +54,10 @@ export async function PUT(request: Request, { params }: { params: { userId: stri
       return NextResponse.json({ success: false, message: "All required fields must be filled" }, { status: 400 })
     }
 
-    if (!email.includes("@") || !email.includes(".")) {
+    // Enhanced email validation
+    const trimmedEmail = email.trim().toLowerCase()
+    if (!trimmedEmail.includes("@") || !trimmedEmail.includes(".")) {
       return NextResponse.json({ success: false, message: "Please enter a valid email address" }, { status: 400 })
-    }
-
-    // Password validation (only if provided)
-    if (password && password.trim() && password.length < 6) {
-      return NextResponse.json(
-        { success: false, message: "Password must be at least 6 characters long" },
-        { status: 400 },
-      )
     }
 
     // Check if user exists
@@ -76,14 +70,17 @@ export async function PUT(request: Request, { params }: { params: { userId: stri
       return NextResponse.json({ success: false, message: "User not found" }, { status: 404 })
     }
 
-    // Check if email is already taken by another user
+    // Check if email is already taken by another user - enhanced check
     const emailCheck = await sql`
-      SELECT id FROM users WHERE email = ${email.trim().toLowerCase()} AND id != ${userId}
+      SELECT id, email FROM users WHERE LOWER(email) = ${trimmedEmail} AND id != ${userId}
     `
 
     if (emailCheck.length > 0) {
       return NextResponse.json(
-        { success: false, message: "An account with this email already exists" },
+        {
+          success: false,
+          message: `Email "${trimmedEmail}" is already in use by another user. Please choose a different email address.`,
+        },
         { status: 400 },
       )
     }
@@ -100,7 +97,7 @@ export async function PUT(request: Request, { params }: { params: { userId: stri
         SET 
           first_name = ${firstName.trim()},
           last_name = ${lastName.trim()},
-          email = ${email.trim().toLowerCase()},
+          email = ${trimmedEmail},
           company = ${company?.trim() || null},
           plan = ${plan},
           is_admin = ${isAdmin || false},
@@ -115,7 +112,7 @@ export async function PUT(request: Request, { params }: { params: { userId: stri
         SET 
           first_name = ${firstName.trim()},
           last_name = ${lastName.trim()},
-          email = ${email.trim().toLowerCase()},
+          email = ${trimmedEmail},
           company = ${company?.trim() || null},
           plan = ${plan},
           is_admin = ${isAdmin || false}

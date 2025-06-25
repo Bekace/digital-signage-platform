@@ -41,7 +41,7 @@ export async function POST(request: Request) {
 
     // Email format validation with more detailed error
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
-    const trimmedEmail = email.trim()
+    const trimmedEmail = email.trim().toLowerCase()
     if (!emailRegex.test(trimmedEmail)) {
       return NextResponse.json(
         {
@@ -52,17 +52,23 @@ export async function POST(request: Request) {
       )
     }
 
+    // Check if user already exists - enhanced check
+    const existingUser = await sql`SELECT id, email FROM users WHERE LOWER(email) = ${trimmedEmail}`
+    if (existingUser.length > 0) {
+      return NextResponse.json(
+        {
+          success: false,
+          message: `A user with email "${trimmedEmail}" already exists. Please use a different email address.`,
+        },
+        { status: 400 },
+      )
+    }
+
     if (password.length < 6) {
       return NextResponse.json(
         { success: false, message: "Password must be at least 6 characters long" },
         { status: 400 },
       )
-    }
-
-    // Check if user already exists
-    const existingUser = await sql`SELECT id FROM users WHERE email = ${trimmedEmail.toLowerCase()}`
-    if (existingUser.length > 0) {
-      return NextResponse.json({ success: false, message: "A user with this email already exists" }, { status: 400 })
     }
 
     // Verify plan exists - check both plan_templates and fallback to hardcoded plans
@@ -83,7 +89,7 @@ export async function POST(request: Request) {
     // Hash password
     const hashedPassword = await bcrypt.hash(password, 12)
 
-    // Create new user - using password_hash column instead of password
+    // Create new user - using trimmed lowercase email
     const newUser = await sql`
       INSERT INTO users (
         first_name, 
@@ -97,7 +103,7 @@ export async function POST(request: Request) {
       ) VALUES (
         ${firstName.trim()}, 
         ${lastName.trim()}, 
-        ${trimmedEmail.toLowerCase()}, 
+        ${trimmedEmail}, 
         ${company?.trim() || null}, 
         ${hashedPassword}, 
         ${plan},

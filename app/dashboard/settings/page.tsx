@@ -10,7 +10,7 @@ import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { DashboardLayout } from "@/components/dashboard-layout"
-import { useToast } from "@/hooks/use-toast"
+import { Alert, AlertDescription } from "@/components/ui/alert"
 
 const formatBytes = (bytes: number): string => {
   if (bytes === 0) return "0 Bytes"
@@ -36,7 +36,6 @@ interface UserProfile {
 }
 
 export default function SettingsPage() {
-  const { toast } = useToast()
   const [user, setUser] = useState<UserProfile | null>(null)
   const [loading, setLoading] = useState(true)
   const [notifications, setNotifications] = useState({
@@ -66,6 +65,17 @@ export default function SettingsPage() {
     confirm: false,
   })
 
+  const [toastMessage, setToastMessage] = useState<{
+    title: string
+    description: string
+    variant?: "default" | "destructive"
+  } | null>(null)
+
+  const showToast = (message: { title: string; description: string; variant?: "default" | "destructive" }) => {
+    setToastMessage(message)
+    setTimeout(() => setToastMessage(null), 5000)
+  }
+
   useEffect(() => {
     fetchUserProfile()
   }, [])
@@ -91,7 +101,7 @@ export default function SettingsPage() {
       }
     } catch (error) {
       console.error("Failed to fetch user data:", error)
-      toast({
+      showToast({
         title: "Error",
         description: "Failed to load user data",
         variant: "destructive",
@@ -124,7 +134,7 @@ export default function SettingsPage() {
 
   const saveCompanyInfo = async () => {
     if (!companyData.companyName.trim()) {
-      toast({
+      showToast({
         title: "Error",
         description: "Company name is required",
         variant: "destructive",
@@ -146,7 +156,7 @@ export default function SettingsPage() {
       const data = await response.json()
 
       if (data.success) {
-        toast({
+        showToast({
           title: "Success",
           description: "Company information updated successfully",
         })
@@ -160,7 +170,7 @@ export default function SettingsPage() {
           })
         }
       } else {
-        toast({
+        showToast({
           title: "Error",
           description: data.message || "Failed to update company information",
           variant: "destructive",
@@ -168,7 +178,7 @@ export default function SettingsPage() {
       }
     } catch (error) {
       console.error("Failed to save company info:", error)
-      toast({
+      showToast({
         title: "Error",
         description: "Failed to update company information",
         variant: "destructive",
@@ -181,7 +191,7 @@ export default function SettingsPage() {
   const changePassword = async () => {
     // Validation
     if (!passwordData.currentPassword || !passwordData.newPassword || !passwordData.confirmPassword) {
-      toast({
+      showToast({
         title: "Error",
         description: "All password fields are required",
         variant: "destructive",
@@ -190,7 +200,7 @@ export default function SettingsPage() {
     }
 
     if (passwordData.newPassword.length < 8) {
-      toast({
+      showToast({
         title: "Error",
         description: "New password must be at least 8 characters long",
         variant: "destructive",
@@ -199,7 +209,7 @@ export default function SettingsPage() {
     }
 
     if (passwordData.newPassword !== passwordData.confirmPassword) {
-      toast({
+      showToast({
         title: "Error",
         description: "New passwords do not match",
         variant: "destructive",
@@ -208,7 +218,7 @@ export default function SettingsPage() {
     }
 
     if (passwordData.currentPassword === passwordData.newPassword) {
-      toast({
+      showToast({
         title: "Error",
         description: "New password must be different from current password",
         variant: "destructive",
@@ -233,7 +243,7 @@ export default function SettingsPage() {
       const data = await response.json()
 
       if (data.success) {
-        toast({
+        showToast({
           title: "Success",
           description: "Password updated successfully",
         })
@@ -249,7 +259,7 @@ export default function SettingsPage() {
           confirm: false,
         })
       } else {
-        toast({
+        showToast({
           title: "Error",
           description: data.message || "Failed to update password",
           variant: "destructive",
@@ -257,7 +267,7 @@ export default function SettingsPage() {
       }
     } catch (error) {
       console.error("Failed to change password:", error)
-      toast({
+      showToast({
         title: "Error",
         description: "Failed to update password",
         variant: "destructive",
@@ -303,6 +313,14 @@ export default function SettingsPage() {
   return (
     <DashboardLayout>
       <div className="space-y-6">
+        {toastMessage && (
+          <Alert variant={toastMessage.variant || "default"} className="mb-4">
+            <AlertDescription>
+              <strong>{toastMessage.title}:</strong> {toastMessage.description}
+            </AlertDescription>
+          </Alert>
+        )}
+
         <div>
           <h1 className="text-3xl font-bold">Settings</h1>
           <p className="text-gray-600">Manage your account and application preferences</p>
