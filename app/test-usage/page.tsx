@@ -5,7 +5,54 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Progress } from "@/components/ui/progress"
 import { UsageDashboard } from "@/components/usage-dashboard"
-import { formatBytes, formatNumber, getUsagePercentage, getPlanLimits } from "@/lib/plans"
+
+// Define plan limits directly to avoid build-time API calls
+const PLAN_LIMITS = {
+  free: {
+    plan_type: "free",
+    max_media_files: 7,
+    max_storage_bytes: 50 * 1024 * 1024, // 50MB
+    max_screens: 1,
+    price_monthly: 0,
+    features: ["Basic media management", "Email support", "Community access"],
+  },
+  pro: {
+    plan_type: "pro",
+    max_media_files: 500,
+    max_storage_bytes: 5 * 1024 * 1024 * 1024, // 5GB
+    max_screens: 10,
+    price_monthly: 29,
+    features: ["Advanced media management", "Priority support", "Analytics"],
+  },
+  enterprise: {
+    plan_type: "enterprise",
+    max_media_files: -1, // Unlimited
+    max_storage_bytes: -1, // Unlimited
+    max_screens: -1, // Unlimited
+    price_monthly: 99,
+    features: ["Unlimited everything", "24/7 support", "Custom integrations"],
+  },
+}
+
+function formatBytes(bytes: number): string {
+  if (bytes === -1) return "Unlimited"
+  if (bytes === 0) return "0 Bytes"
+  const k = 1024
+  const sizes = ["Bytes", "KB", "MB", "GB", "TB"]
+  const i = Math.floor(Math.log(bytes) / Math.log(k))
+  return Number.parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i]
+}
+
+function formatNumber(num: number): string {
+  if (num === -1) return "Unlimited"
+  return num.toLocaleString()
+}
+
+function getUsagePercentage(used: number, limit: number): number {
+  if (limit === -1) return 0 // Unlimited
+  if (limit === 0) return 100
+  return Math.min((used / limit) * 100, 100)
+}
 
 export default function TestUsagePage() {
   const [testData, setTestData] = useState({
@@ -15,14 +62,7 @@ export default function TestUsagePage() {
       screens_count: 1,
       plan_type: "free",
     },
-    limits: {
-      plan_type: "free",
-      max_media_files: 5,
-      max_storage_bytes: 100 * 1024 * 1024, // 100MB
-      max_screens: 1,
-      price_monthly: 0,
-      features: ["Basic media management", "1 screen", "Email support"],
-    },
+    limits: PLAN_LIMITS.free,
   })
 
   const testScenarios = [
@@ -35,19 +75,19 @@ export default function TestUsagePage() {
           screens_count: 1,
           plan_type: "free",
         },
-        limits: getPlanLimits("free"),
+        limits: PLAN_LIMITS.free,
       },
     },
     {
       name: "Free Plan - High Usage",
       data: {
         usage: {
-          media_files_count: 4,
-          storage_used_bytes: 90 * 1024 * 1024, // 90MB
+          media_files_count: 6,
+          storage_used_bytes: 45 * 1024 * 1024, // 45MB
           screens_count: 1,
           plan_type: "free",
         },
-        limits: getPlanLimits("free"),
+        limits: PLAN_LIMITS.free,
       },
     },
     {
@@ -59,7 +99,7 @@ export default function TestUsagePage() {
           screens_count: 5,
           plan_type: "pro",
         },
-        limits: getPlanLimits("pro"),
+        limits: PLAN_LIMITS.pro,
       },
     },
     {
@@ -71,7 +111,7 @@ export default function TestUsagePage() {
           screens_count: 25,
           plan_type: "enterprise",
         },
-        limits: getPlanLimits("enterprise"),
+        limits: PLAN_LIMITS.enterprise,
       },
     },
   ]

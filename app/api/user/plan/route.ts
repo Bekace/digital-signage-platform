@@ -2,6 +2,10 @@ import { type NextRequest, NextResponse } from "next/server"
 import { getCurrentUser } from "@/lib/auth"
 import { getDb } from "@/lib/db"
 
+// Force dynamic rendering
+export const dynamic = "force-dynamic"
+export const runtime = "nodejs"
+
 export async function GET(request: NextRequest) {
   try {
     console.log("🔍 [PLAN API] === STARTING PLAN FETCH ===")
