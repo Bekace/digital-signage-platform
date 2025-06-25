@@ -169,20 +169,20 @@ export default function UsersAdminPage() {
     setRefreshTrigger((prev) => prev + 1)
   }
 
-  const handleUserCreated = () => {
-    loadUsers()
+  const handleUserCreated = async () => {
+    await loadUsers()
     setCreateUserDialogOpen(false)
     triggerRefresh()
   }
 
-  const handleUserUpdated = () => {
-    loadUsers()
+  const handleUserUpdated = async () => {
+    await loadUsers()
     setEditUserDialogOpen(false)
     triggerRefresh()
   }
 
-  const handleUserDeleted = () => {
-    loadUsers()
+  const handleUserDeleted = async () => {
+    await loadUsers()
     triggerRefresh()
   }
 
@@ -295,7 +295,7 @@ export default function UsersAdminPage() {
           title: "User Deleted",
           description: data.message || "User deleted successfully.",
         })
-        handleUserDeleted()
+        await handleUserDeleted()
       } else {
         toast({
           title: "Delete Failed",
@@ -438,8 +438,8 @@ export default function UsersAdminPage() {
         // Reset form
         resetCreateForm()
 
-        // Use the same pattern as media upload
-        handleUserCreated()
+        // Use the same pattern as media upload - await the handler
+        await handleUserCreated()
       } else {
         console.error("API error:", data)
         toast({
@@ -510,8 +510,8 @@ export default function UsersAdminPage() {
         // Reset form
         resetEditForm()
 
-        // Use the same pattern as media upload
-        handleUserUpdated()
+        // Use the same pattern as media upload - await the handler
+        await handleUserUpdated()
       } else {
         console.error("Edit API error:", data)
         toast({
