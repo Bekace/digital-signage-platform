@@ -319,14 +319,21 @@ export default function UsersAdminPage() {
       const data = await response.json()
       debugLogger.apiResponse(`/api/admin/users/${userId}/plan`, response.ok, data)
 
-      if (response.ok) {
+      console.log("Plan update response:", { status: response.status, data })
+
+      if (response.ok && data.success) {
+        // Update the user in the local state
         setUsers((prev) => prev.map((user) => (user.id === userId ? { ...user, plan: newPlan } : user)))
-        triggerRefresh() // Add this line to refresh usage data
+        triggerRefresh() // Refresh usage data
+
         toast({
           title: "Plan Updated",
-          description: `User plan updated to ${newPlan} successfully.`,
+          description: data.message || `User plan updated to ${newPlan} successfully.`,
         })
+
+        console.log("Plan update successful:", data.user)
       } else {
+        console.error("Plan update failed:", data)
         setError(data.message || "Failed to update user plan")
         toast({
           title: "Update Failed",
@@ -336,11 +343,11 @@ export default function UsersAdminPage() {
       }
     } catch (err) {
       debugLogger.userAction("Update user plan error", { error: err.message })
-      setError("Failed to update user plan")
-      console.error("Error updating user plan:", err)
+      console.error("Network error updating user plan:", err)
+      setError("Network error: Failed to update user plan")
       toast({
         title: "Update Failed",
-        description: "Failed to update user plan",
+        description: "Network error: Failed to update user plan",
         variant: "destructive",
       })
     } finally {
