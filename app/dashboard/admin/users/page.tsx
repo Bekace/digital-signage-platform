@@ -260,6 +260,7 @@ export default function UsersAdminPage() {
   }
 
   const createUser = async () => {
+    console.log("Create user clicked", newUser) // Debug log
     if (!newUser.firstName || !newUser.lastName || !newUser.email || !newUser.password || !newUser.plan) {
       toast({
         title: "Validation Error",
@@ -354,7 +355,7 @@ export default function UsersAdminPage() {
             </Button>
             <Dialog open={createUserDialogOpen} onOpenChange={setCreateUserDialogOpen}>
               <DialogTrigger asChild>
-                <Button size="sm">
+                <Button size="sm" onClick={() => setCreateUserDialogOpen(true)}>
                   <UserPlus className="h-4 w-4 mr-2" />
                   Add User
                 </Button>
@@ -455,7 +456,21 @@ export default function UsersAdminPage() {
                   </div>
                 </div>
                 <DialogFooter>
-                  <Button variant="outline" onClick={() => setCreateUserDialogOpen(false)}>
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      setCreateUserDialogOpen(false)
+                      setNewUser({
+                        firstName: "",
+                        lastName: "",
+                        email: "",
+                        company: "",
+                        plan: "",
+                        password: "",
+                        isAdmin: false,
+                      })
+                    }}
+                  >
                     Cancel
                   </Button>
                   <Button onClick={createUser} disabled={creatingUser}>
