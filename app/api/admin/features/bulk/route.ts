@@ -28,7 +28,7 @@ export async function POST(request: NextRequest) {
     }
 
     let result
-    let message
+    let message = ""
 
     switch (action) {
       case "activate":
@@ -36,9 +36,9 @@ export async function POST(request: NextRequest) {
           UPDATE plan_features 
           SET is_active = true 
           WHERE id = ANY(${featureIds})
-          RETURNING *
+          RETURNING id
         `
-        message = `${result.length} features activated successfully`
+        message = `Successfully activated ${result.length} features`
         break
 
       case "deactivate":
@@ -46,9 +46,9 @@ export async function POST(request: NextRequest) {
           UPDATE plan_features 
           SET is_active = false 
           WHERE id = ANY(${featureIds})
-          RETURNING *
+          RETURNING id
         `
-        message = `${result.length} features deactivated successfully`
+        message = `Successfully deactivated ${result.length} features`
         break
 
       case "delete":
@@ -61,10 +61,11 @@ export async function POST(request: NextRequest) {
         `
 
         if (usedFeatures.length > 0) {
+          const featureNames = usedFeatures.map((f) => f.feature_name).join(", ")
           return NextResponse.json(
             {
               success: false,
-              message: `Cannot delete features that are used in plans: ${usedFeatures.map((f) => f.feature_name).join(", ")}`,
+              message: `Cannot delete features that are used in plans: ${featureNames}`,
             },
             { status: 400 },
           )
@@ -73,9 +74,9 @@ export async function POST(request: NextRequest) {
         result = await sql`
           DELETE FROM plan_features 
           WHERE id = ANY(${featureIds})
-          RETURNING *
+          RETURNING id
         `
-        message = `${result.length} features deleted successfully`
+        message = `Successfully deleted ${result.length} features`
         break
 
       default:
@@ -84,17 +85,11 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      message: message,
-      affectedFeatures: result,
+      message,
+      affectedCount: result.length,
     })
   } catch (error) {
-    console.error("Bulk features operation error:", error)
-    return NextResponse.json(
-      {
-        success: false,
-        message: "Failed to perform bulk operation: " + error.message,
-      },
-      { status: 500 },
-    )
+    console.error("Bulk operation error:", error)
+    return NextResponse.json({ success: false, message: "Internal server error" }, { status: 500 })
   }
 }

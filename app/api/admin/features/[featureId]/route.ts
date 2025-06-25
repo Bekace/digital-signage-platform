@@ -105,10 +105,19 @@ export async function DELETE(request: NextRequest, { params }: { params: { featu
       return NextResponse.json({ success: false, message: "Access denied" }, { status: 403 })
     }
 
+    // Check if feature exists first
+    const existingFeature = await sql`
+      SELECT id, feature_name FROM plan_features WHERE id = ${params.featureId}
+    `
+
+    if (existingFeature.length === 0) {
+      return NextResponse.json({ success: false, message: "Feature not found" }, { status: 404 })
+    }
+
     // Check if feature is used in any plans
     const plansUsingFeature = await sql`
       SELECT COUNT(*) as count FROM plan_templates 
-      WHERE features::text LIKE '%' || (SELECT feature_name FROM plan_features WHERE id = ${params.featureId}) || '%'
+      WHERE features::text LIKE '%' || ${existingFeature[0].feature_name} || '%'
     `
 
     if (plansUsingFeature[0].count > 0) {
@@ -125,7 +134,7 @@ export async function DELETE(request: NextRequest, { params }: { params: { featu
     `
 
     if (deletedFeature.length === 0) {
-      return NextResponse.json({ success: false, message: "Feature not found" }, { status: 404 })
+      return NextResponse.json({ success: false, message: "Failed to delete feature" }, { status: 500 })
     }
 
     return NextResponse.json({
