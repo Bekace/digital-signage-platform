@@ -539,13 +539,38 @@ export default function UsersAdminPage() {
           description: `User ${data.user.firstName} ${data.user.lastName} created successfully.`,
         })
 
+        // Add the new user to the existing list immediately (optimistic update)
+        const newUserForList: User = {
+          id: data.user.id,
+          email: data.user.email,
+          firstName: data.user.firstName,
+          lastName: data.user.lastName,
+          company: data.user.company || "",
+          plan: data.user.plan,
+          createdAt: data.user.createdAt,
+          isAdmin: data.user.isAdmin,
+          mediaCount: 0,
+          storageUsed: 0,
+        }
+
+        // Update the users list immediately
+        setUsers((prev) => [newUserForList, ...prev])
+
         // Reset form
         debugLogger.stateChange("CreateUser", "Resetting form")
         resetCreateForm()
 
-        // Use the same pattern as media upload - await the handler
-        debugLogger.userAction("Create user - CALLING HANDLER")
-        await handleUserCreated()
+        // Close dialog
+        debugLogger.stateChange("CreateUser", "Closing dialog")
+        setCreateUserDialogOpen(false)
+
+        // Trigger refresh for any other components
+        triggerRefresh()
+
+        // Then reload from server to ensure consistency (but don't await it)
+        setTimeout(() => {
+          loadUsers()
+        }, 500)
 
         debugLogger.userAction("Create user - COMPLETE SUCCESS")
       } else {
@@ -625,13 +650,38 @@ export default function UsersAdminPage() {
           description: `User ${data.user.firstName} ${data.user.lastName} updated successfully.`,
         })
 
+        // Update the user in the existing list immediately (optimistic update)
+        setUsers((prev) =>
+          prev.map((user) =>
+            user.id === editingUser?.id
+              ? {
+                  ...user,
+                  firstName: data.user.firstName,
+                  lastName: data.user.lastName,
+                  email: data.user.email,
+                  company: data.user.company || "",
+                  plan: data.user.plan,
+                  isAdmin: data.user.isAdmin,
+                }
+              : user,
+          ),
+        )
+
         // Reset form
         debugLogger.stateChange("EditUser", "Resetting form")
         resetEditForm()
 
-        // Use the same pattern as media upload - await the handler
-        debugLogger.userAction("Update user - CALLING HANDLER")
-        await handleUserUpdated()
+        // Close dialog
+        debugLogger.stateChange("EditUser", "Closing dialog")
+        setEditUserDialogOpen(false)
+
+        // Trigger refresh for any other components
+        triggerRefresh()
+
+        // Then reload from server to ensure consistency (but don't await it)
+        setTimeout(() => {
+          loadUsers()
+        }, 500)
 
         debugLogger.userAction("Update user - COMPLETE SUCCESS")
       } else {
