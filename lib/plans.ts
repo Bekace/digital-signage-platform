@@ -68,38 +68,16 @@ export function canUploadFile(
   return { allowed: true }
 }
 
-export const PLAN_LIMITS = {
-  free: {
-    max_media_files: 5,
-    max_storage_bytes: 100 * 1024 * 1024, // 100MB
-    max_screens: 1,
-    price_monthly: 0,
-    features: ["Basic media management", "1 screen", "Email support"],
-  },
-  pro: {
-    max_media_files: 500,
-    max_storage_bytes: 5 * 1024 * 1024 * 1024, // 5GB
-    max_screens: 10,
-    price_monthly: 29,
-    features: ["Advanced media management", "10 screens", "Priority support", "Analytics"],
-  },
-  enterprise: {
-    max_media_files: -1, // Unlimited
-    max_storage_bytes: -1, // Unlimited
-    max_screens: -1, // Unlimited
-    price_monthly: 99,
-    features: ["Unlimited everything", "Priority support", "Advanced analytics", "Custom branding"],
-  },
-} as const
-
-export function getPlanLimits(planType: string): PlanLimits {
-  const plan = PLAN_LIMITS[planType as keyof typeof PLAN_LIMITS] || PLAN_LIMITS.free
-  return {
-    plan_type: planType,
-    max_media_files: plan.max_media_files,
-    max_storage_bytes: plan.max_storage_bytes,
-    max_screens: plan.max_screens,
-    price_monthly: plan.price_monthly,
-    features: plan.features,
+// Remove hardcoded limits - now fetched from database
+export async function getPlanLimits(planType: string): Promise<PlanLimits | null> {
+  try {
+    const response = await fetch(`/api/plans/${planType}`)
+    if (response.ok) {
+      const data = await response.json()
+      return data.plan
+    }
+  } catch (error) {
+    console.error("Error fetching plan limits:", error)
   }
+  return null
 }
