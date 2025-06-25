@@ -46,6 +46,8 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { toast } from "@/hooks/use-toast"
 import { DashboardLayout } from "@/components/dashboard-layout"
 import { formatBytes, formatNumber } from "@/lib/plans"
+import { DebugPanel } from "@/components/debug-panel"
+import { debugLogger } from "@/lib/debug"
 
 interface User {
   id: number
@@ -129,62 +131,137 @@ export default function UsersAdminPage() {
 
   const loadUsers = async () => {
     try {
+      debugLogger.apiCall("GET", "/api/admin/users")
+      debugLogger.stateChange("UsersPage", "Loading users started", { loading: true })
+
       setLoading(true)
       const response = await fetch("/api/admin/users")
       const data = await response.json()
 
+      debugLogger.apiResponse("/api/admin/users", response.ok, {
+        status: response.status,
+        userCount: data.users?.length || 0,
+      })
+
       if (response.ok) {
+        debugLogger.stateChange("UsersPage", "Users loaded successfully", {
+          userCount: data.users?.length || 0,
+          previousCount: users.length,
+        })
         setUsers(data.users || [])
         setError(null)
       } else {
+        debugLogger.stateChange("UsersPage", "Users loading failed", { error: data.message })
         setError(data.message || "Failed to load users")
       }
     } catch (err) {
+      debugLogger.stateChange("UsersPage", "Users loading error", { error: err.message })
       setError("Failed to load users")
       console.error("Error loading users:", err)
     } finally {
+      debugLogger.stateChange("UsersPage", "Loading users finished", { loading: false })
       setLoading(false)
     }
   }
 
   const loadPlans = async () => {
     try {
+      debugLogger.apiCall("GET", "/api/admin/plans")
       const response = await fetch("/api/admin/plans")
       const data = await response.json()
+
+      debugLogger.apiResponse("/api/admin/plans", response.ok, {
+        planCount: data.plans?.length || 0,
+      })
 
       if (response.ok) {
         setPlans(data.plans || [])
       }
     } catch (err) {
+      debugLogger.stateChange("UsersPage", "Plans loading error", { error: err.message })
       console.error("Error loading plans:", err)
     }
   }
 
   useEffect(() => {
+    debugLogger.stateChange("UsersPage", "Component mounted")
     loadUsers()
     loadPlans()
   }, [])
 
+  // Debug refresh trigger changes
+  useEffect(() => {
+    debugLogger.refresh("UsersPage", `refreshTrigger changed to ${refreshTrigger}`)
+  }, [refreshTrigger])
+
   const triggerRefresh = () => {
-    setRefreshTrigger((prev) => prev + 1)
+    const newTrigger = refreshTrigger + 1
+    debugLogger.userAction("Trigger refresh", { oldTrigger: refreshTrigger, newTrigger })
+    setRefreshTrigger(newTrigger)
   }
 
   const handleUserCreated = async () => {
-    await loadUsers()
-    setCreateUserDialogOpen(false)
-    triggerRefresh()
+    debugLogger.userAction("Handle user created - START")
+
+    try {
+      debugLogger.stateChange("UsersPage", "Reloading users after creation")
+      await loadUsers()
+
+      debugLogger.stateChange("UsersPage", "Closing create dialog")
+      setCreateUserDialogOpen(false)
+
+      debugLogger.userAction("Triggering refresh after user creation")
+      triggerRefresh()
+
+      debugLogger.userAction("Handle user created - SUCCESS")
+    } catch (error) {
+      debugLogger.userAction("Handle user created - ERROR", { error: error.message })
+    }
   }
 
   const handleUserUpdated = async () => {
-    await loadUsers()
-    setEditUserDialogOpen(false)
-    triggerRefresh()
+    debugLogger.userAction("Handle user updated - START")
+
+    try {
+      debugLogger.stateChange("UsersPage", "Reloading users after update")
+      await loadUsers()
+
+      debugLogger.stateChange("UsersPage", "Closing edit dialog")
+      setEditUserDialogOpen(false)
+
+      debugLogger.userAction("Triggering refresh after user update")
+      triggerRefresh()
+
+      debugLogger.userAction("Handle user updated - SUCCESS")
+    } catch (error) {
+      debugLogger.userAction("Handle user updated - ERROR", { error: error.message })
+    }
   }
 
   const handleUserDeleted = async () => {
-    await loadUsers()
-    triggerRefresh()
+    debugLogger.userAction("Handle user deleted - START")
+
+    try {
+      debugLogger.stateChange("UsersPage", "Reloading users after deletion")
+      await loadUsers()
+
+      debugLogger.userAction("Triggering refresh after user deletion")
+      triggerRefresh()
+
+      debugLogger.userAction("Handle user deleted - SUCCESS")
+    } catch (error) {
+      debugLogger.userAction("Handle user deleted - ERROR", { error: error.message })
+    }
   }
+
+  // Debug dialog state changes
+  useEffect(() => {
+    debugLogger.stateChange("CreateDialog", `Dialog ${createUserDialogOpen ? "opened" : "closed"}`)
+  }, [createUserDialogOpen])
+
+  useEffect(() => {
+    debugLogger.stateChange("EditDialog", `Dialog ${editUserDialogOpen ? "opened" : "closed"}`)
+  }, [editUserDialogOpen])
 
   // Filter users based on search and plan filter
   useEffect(() => {
@@ -205,6 +282,13 @@ export default function UsersAdminPage() {
     if (selectedPlanFilter !== "all") {
       filtered = filtered.filter((user) => user.plan === selectedPlanFilter)
     }
+
+    debugLogger.stateChange("UsersPage", "Users filtered", {
+      totalUsers: users.length,
+      filteredUsers: filtered.length,
+      searchTerm,
+      planFilter: selectedPlanFilter,
+    })
 
     setFilteredUsers(filtered)
   }, [users, searchTerm, selectedPlanFilter])
@@ -243,7 +327,10 @@ export default function UsersAdminPage() {
 
   const updateUserPlan = async (userId: number, newPlan: string) => {
     try {
+      debugLogger.userAction("Update user plan", { userId, newPlan })
       setUpdatingUser(userId)
+
+      debugLogger.apiCall("PUT", `/api/admin/users/${userId}/plan`, { plan: newPlan })
       const response = await fetch(`/api/admin/users/${userId}/plan`, {
         method: "PUT",
         headers: {
@@ -253,6 +340,7 @@ export default function UsersAdminPage() {
       })
 
       const data = await response.json()
+      debugLogger.apiResponse(`/api/admin/users/${userId}/plan`, response.ok, data)
 
       if (response.ok) {
         setUsers((prev) => prev.map((user) => (user.id === userId ? { ...user, plan: newPlan } : user)))
@@ -269,6 +357,7 @@ export default function UsersAdminPage() {
         })
       }
     } catch (err) {
+      debugLogger.userAction("Update user plan error", { error: err.message })
       setError("Failed to update user plan")
       console.error("Error updating user plan:", err)
       toast({
@@ -283,12 +372,16 @@ export default function UsersAdminPage() {
 
   const deleteUser = async (userId: number) => {
     try {
+      debugLogger.userAction("Delete user", { userId })
       setDeletingUser(userId)
+
+      debugLogger.apiCall("DELETE", `/api/admin/users/${userId}`)
       const response = await fetch(`/api/admin/users/${userId}`, {
         method: "DELETE",
       })
 
       const data = await response.json()
+      debugLogger.apiResponse(`/api/admin/users/${userId}`, response.ok, data)
 
       if (response.ok) {
         toast({
@@ -304,6 +397,7 @@ export default function UsersAdminPage() {
         })
       }
     } catch (err) {
+      debugLogger.userAction("Delete user error", { error: err.message })
       console.error("Error deleting user:", err)
       toast({
         title: "Delete Failed",
@@ -319,6 +413,7 @@ export default function UsersAdminPage() {
     if (!bulkAssignPlan || selectedUsers.length === 0) return
 
     try {
+      debugLogger.userAction("Bulk assign plans", { userCount: selectedUsers.length, plan: bulkAssignPlan })
       setBulkAssigning(true)
       const promises = selectedUsers.map((userId) => updateUserPlan(userId, bulkAssignPlan))
       await Promise.all(promises)
@@ -332,6 +427,7 @@ export default function UsersAdminPage() {
       setBulkAssignDialogOpen(false)
       setBulkAssignPlan("")
     } catch (err) {
+      debugLogger.userAction("Bulk assign error", { error: err.message })
       toast({
         title: "Bulk Assignment Failed",
         description: "Some plan assignments may have failed.",
@@ -373,6 +469,7 @@ export default function UsersAdminPage() {
   }
 
   const exportUsers = () => {
+    debugLogger.userAction("Export users", { userCount: filteredUsers.length })
     const csvContent = [
       ["Name", "Email", "Company", "Plan", "Media Files", "Storage Used", "Admin", "Created"],
       ...filteredUsers.map((user) => [
@@ -399,25 +496,30 @@ export default function UsersAdminPage() {
   }
 
   const createUser = async () => {
-    console.log("Create user clicked", newUser)
+    debugLogger.userAction("Create user - START", newUser)
 
     // Clear previous validation errors
     setValidationErrors({})
 
     // Validate form
     if (!validateForm(newUser, validationErrors)) {
+      debugLogger.userAction("Create user - VALIDATION FAILED", validationErrors)
       setValidationErrors({ ...validationErrors })
       return
     }
 
     // Additional validation for create (password required)
     if (!newUser.password?.trim()) {
+      debugLogger.userAction("Create user - PASSWORD REQUIRED")
       setValidationErrors({ ...validationErrors, password: "Password is required" })
       return
     }
 
     try {
+      debugLogger.stateChange("CreateUser", "Setting creating state", { creating: true })
       setCreatingUser(true)
+
+      debugLogger.apiCall("POST", "/api/admin/users/create", newUser)
       const response = await fetch("/api/admin/users/create", {
         method: "POST",
         headers: {
@@ -427,20 +529,27 @@ export default function UsersAdminPage() {
       })
 
       const data = await response.json()
-      console.log("API response:", data)
+      debugLogger.apiResponse("/api/admin/users/create", response.ok, data)
 
       if (response.ok && data.success) {
+        debugLogger.userAction("Create user - API SUCCESS", data.user)
+
         toast({
           title: "User Created",
           description: `User ${data.user.firstName} ${data.user.lastName} created successfully.`,
         })
 
         // Reset form
+        debugLogger.stateChange("CreateUser", "Resetting form")
         resetCreateForm()
 
         // Use the same pattern as media upload - await the handler
+        debugLogger.userAction("Create user - CALLING HANDLER")
         await handleUserCreated()
+
+        debugLogger.userAction("Create user - COMPLETE SUCCESS")
       } else {
+        debugLogger.userAction("Create user - API ERROR", data)
         console.error("API error:", data)
         toast({
           title: "Creation Failed",
@@ -449,6 +558,7 @@ export default function UsersAdminPage() {
         })
       }
     } catch (err) {
+      debugLogger.userAction("Create user - NETWORK ERROR", { error: err.message })
       console.error("Network error:", err)
       toast({
         title: "Creation Failed",
@@ -456,11 +566,13 @@ export default function UsersAdminPage() {
         variant: "destructive",
       })
     } finally {
+      debugLogger.stateChange("CreateUser", "Setting creating state", { creating: false })
       setCreatingUser(false)
     }
   }
 
   const openEditDialog = (user: User) => {
+    debugLogger.userAction("Open edit dialog", { userId: user.id, userName: `${user.firstName} ${user.lastName}` })
     setEditingUser(user)
     setEditUser({
       firstName: user.firstName,
@@ -477,19 +589,23 @@ export default function UsersAdminPage() {
   }
 
   const updateUser = async () => {
-    console.log("Update user clicked", editUser)
+    debugLogger.userAction("Update user - START", { userId: editingUser?.id, data: editUser })
 
     // Clear previous validation errors
     setEditValidationErrors({})
 
     // Validate form
     if (!validateForm(editUser, editValidationErrors)) {
+      debugLogger.userAction("Update user - VALIDATION FAILED", editValidationErrors)
       setEditValidationErrors({ ...editValidationErrors })
       return
     }
 
     try {
+      debugLogger.stateChange("EditUser", "Setting updating state", { updating: true })
       setUpdatingUserEdit(true)
+
+      debugLogger.apiCall("PUT", `/api/admin/users/${editingUser?.id}/edit`, editUser)
       const response = await fetch(`/api/admin/users/${editingUser?.id}/edit`, {
         method: "PUT",
         headers: {
@@ -499,20 +615,27 @@ export default function UsersAdminPage() {
       })
 
       const data = await response.json()
-      console.log("Edit API response:", data)
+      debugLogger.apiResponse(`/api/admin/users/${editingUser?.id}/edit`, response.ok, data)
 
       if (response.ok && data.success) {
+        debugLogger.userAction("Update user - API SUCCESS", data.user)
+
         toast({
           title: "User Updated",
           description: `User ${data.user.firstName} ${data.user.lastName} updated successfully.`,
         })
 
         // Reset form
+        debugLogger.stateChange("EditUser", "Resetting form")
         resetEditForm()
 
         // Use the same pattern as media upload - await the handler
+        debugLogger.userAction("Update user - CALLING HANDLER")
         await handleUserUpdated()
+
+        debugLogger.userAction("Update user - COMPLETE SUCCESS")
       } else {
+        debugLogger.userAction("Update user - API ERROR", data)
         console.error("Edit API error:", data)
         toast({
           title: "Update Failed",
@@ -521,6 +644,7 @@ export default function UsersAdminPage() {
         })
       }
     } catch (err) {
+      debugLogger.userAction("Update user - NETWORK ERROR", { error: err.message })
       console.error("Edit Network error:", err)
       toast({
         title: "Update Failed",
@@ -528,11 +652,13 @@ export default function UsersAdminPage() {
         variant: "destructive",
       })
     } finally {
+      debugLogger.stateChange("EditUser", "Setting updating state", { updating: false })
       setUpdatingUserEdit(false)
     }
   }
 
   const resetCreateForm = () => {
+    debugLogger.stateChange("CreateUser", "Form reset")
     setNewUser({
       firstName: "",
       lastName: "",
@@ -547,6 +673,7 @@ export default function UsersAdminPage() {
   }
 
   const resetEditForm = () => {
+    debugLogger.stateChange("EditUser", "Form reset")
     setEditUser({
       firstName: "",
       lastName: "",
@@ -568,6 +695,7 @@ export default function UsersAdminPage() {
           <Loader2 className="h-8 w-8 animate-spin" />
           <span className="ml-2">Loading users...</span>
         </div>
+        <DebugPanel />
       </DashboardLayout>
     )
   }
@@ -581,6 +709,7 @@ export default function UsersAdminPage() {
             Try Again
           </Button>
         </div>
+        <DebugPanel />
       </DashboardLayout>
     )
   }
@@ -601,6 +730,7 @@ export default function UsersAdminPage() {
             <Button
               size="sm"
               onClick={() => {
+                debugLogger.userAction("Open create user dialog")
                 setCreateUserDialogOpen(true)
               }}
             >
@@ -609,7 +739,13 @@ export default function UsersAdminPage() {
             </Button>
 
             {/* Create User Dialog */}
-            <Dialog open={createUserDialogOpen} onOpenChange={setCreateUserDialogOpen}>
+            <Dialog
+              open={createUserDialogOpen}
+              onOpenChange={(open) => {
+                debugLogger.stateChange("CreateDialog", `Dialog ${open ? "opening" : "closing"}`)
+                setCreateUserDialogOpen(open)
+              }}
+            >
               <DialogContent className="max-w-md">
                 <DialogHeader>
                   <DialogTitle>Create New User</DialogTitle>
@@ -768,6 +904,7 @@ export default function UsersAdminPage() {
                   <Button
                     variant="outline"
                     onClick={() => {
+                      debugLogger.userAction("Cancel create user")
                       setCreateUserDialogOpen(false)
                       resetCreateForm()
                     }}
@@ -783,7 +920,13 @@ export default function UsersAdminPage() {
             </Dialog>
 
             {/* Edit User Dialog */}
-            <Dialog open={editUserDialogOpen} onOpenChange={setEditUserDialogOpen}>
+            <Dialog
+              open={editUserDialogOpen}
+              onOpenChange={(open) => {
+                debugLogger.stateChange("EditDialog", `Dialog ${open ? "opening" : "closing"}`)
+                setEditUserDialogOpen(open)
+              }}
+            >
               <DialogContent className="max-w-md">
                 <DialogHeader>
                   <DialogTitle>Edit User</DialogTitle>
@@ -944,6 +1087,7 @@ export default function UsersAdminPage() {
                   <Button
                     variant="outline"
                     onClick={() => {
+                      debugLogger.userAction("Cancel edit user")
                       setEditUserDialogOpen(false)
                       resetEditForm()
                     }}
@@ -1211,6 +1355,7 @@ export default function UsersAdminPage() {
           </CardContent>
         </Card>
       </div>
+      <DebugPanel />
     </DashboardLayout>
   )
 }
