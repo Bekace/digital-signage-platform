@@ -33,15 +33,17 @@ export async function DELETE(request: Request, { params }: { params: { playlistI
       return NextResponse.json({ error: "Playlist not found" }, { status: 404 })
     }
 
-    // Get item details before deletion
+    // Get item position before deletion
     const item = await sql`
-      SELECT * FROM playlist_items 
+      SELECT position FROM playlist_items 
       WHERE id = ${itemId} AND playlist_id = ${playlistId}
     `
 
     if (item.length === 0) {
       return NextResponse.json({ error: "Item not found" }, { status: 404 })
     }
+
+    const deletedPosition = item[0].position
 
     // Delete the item
     await sql`
@@ -53,14 +55,14 @@ export async function DELETE(request: Request, { params }: { params: { playlistI
     await sql`
       UPDATE playlist_items 
       SET position = position - 1
-      WHERE playlist_id = ${playlistId} AND position > ${item[0].position}
+      WHERE playlist_id = ${playlistId} AND position > ${deletedPosition}
     `
 
-    console.log(`✅ [PLAYLIST ITEM DELETE API] Removed item ${itemId}`)
+    console.log(`✅ [PLAYLIST ITEM DELETE API] Removed item and reordered remaining items`)
 
     return NextResponse.json({
       success: true,
-      message: "Item removed from playlist",
+      message: "Item removed successfully",
     })
   } catch (error) {
     console.error("❌ [PLAYLIST ITEM DELETE API] Error removing item:", error)

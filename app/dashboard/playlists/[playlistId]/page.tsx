@@ -5,7 +5,6 @@ import { useParams, useRouter } from "next/navigation"
 import {
   ArrowLeft,
   Save,
-  Settings,
   Clock,
   HardDrive,
   Hash,
@@ -28,6 +27,7 @@ import { Badge } from "@/components/ui/badge"
 import { DashboardLayout } from "@/components/dashboard-layout"
 import { Skeleton } from "@/components/ui/skeleton"
 import { ScrollArea } from "@/components/ui/scroll-area"
+import { PlaylistOptionsDialog } from "@/components/playlist-options-dialog"
 
 interface MediaFile {
   id: number
@@ -152,6 +152,31 @@ function MediaLibraryItem({
     return <FileText className="h-4 w-4" />
   }
 
+  const getThumbnailUrl = (media: MediaFile) => {
+    // If we have a thumbnail URL, use it
+    if (media.thumbnail_url) {
+      return media.thumbnail_url
+    }
+
+    // For images, use the original URL
+    if (media.mime_type?.startsWith("image/")) {
+      return media.url
+    }
+
+    // For other file types, use type-specific placeholders
+    if (media.mime_type?.startsWith("video/")) {
+      return "/thumbnails/video.png"
+    }
+    if (media.mime_type === "application/pdf") {
+      return "/thumbnails/pdf.png"
+    }
+    if (media.file_type === "presentation") {
+      return "/thumbnails/office.png"
+    }
+
+    return "/thumbnails/generic.png"
+  }
+
   const formatFileSize = (bytes: number) => {
     if (bytes === 0) return "0 Bytes"
     const k = 1024
@@ -161,25 +186,37 @@ function MediaLibraryItem({
   }
 
   return (
-    <Card className="hover:shadow-md transition-shadow cursor-pointer" onClick={() => onAddToPlaylist(media)}>
+    <Card className="hover:shadow-md transition-shadow cursor-pointer group" onClick={() => onAddToPlaylist(media)}>
       <CardContent className="p-3">
         <div className="flex items-center space-x-3">
-          <div className="flex-shrink-0">
-            {media.thumbnail_url ? (
-              <img
-                src={media.thumbnail_url || "/placeholder.svg"}
-                alt={media.original_name}
-                className="w-10 h-10 object-cover rounded"
-              />
-            ) : (
-              <div className="w-10 h-10 bg-gray-100 rounded flex items-center justify-center">
-                {getFileIcon(media.mime_type)}
-              </div>
-            )}
+          <div className="flex-shrink-0 relative">
+            <img
+              src={getThumbnailUrl(media) || "/placeholder.svg"}
+              alt={media.original_name}
+              className="w-12 h-12 object-cover rounded border"
+              onError={(e) => {
+                // Fallback to icon if image fails to load
+                const target = e.target as HTMLImageElement
+                target.style.display = "none"
+                target.nextElementSibling?.classList.remove("hidden")
+              }}
+            />
+            <div className="w-12 h-12 bg-gray-100 rounded flex items-center justify-center hidden">
+              {getFileIcon(media.mime_type || media.file_type)}
+            </div>
+            {/* Add hover overlay */}
+            <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-20 rounded transition-all duration-200 flex items-center justify-center">
+              <Plus className="h-4 w-4 text-white opacity-0 group-hover:opacity-100 transition-opacity" />
+            </div>
           </div>
           <div className="flex-1 min-w-0">
             <h4 className="text-sm font-medium truncate">{media.original_name}</h4>
-            <p className="text-xs text-gray-500">{formatFileSize(media.file_size)}</p>
+            <div className="flex items-center space-x-2 text-xs text-gray-500 mt-1">
+              <span>{formatFileSize(media.file_size)}</span>
+              <Badge variant="outline" className="text-xs">
+                {media.file_type}
+              </Badge>
+            </div>
           </div>
         </div>
       </CardContent>
@@ -197,6 +234,21 @@ export default function PlaylistEditorPage() {
   const [mediaFiles, setMediaFiles] = useState<MediaFile[]>([])
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
+
+  const [playlistOptions, setPlaylistOptions] = useState({
+    scale_image: "fit",
+    scale_video: "fit",
+    scale_document: "fit",
+    shuffle: false,
+    default_transition: "fade",
+    transition_speed: "medium",
+    advanced_options: {
+      auto_advance: true,
+      loop_playlist: false,
+      background_color: "black",
+      text_overlay: false,
+    },
+  })
 
   const sensors = useSensors(
     useSensor(PointerSensor),
@@ -349,6 +401,12 @@ export default function PlaylistEditorPage() {
 
   const stats = calculateStats()
 
+  const handleSaveOptions = (options: any) => {
+    setPlaylistOptions(options)
+    toast.success("Playlist options saved")
+    // TODO: Save to backend
+  }
+
   if (loading) {
     return (
       <DashboardLayout>
@@ -395,10 +453,7 @@ export default function PlaylistEditorPage() {
               </div>
             </div>
             <div className="flex items-center space-x-2">
-              <Button variant="outline">
-                <Settings className="h-4 w-4 mr-2" />
-                Settings
-              </Button>
+              <PlaylistOptionsDialog options={playlistOptions} onSave={handleSaveOptions} />
               <Button>
                 <Save className="h-4 w-4 mr-2" />
                 Save

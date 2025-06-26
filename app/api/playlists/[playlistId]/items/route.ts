@@ -39,9 +39,9 @@ export async function GET(request: Request, { params }: { params: { playlistId: 
         mf.original_name,
         mf.file_type,
         mf.file_size,
-        mf.mime_type,
         mf.duration as media_duration,
         mf.url,
+        mf.mime_type,
         mf.thumbnail_url
       FROM playlist_items pi
       LEFT JOIN media_files mf ON pi.media_file_id = mf.id
@@ -55,7 +55,7 @@ export async function GET(request: Request, { params }: { params: { playlistId: 
       media_file_id: item.media_file_id,
       position: item.position,
       duration: item.duration,
-      transition_type: item.transition_type || "fade",
+      transition_type: item.transition_type,
       media: {
         id: item.media_file_id,
         filename: item.filename,
@@ -138,7 +138,7 @@ export async function POST(request: Request, { params }: { params: { playlistId:
       WHERE playlist_id = ${playlistId}
     `
 
-    const nextPosition = (maxPosition[0]?.max_pos || -1) + 1
+    const nextPosition = maxPosition[0].max_pos + 1
 
     // Add item to playlist
     const newItem = await sql`
@@ -148,8 +148,7 @@ export async function POST(request: Request, { params }: { params: { playlistId:
         position, 
         duration, 
         transition_type
-      )
-      VALUES (
+      ) VALUES (
         ${playlistId}, 
         ${media_file_id}, 
         ${nextPosition}, 
@@ -159,48 +158,27 @@ export async function POST(request: Request, { params }: { params: { playlistId:
       RETURNING *
     `
 
-    // Get the complete item with media details
-    const itemWithMedia = await sql`
-      SELECT 
-        pi.*,
-        mf.filename,
-        mf.original_name,
-        mf.file_type,
-        mf.file_size,
-        mf.mime_type,
-        mf.duration as media_duration,
-        mf.url,
-        mf.thumbnail_url
-      FROM playlist_items pi
-      LEFT JOIN media_files mf ON pi.media_file_id = mf.id
-      WHERE pi.id = ${newItem[0].id}
-    `
-
-    const formattedItem = {
-      id: itemWithMedia[0].id,
-      playlist_id: itemWithMedia[0].playlist_id,
-      media_file_id: itemWithMedia[0].media_file_id,
-      position: itemWithMedia[0].position,
-      duration: itemWithMedia[0].duration,
-      transition_type: itemWithMedia[0].transition_type,
+    // Return item with media details
+    const itemWithMedia = {
+      ...newItem[0],
       media: {
-        id: itemWithMedia[0].media_file_id,
-        filename: itemWithMedia[0].filename,
-        original_name: itemWithMedia[0].original_name,
-        file_type: itemWithMedia[0].file_type,
-        file_size: itemWithMedia[0].file_size,
-        mime_type: itemWithMedia[0].mime_type,
-        url: itemWithMedia[0].url,
-        thumbnail_url: itemWithMedia[0].thumbnail_url,
-        duration: itemWithMedia[0].media_duration,
+        id: mediaFile[0].id,
+        filename: mediaFile[0].filename,
+        original_name: mediaFile[0].original_name,
+        file_type: mediaFile[0].file_type,
+        file_size: mediaFile[0].file_size,
+        mime_type: mediaFile[0].mime_type,
+        url: mediaFile[0].url,
+        thumbnail_url: mediaFile[0].thumbnail_url,
+        duration: mediaFile[0].duration,
       },
     }
 
-    console.log(`✅ [PLAYLIST ITEMS API] Added item: ${formattedItem.media.original_name}`)
+    console.log(`✅ [PLAYLIST ITEMS API] Added item: ${mediaFile[0].original_name}`)
 
     return NextResponse.json({
       success: true,
-      item: formattedItem,
+      item: itemWithMedia,
     })
   } catch (error) {
     console.error("❌ [PLAYLIST ITEMS API] Error adding item:", error)

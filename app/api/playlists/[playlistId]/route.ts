@@ -1,11 +1,14 @@
-import { NextResponse } from "next/server"
+import { type NextRequest, NextResponse } from "next/server"
+import { neon } from "@neondatabase/serverless"
 import { getCurrentUser } from "@/lib/auth"
 import { getDb } from "@/lib/db"
 
 export const dynamic = "force-dynamic"
 
+const sql = neon(process.env.DATABASE_URL!)
+
 // GET - Fetch a specific playlist with its items
-export async function GET(request: Request, { params }: { params: { playlistId: string } }) {
+export async function GET(request: NextRequest, { params }: { params: { playlistId: string } }) {
   console.log(`🎵 [PLAYLIST API] Getting playlist: ${params.playlistId}`)
 
   try {
@@ -19,10 +22,10 @@ export async function GET(request: Request, { params }: { params: { playlistId: 
       return NextResponse.json({ error: "Invalid playlist ID" }, { status: 400 })
     }
 
-    const sql = getDb()
+    const db = getDb()
 
     // Get playlist details
-    const playlist = await sql`
+    const playlist = await db`
       SELECT * FROM playlists 
       WHERE id = ${playlistId} AND user_id = ${user.id}
     `
@@ -62,7 +65,7 @@ export async function GET(request: Request, { params }: { params: { playlistId: 
 }
 
 // PUT - Update a playlist
-export async function PUT(request: Request, { params }: { params: { playlistId: string } }) {
+export async function PUT(request: NextRequest, { params }: { params: { playlistId: string } }) {
   console.log(`🎵 [PLAYLIST API] Updating playlist: ${params.playlistId}`)
 
   try {
@@ -79,10 +82,10 @@ export async function PUT(request: Request, { params }: { params: { playlistId: 
     const body = await request.json()
     const { name, description, status, loop_enabled, schedule_enabled, start_time, end_time, selected_days } = body
 
-    const sql = getDb()
+    const db = getDb()
 
     // Verify ownership
-    const existing = await sql`
+    const existing = await db`
       SELECT id FROM playlists 
       WHERE id = ${playlistId} AND user_id = ${user.id}
     `
@@ -92,7 +95,7 @@ export async function PUT(request: Request, { params }: { params: { playlistId: 
     }
 
     // Update playlist
-    const updated = await sql`
+    const updated = await db`
       UPDATE playlists SET
         name = COALESCE(${name}, name),
         description = COALESCE(${description}, description),
@@ -124,7 +127,7 @@ export async function PUT(request: Request, { params }: { params: { playlistId: 
 }
 
 // DELETE - Delete a playlist
-export async function DELETE(request: Request, { params }: { params: { playlistId: string } }) {
+export async function DELETE(request: NextRequest, { params }: { params: { playlistId: string } }) {
   console.log(`🎵 [PLAYLIST API] Deleting playlist: ${params.playlistId}`)
 
   try {
@@ -138,10 +141,10 @@ export async function DELETE(request: Request, { params }: { params: { playlistI
       return NextResponse.json({ error: "Invalid playlist ID" }, { status: 400 })
     }
 
-    const sql = getDb()
+    const db = getDb()
 
     // Verify ownership and delete
-    const deleted = await sql`
+    const deleted = await db`
       DELETE FROM playlists 
       WHERE id = ${playlistId} AND user_id = ${user.id}
       RETURNING id, name
