@@ -42,14 +42,13 @@ export async function PUT(request: Request, { params }: { params: { playlistId: 
     }
 
     // Update positions for each item
-    for (const item of items) {
-      if (item.id && typeof item.position === "number") {
-        await sql`
-          UPDATE playlist_items 
-          SET position = ${item.position}
-          WHERE id = ${item.id} AND playlist_id = ${playlistId}
-        `
-      }
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i]
+      await sql`
+        UPDATE playlist_items 
+        SET position = ${i + 1}
+        WHERE id = ${item.id} AND playlist_id = ${playlistId}
+      `
     }
 
     console.log(`✅ [PLAYLIST REORDER API] Reordered ${items.length} items`)
@@ -62,7 +61,7 @@ export async function PUT(request: Request, { params }: { params: { playlistId: 
     console.error("❌ [PLAYLIST REORDER API] Error:", error)
     return NextResponse.json(
       {
-        error: "Failed to reorder items",
+        error: "Failed to reorder playlist items",
         details: error instanceof Error ? error.message : "Unknown error",
       },
       { status: 500 },

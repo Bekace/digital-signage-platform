@@ -35,7 +35,7 @@ export async function GET(request: Request, { params }: { params: { playlistId: 
 
     console.log("✅ [PLAYLIST ITEMS API] Playlist ownership verified")
 
-    // Get playlist items with media details - using correct table name
+    // Get playlist items with media details
     console.log("🔍 [PLAYLIST ITEMS API] Fetching playlist items...")
     const items = await sql`
       SELECT 
@@ -72,7 +72,7 @@ export async function GET(request: Request, { params }: { params: { playlistId: 
         ? {
             id: item.media_file_id,
             filename: item.filename,
-            original_filename: item.original_name, // Map original_name to original_filename for consistency
+            original_filename: item.original_name,
             file_type: item.file_type,
             file_size: item.file_size,
             url: item.url,

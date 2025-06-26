@@ -12,41 +12,37 @@ import {
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Textarea } from "@/components/ui/textarea"
 import { Switch } from "@/components/ui/switch"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-
-interface PlaylistOptions {
-  scale_image: string
-  scale_video: string
-  scale_document: string
-  shuffle: boolean
-  default_transition: string
-  transition_speed: string
-  auto_advance: boolean
-  loop_playlist: boolean
-  background_color: string
-  text_overlay: boolean
-}
 
 interface PlaylistOptionsDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
-  options: PlaylistOptions
-  onSave: (options: PlaylistOptions) => void
+  playlist: any
+  onSave: (options: any) => void
 }
 
-export function PlaylistOptionsDialog({ open, onOpenChange, options, onSave }: PlaylistOptionsDialogProps) {
-  const [formData, setFormData] = useState<PlaylistOptions>(options)
+export function PlaylistOptionsDialog({ open, onOpenChange, playlist, onSave }: PlaylistOptionsDialogProps) {
+  const [options, setOptions] = useState({
+    name: playlist?.name || "",
+    description: playlist?.description || "",
+    scale_image: playlist?.scale_image || "fit",
+    scale_video: playlist?.scale_video || "fit",
+    scale_document: playlist?.scale_document || "fit",
+    shuffle: playlist?.shuffle || false,
+    default_transition: playlist?.default_transition || "fade",
+    transition_speed: playlist?.transition_speed || "normal",
+    auto_advance: playlist?.auto_advance !== false,
+    background_color: playlist?.background_color || "#000000",
+    text_overlay: playlist?.text_overlay || false,
+  })
 
   const handleSave = () => {
-    onSave(formData)
+    onSave(options)
     onOpenChange(false)
-  }
-
-  const handleReset = () => {
-    setFormData(options)
   }
 
   return (
@@ -54,29 +50,59 @@ export function PlaylistOptionsDialog({ open, onOpenChange, options, onSave }: P
       <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Playlist Settings</DialogTitle>
-          <DialogDescription>Configure how your playlist content is displayed and behaves.</DialogDescription>
+          <DialogDescription>Configure your playlist options and behavior.</DialogDescription>
         </DialogHeader>
 
-        <Tabs defaultValue="scaling" className="w-full">
+        <Tabs defaultValue="general" className="w-full">
           <TabsList className="grid w-full grid-cols-4">
+            <TabsTrigger value="general">General</TabsTrigger>
             <TabsTrigger value="scaling">Scaling</TabsTrigger>
             <TabsTrigger value="playback">Playback</TabsTrigger>
-            <TabsTrigger value="transitions">Transitions</TabsTrigger>
             <TabsTrigger value="appearance">Appearance</TabsTrigger>
           </TabsList>
+
+          <TabsContent value="general" className="space-y-4">
+            <Card>
+              <CardHeader>
+                <CardTitle>Basic Information</CardTitle>
+                <CardDescription>Set the name and description for your playlist.</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="name">Playlist Name</Label>
+                  <Input
+                    id="name"
+                    value={options.name}
+                    onChange={(e) => setOptions({ ...options, name: e.target.value })}
+                    placeholder="Enter playlist name"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="description">Description</Label>
+                  <Textarea
+                    id="description"
+                    value={options.description}
+                    onChange={(e) => setOptions({ ...options, description: e.target.value })}
+                    placeholder="Enter playlist description"
+                    rows={3}
+                  />
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
 
           <TabsContent value="scaling" className="space-y-4">
             <Card>
               <CardHeader>
                 <CardTitle>Content Scaling</CardTitle>
-                <CardDescription>Choose how different types of content are scaled to fit the screen.</CardDescription>
+                <CardDescription>Configure how different media types are scaled and displayed.</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="space-y-2">
                   <Label htmlFor="scale_image">Image Scaling</Label>
                   <Select
-                    value={formData.scale_image}
-                    onValueChange={(value) => setFormData({ ...formData, scale_image: value })}
+                    value={options.scale_image}
+                    onValueChange={(value) => setOptions({ ...options, scale_image: value })}
                   >
                     <SelectTrigger>
                       <SelectValue placeholder="Select image scaling" />
@@ -85,7 +111,7 @@ export function PlaylistOptionsDialog({ open, onOpenChange, options, onSave }: P
                       <SelectItem value="fit">Fit to Screen</SelectItem>
                       <SelectItem value="fill">Fill Screen</SelectItem>
                       <SelectItem value="stretch">Stretch to Fit</SelectItem>
-                      <SelectItem value="center">Center (No Scaling)</SelectItem>
+                      <SelectItem value="center">Center</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -93,8 +119,8 @@ export function PlaylistOptionsDialog({ open, onOpenChange, options, onSave }: P
                 <div className="space-y-2">
                   <Label htmlFor="scale_video">Video Scaling</Label>
                   <Select
-                    value={formData.scale_video}
-                    onValueChange={(value) => setFormData({ ...formData, scale_video: value })}
+                    value={options.scale_video}
+                    onValueChange={(value) => setOptions({ ...options, scale_video: value })}
                   >
                     <SelectTrigger>
                       <SelectValue placeholder="Select video scaling" />
@@ -103,7 +129,7 @@ export function PlaylistOptionsDialog({ open, onOpenChange, options, onSave }: P
                       <SelectItem value="fit">Fit to Screen</SelectItem>
                       <SelectItem value="fill">Fill Screen</SelectItem>
                       <SelectItem value="stretch">Stretch to Fit</SelectItem>
-                      <SelectItem value="center">Center (No Scaling)</SelectItem>
+                      <SelectItem value="center">Center</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -111,8 +137,8 @@ export function PlaylistOptionsDialog({ open, onOpenChange, options, onSave }: P
                 <div className="space-y-2">
                   <Label htmlFor="scale_document">Document Scaling</Label>
                   <Select
-                    value={formData.scale_document}
-                    onValueChange={(value) => setFormData({ ...formData, scale_document: value })}
+                    value={options.scale_document}
+                    onValueChange={(value) => setOptions({ ...options, scale_document: value })}
                   >
                     <SelectTrigger>
                       <SelectValue placeholder="Select document scaling" />
@@ -121,7 +147,7 @@ export function PlaylistOptionsDialog({ open, onOpenChange, options, onSave }: P
                       <SelectItem value="fit">Fit to Screen</SelectItem>
                       <SelectItem value="fill">Fill Screen</SelectItem>
                       <SelectItem value="stretch">Stretch to Fit</SelectItem>
-                      <SelectItem value="center">Center (No Scaling)</SelectItem>
+                      <SelectItem value="center">Center</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -132,74 +158,49 @@ export function PlaylistOptionsDialog({ open, onOpenChange, options, onSave }: P
           <TabsContent value="playback" className="space-y-4">
             <Card>
               <CardHeader>
-                <CardTitle>Playback Behavior</CardTitle>
-                <CardDescription>Control how your playlist plays and advances through content.</CardDescription>
+                <CardTitle>Playback Settings</CardTitle>
+                <CardDescription>Configure how your playlist plays and transitions between items.</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="flex items-center justify-between">
                   <div className="space-y-0.5">
-                    <Label htmlFor="shuffle">Shuffle Playlist</Label>
-                    <p className="text-sm text-muted-foreground">Play items in random order</p>
+                    <Label htmlFor="shuffle">Shuffle Playback</Label>
+                    <div className="text-sm text-muted-foreground">Play items in random order</div>
                   </div>
                   <Switch
                     id="shuffle"
-                    checked={formData.shuffle}
-                    onCheckedChange={(checked) => setFormData({ ...formData, shuffle: checked })}
+                    checked={options.shuffle}
+                    onCheckedChange={(checked) => setOptions({ ...options, shuffle: checked })}
                   />
                 </div>
 
                 <div className="flex items-center justify-between">
                   <div className="space-y-0.5">
                     <Label htmlFor="auto_advance">Auto Advance</Label>
-                    <p className="text-sm text-muted-foreground">Automatically advance to next item</p>
+                    <div className="text-sm text-muted-foreground">Automatically advance to next item</div>
                   </div>
                   <Switch
                     id="auto_advance"
-                    checked={formData.auto_advance}
-                    onCheckedChange={(checked) => setFormData({ ...formData, auto_advance: checked })}
+                    checked={options.auto_advance}
+                    onCheckedChange={(checked) => setOptions({ ...options, auto_advance: checked })}
                   />
                 </div>
 
-                <div className="flex items-center justify-between">
-                  <div className="space-y-0.5">
-                    <Label htmlFor="loop_playlist">Loop Playlist</Label>
-                    <p className="text-sm text-muted-foreground">Restart playlist when it reaches the end</p>
-                  </div>
-                  <Switch
-                    id="loop_playlist"
-                    checked={formData.loop_playlist}
-                    onCheckedChange={(checked) => setFormData({ ...formData, loop_playlist: checked })}
-                  />
-                </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          <TabsContent value="transitions" className="space-y-4">
-            <Card>
-              <CardHeader>
-                <CardTitle>Transitions</CardTitle>
-                <CardDescription>Configure how content transitions between items.</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
                 <div className="space-y-2">
                   <Label htmlFor="default_transition">Default Transition</Label>
                   <Select
-                    value={formData.default_transition}
-                    onValueChange={(value) => setFormData({ ...formData, default_transition: value })}
+                    value={options.default_transition}
+                    onValueChange={(value) => setOptions({ ...options, default_transition: value })}
                   >
                     <SelectTrigger>
-                      <SelectValue placeholder="Select transition type" />
+                      <SelectValue placeholder="Select transition" />
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="none">None</SelectItem>
                       <SelectItem value="fade">Fade</SelectItem>
-                      <SelectItem value="slide_left">Slide Left</SelectItem>
-                      <SelectItem value="slide_right">Slide Right</SelectItem>
-                      <SelectItem value="slide_up">Slide Up</SelectItem>
-                      <SelectItem value="slide_down">Slide Down</SelectItem>
-                      <SelectItem value="zoom_in">Zoom In</SelectItem>
-                      <SelectItem value="zoom_out">Zoom Out</SelectItem>
+                      <SelectItem value="slide">Slide</SelectItem>
+                      <SelectItem value="zoom">Zoom</SelectItem>
+                      <SelectItem value="flip">Flip</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -207,17 +208,16 @@ export function PlaylistOptionsDialog({ open, onOpenChange, options, onSave }: P
                 <div className="space-y-2">
                   <Label htmlFor="transition_speed">Transition Speed</Label>
                   <Select
-                    value={formData.transition_speed}
-                    onValueChange={(value) => setFormData({ ...formData, transition_speed: value })}
+                    value={options.transition_speed}
+                    onValueChange={(value) => setOptions({ ...options, transition_speed: value })}
                   >
                     <SelectTrigger>
-                      <SelectValue placeholder="Select transition speed" />
+                      <SelectValue placeholder="Select speed" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="slow">Slow (1.5s)</SelectItem>
-                      <SelectItem value="normal">Normal (1s)</SelectItem>
-                      <SelectItem value="fast">Fast (0.5s)</SelectItem>
-                      <SelectItem value="instant">Instant</SelectItem>
+                      <SelectItem value="slow">Slow</SelectItem>
+                      <SelectItem value="normal">Normal</SelectItem>
+                      <SelectItem value="fast">Fast</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -228,7 +228,7 @@ export function PlaylistOptionsDialog({ open, onOpenChange, options, onSave }: P
           <TabsContent value="appearance" className="space-y-4">
             <Card>
               <CardHeader>
-                <CardTitle>Appearance</CardTitle>
+                <CardTitle>Visual Appearance</CardTitle>
                 <CardDescription>Customize the visual appearance of your playlist.</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
@@ -238,14 +238,13 @@ export function PlaylistOptionsDialog({ open, onOpenChange, options, onSave }: P
                     <Input
                       id="background_color"
                       type="color"
-                      value={formData.background_color}
-                      onChange={(e) => setFormData({ ...formData, background_color: e.target.value })}
+                      value={options.background_color}
+                      onChange={(e) => setOptions({ ...options, background_color: e.target.value })}
                       className="w-16 h-10 p-1 border rounded"
                     />
                     <Input
-                      type="text"
-                      value={formData.background_color}
-                      onChange={(e) => setFormData({ ...formData, background_color: e.target.value })}
+                      value={options.background_color}
+                      onChange={(e) => setOptions({ ...options, background_color: e.target.value })}
                       placeholder="#000000"
                       className="flex-1"
                     />
@@ -255,12 +254,12 @@ export function PlaylistOptionsDialog({ open, onOpenChange, options, onSave }: P
                 <div className="flex items-center justify-between">
                   <div className="space-y-0.5">
                     <Label htmlFor="text_overlay">Text Overlay</Label>
-                    <p className="text-sm text-muted-foreground">Show filename overlay on content</p>
+                    <div className="text-sm text-muted-foreground">Show text overlays on media</div>
                   </div>
                   <Switch
                     id="text_overlay"
-                    checked={formData.text_overlay}
-                    onCheckedChange={(checked) => setFormData({ ...formData, text_overlay: checked })}
+                    checked={options.text_overlay}
+                    onCheckedChange={(checked) => setOptions({ ...options, text_overlay: checked })}
                   />
                 </div>
               </CardContent>
@@ -268,16 +267,11 @@ export function PlaylistOptionsDialog({ open, onOpenChange, options, onSave }: P
           </TabsContent>
         </Tabs>
 
-        <DialogFooter className="flex justify-between">
-          <Button variant="outline" onClick={handleReset}>
-            Reset
+        <DialogFooter>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>
+            Cancel
           </Button>
-          <div className="space-x-2">
-            <Button variant="outline" onClick={() => onOpenChange(false)}>
-              Cancel
-            </Button>
-            <Button onClick={handleSave}>Save Settings</Button>
-          </div>
+          <Button onClick={handleSave}>Save Settings</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
