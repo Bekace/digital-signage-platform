@@ -49,7 +49,7 @@ export default function PlaylistEditorLoading() {
                   {Array.from({ length: 5 }).map((_, i) => (
                     <div key={i} className="flex items-center space-x-3 p-3 border rounded-lg">
                       <Skeleton className="h-4 w-4" />
-                      <Skeleton className="h-12 w-12 rounded" />
+                      <Skeleton className="h-12 w-12" />
                       <div className="flex-1">
                         <Skeleton className="h-4 w-48" />
                         <Skeleton className="h-3 w-32 mt-2" />
@@ -76,7 +76,7 @@ export default function PlaylistEditorLoading() {
                 <div className="space-y-3">
                   {Array.from({ length: 6 }).map((_, i) => (
                     <div key={i} className="flex items-center space-x-3 p-3 border rounded-lg">
-                      <Skeleton className="h-12 w-12 rounded" />
+                      <Skeleton className="h-12 w-12" />
                       <div className="flex-1">
                         <Skeleton className="h-4 w-32" />
                         <Skeleton className="h-3 w-24 mt-2" />

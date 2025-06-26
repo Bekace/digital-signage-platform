@@ -44,66 +44,68 @@ export function PlaylistOptionsDialog({ open, onOpenChange, options, onSave }: P
   }
 
   const updateOption = (key: keyof PlaylistOptions, value: any) => {
-    setLocalOptions((prev) => ({ ...prev, [key]: value }))
+    setLocalOptions((prev) => ({
+      ...prev,
+      [key]: value,
+    }))
   }
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Playlist Settings</DialogTitle>
+          <DialogTitle>Playlist Options</DialogTitle>
           <DialogDescription>Configure how your playlist content is displayed and behaves.</DialogDescription>
         </DialogHeader>
 
         <div className="space-y-6">
-          {/* Content Scaling */}
+          {/* Scaling Options */}
           <div className="space-y-4">
             <h3 className="text-lg font-medium">Content Scaling</h3>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="scale-image">Images</Label>
+                <Label htmlFor="scale-image">Image Scaling</Label>
                 <Select value={localOptions.scale_image} onValueChange={(value) => updateOption("scale_image", value)}>
                   <SelectTrigger>
-                    <SelectValue />
+                    <SelectValue placeholder="Select image scaling" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="fit">Fit to screen</SelectItem>
-                    <SelectItem value="fill">Fill screen</SelectItem>
-                    <SelectItem value="stretch">Stretch to fit</SelectItem>
-                    <SelectItem value="center">Center</SelectItem>
+                    <SelectItem value="fit">Fit (maintain aspect ratio)</SelectItem>
+                    <SelectItem value="fill">Fill (may crop)</SelectItem>
+                    <SelectItem value="stretch">Stretch (may distort)</SelectItem>
+                    <SelectItem value="center">Center (original size)</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="scale-video">Videos</Label>
+                <Label htmlFor="scale-video">Video Scaling</Label>
                 <Select value={localOptions.scale_video} onValueChange={(value) => updateOption("scale_video", value)}>
                   <SelectTrigger>
-                    <SelectValue />
+                    <SelectValue placeholder="Select video scaling" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="fit">Fit to screen</SelectItem>
-                    <SelectItem value="fill">Fill screen</SelectItem>
-                    <SelectItem value="stretch">Stretch to fit</SelectItem>
-                    <SelectItem value="center">Center</SelectItem>
+                    <SelectItem value="fit">Fit (maintain aspect ratio)</SelectItem>
+                    <SelectItem value="fill">Fill (may crop)</SelectItem>
+                    <SelectItem value="stretch">Stretch (may distort)</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="scale-document">Documents</Label>
+                <Label htmlFor="scale-document">Document Scaling</Label>
                 <Select
                   value={localOptions.scale_document}
                   onValueChange={(value) => updateOption("scale_document", value)}
                 >
                   <SelectTrigger>
-                    <SelectValue />
+                    <SelectValue placeholder="Select document scaling" />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="fit">Fit to screen</SelectItem>
-                    <SelectItem value="fill">Fill screen</SelectItem>
-                    <SelectItem value="stretch">Stretch to fit</SelectItem>
-                    <SelectItem value="center">Center</SelectItem>
+                    <SelectItem value="width">Fit to width</SelectItem>
+                    <SelectItem value="height">Fit to height</SelectItem>
+                    <SelectItem value="original">Original size</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -112,23 +114,65 @@ export function PlaylistOptionsDialog({ open, onOpenChange, options, onSave }: P
 
           <Separator />
 
-          {/* Playback Settings */}
+          {/* Playback Options */}
           <div className="space-y-4">
-            <h3 className="text-lg font-medium">Playback Settings</h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <h3 className="text-lg font-medium">Playback Behavior</h3>
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <div className="space-y-0.5">
+                  <Label>Shuffle Playlist</Label>
+                  <p className="text-sm text-muted-foreground">Play items in random order</p>
+                </div>
+                <Switch
+                  checked={localOptions.shuffle}
+                  onCheckedChange={(checked) => updateOption("shuffle", checked)}
+                />
+              </div>
+
+              <div className="flex items-center justify-between">
+                <div className="space-y-0.5">
+                  <Label>Auto Advance</Label>
+                  <p className="text-sm text-muted-foreground">Automatically move to next item</p>
+                </div>
+                <Switch
+                  checked={localOptions.auto_advance}
+                  onCheckedChange={(checked) => updateOption("auto_advance", checked)}
+                />
+              </div>
+
+              <div className="flex items-center justify-between">
+                <div className="space-y-0.5">
+                  <Label>Loop Playlist</Label>
+                  <p className="text-sm text-muted-foreground">Restart playlist when it ends</p>
+                </div>
+                <Switch
+                  checked={localOptions.loop_playlist}
+                  onCheckedChange={(checked) => updateOption("loop_playlist", checked)}
+                />
+              </div>
+            </div>
+          </div>
+
+          <Separator />
+
+          {/* Transition Options */}
+          <div className="space-y-4">
+            <h3 className="text-lg font-medium">Transitions</h3>
+            <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="transition">Default Transition</Label>
+                <Label htmlFor="default-transition">Default Transition</Label>
                 <Select
                   value={localOptions.default_transition}
                   onValueChange={(value) => updateOption("default_transition", value)}
                 >
                   <SelectTrigger>
-                    <SelectValue />
+                    <SelectValue placeholder="Select transition" />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="none">None</SelectItem>
                     <SelectItem value="fade">Fade</SelectItem>
                     <SelectItem value="slide">Slide</SelectItem>
+                    <SelectItem value="wipe">Wipe</SelectItem>
                     <SelectItem value="zoom">Zoom</SelectItem>
                   </SelectContent>
                 </Select>
@@ -141,86 +185,51 @@ export function PlaylistOptionsDialog({ open, onOpenChange, options, onSave }: P
                   onValueChange={(value) => updateOption("transition_speed", value)}
                 >
                   <SelectTrigger>
-                    <SelectValue />
+                    <SelectValue placeholder="Select speed" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="slow">Slow</SelectItem>
-                    <SelectItem value="medium">Medium</SelectItem>
-                    <SelectItem value="fast">Fast</SelectItem>
+                    <SelectItem value="slow">Slow (2s)</SelectItem>
+                    <SelectItem value="medium">Medium (1s)</SelectItem>
+                    <SelectItem value="fast">Fast (0.5s)</SelectItem>
+                    <SelectItem value="instant">Instant</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="background-color">Background Color</Label>
-              <Select
-                value={localOptions.background_color}
-                onValueChange={(value) => updateOption("background_color", value)}
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="black">Black</SelectItem>
-                  <SelectItem value="white">White</SelectItem>
-                  <SelectItem value="gray">Gray</SelectItem>
-                  <SelectItem value="blue">Blue</SelectItem>
-                  <SelectItem value="green">Green</SelectItem>
-                </SelectContent>
-              </Select>
             </div>
           </div>
 
           <Separator />
 
-          {/* Behavior Settings */}
+          {/* Appearance Options */}
           <div className="space-y-4">
-            <h3 className="text-lg font-medium">Behavior Settings</h3>
+            <h3 className="text-lg font-medium">Appearance</h3>
             <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <div className="space-y-0.5">
-                  <Label htmlFor="shuffle">Shuffle Playlist</Label>
-                  <p className="text-sm text-muted-foreground">Play items in random order</p>
-                </div>
-                <Switch
-                  id="shuffle"
-                  checked={localOptions.shuffle}
-                  onCheckedChange={(checked) => updateOption("shuffle", checked)}
-                />
+              <div className="space-y-2">
+                <Label htmlFor="background-color">Background Color</Label>
+                <Select
+                  value={localOptions.background_color}
+                  onValueChange={(value) => updateOption("background_color", value)}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select background color" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="black">Black</SelectItem>
+                    <SelectItem value="white">White</SelectItem>
+                    <SelectItem value="gray">Gray</SelectItem>
+                    <SelectItem value="blue">Blue</SelectItem>
+                    <SelectItem value="green">Green</SelectItem>
+                    <SelectItem value="red">Red</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
 
               <div className="flex items-center justify-between">
                 <div className="space-y-0.5">
-                  <Label htmlFor="auto-advance">Auto Advance</Label>
-                  <p className="text-sm text-muted-foreground">Automatically advance to next item</p>
-                </div>
-                <Switch
-                  id="auto-advance"
-                  checked={localOptions.auto_advance}
-                  onCheckedChange={(checked) => updateOption("auto_advance", checked)}
-                />
-              </div>
-
-              <div className="flex items-center justify-between">
-                <div className="space-y-0.5">
-                  <Label htmlFor="loop-playlist">Loop Playlist</Label>
-                  <p className="text-sm text-muted-foreground">Restart playlist when it reaches the end</p>
-                </div>
-                <Switch
-                  id="loop-playlist"
-                  checked={localOptions.loop_playlist}
-                  onCheckedChange={(checked) => updateOption("loop_playlist", checked)}
-                />
-              </div>
-
-              <div className="flex items-center justify-between">
-                <div className="space-y-0.5">
-                  <Label htmlFor="text-overlay">Text Overlay</Label>
+                  <Label>Text Overlay</Label>
                   <p className="text-sm text-muted-foreground">Show filename overlay on content</p>
                 </div>
                 <Switch
-                  id="text-overlay"
                   checked={localOptions.text_overlay}
                   onCheckedChange={(checked) => updateOption("text_overlay", checked)}
                 />
@@ -233,7 +242,7 @@ export function PlaylistOptionsDialog({ open, onOpenChange, options, onSave }: P
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
-          <Button onClick={handleSave}>Save Settings</Button>
+          <Button onClick={handleSave}>Save Options</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
