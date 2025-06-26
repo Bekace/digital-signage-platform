@@ -4,28 +4,28 @@ import { getDb } from "@/lib/db"
 
 export const dynamic = "force-dynamic"
 
-export async function POST(request: Request, { params }: { params: { playlistId: string } }) {
-  console.log("🔄 [PLAYLIST REORDER API] Starting POST request for playlist:", params.playlistId)
+export async function PUT(request: Request, { params }: { params: { playlistId: string } }) {
+  console.log("🔄 [PLAYLIST ITEMS REORDER API] Starting PUT request for playlist:", params.playlistId)
 
   try {
     const user = await getCurrentUser()
     if (!user) {
-      console.log("❌ [PLAYLIST REORDER API] No user authenticated")
+      console.log("❌ [PLAYLIST ITEMS REORDER API] No user authenticated")
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
     const playlistId = Number.parseInt(params.playlistId)
     if (isNaN(playlistId)) {
-      console.log("❌ [PLAYLIST REORDER API] Invalid playlist ID:", params.playlistId)
+      console.log("❌ [PLAYLIST ITEMS REORDER API] Invalid playlist ID:", params.playlistId)
       return NextResponse.json({ error: "Invalid playlist ID" }, { status: 400 })
     }
 
     const body = await request.json()
-    console.log("📝 [PLAYLIST REORDER API] Request body:", body)
+    console.log("📝 [PLAYLIST ITEMS REORDER API] Request body:", body)
 
     const { items } = body
 
-    if (!Array.isArray(items)) {
+    if (!Array.isArray(items) || items.length === 0) {
       return NextResponse.json({ error: "Items array is required" }, { status: 400 })
     }
 
@@ -37,30 +37,34 @@ export async function POST(request: Request, { params }: { params: { playlistId:
     `
 
     if (playlist.length === 0) {
-      console.log("❌ [PLAYLIST REORDER API] Playlist not found or not owned by user")
+      console.log("❌ [PLAYLIST ITEMS REORDER API] Playlist not found or not owned by user")
       return NextResponse.json({ error: "Playlist not found" }, { status: 404 })
     }
 
-    // Update positions for all items
-    console.log("🔄 [PLAYLIST REORDER API] Updating item positions...")
+    // Update positions for each item
+    console.log(`🔄 [PLAYLIST ITEMS REORDER API] Updating positions for ${items.length} items`)
 
-    for (let i = 0; i < items.length; i++) {
-      const item = items[i]
+    for (const item of items) {
+      if (!item.id || typeof item.position !== "number") {
+        console.log("❌ [PLAYLIST ITEMS REORDER API] Invalid item data:", item)
+        continue
+      }
+
       await sql`
         UPDATE playlist_items 
-        SET position = ${i + 1}
+        SET position = ${item.position}
         WHERE id = ${item.id} AND playlist_id = ${playlistId}
       `
     }
 
-    console.log(`✅ [PLAYLIST REORDER API] Updated positions for ${items.length} items`)
+    console.log(`✅ [PLAYLIST ITEMS REORDER API] Successfully reordered items for playlist ${playlistId}`)
 
     return NextResponse.json({
       success: true,
       message: "Items reordered successfully",
     })
   } catch (error) {
-    console.error("❌ [PLAYLIST REORDER API] Error:", error)
+    console.error("❌ [PLAYLIST ITEMS REORDER API] Error:", error)
     return NextResponse.json(
       {
         error: "Failed to reorder playlist items",

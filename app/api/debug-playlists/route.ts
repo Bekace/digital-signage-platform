@@ -109,7 +109,7 @@ export async function GET() {
       "selected_days",
     ]
 
-    const requiredPlaylistItemColumns = ["id", "playlist_id", "media_id", "position", "duration", "created_at"]
+    const requiredPlaylistItemColumns = ["id", "playlist_id", "media_file_id", "position", "duration", "created_at"]
 
     const existingPlaylistColumns = playlistsColumns.map((col) => col.column_name)
     const existingPlaylistItemColumns = playlistItemsColumns.map((col) => col.column_name)
@@ -119,31 +119,68 @@ export async function GET() {
       (col) => !existingPlaylistItemColumns.includes(col),
     )
 
+    // Test a simple query
+    let testQueryResult = null
+    let testQueryError = null
+
+    try {
+      if (playlistsTableExists[0].exists) {
+        testQueryResult = await sql`
+          SELECT 
+            p.id,
+            p.name,
+            p.status,
+            COUNT(pi.id) as item_count
+          FROM playlists p
+          LEFT JOIN playlist_items pi ON p.id = pi.playlist_id
+          WHERE p.user_id = ${user.id}
+          GROUP BY p.id, p.name, p.status
+          LIMIT 1
+        `
+      }
+    } catch (error) {
+      testQueryError = error instanceof Error ? error.message : "Unknown error"
+    }
+
     console.log(`✅ [DEBUG PLAYLISTS API] Debug info compiled for user ${user.id}`)
 
     return NextResponse.json({
       success: true,
       debug: {
         user_id: user.id,
+        timestamp: new Date().toISOString(),
         tables: {
           playlists: {
             exists: playlistsTableExists[0].exists,
             columns: playlistsColumns,
             missing_columns: missingPlaylistColumns,
             sample_data: samplePlaylists,
+            column_count: playlistsColumns.length,
           },
           playlist_items: {
             exists: playlistItemsTableExists[0].exists,
             columns: playlistItemsColumns,
             missing_columns: missingPlaylistItemColumns,
             sample_data: samplePlaylistItems,
+            column_count: playlistItemsColumns.length,
           },
+        },
+        test_query: {
+          success: testQueryError === null,
+          result: testQueryResult,
+          error: testQueryError,
         },
         summary: {
           playlists_table_ready: playlistsTableExists[0].exists && missingPlaylistColumns.length === 0,
           playlist_items_table_ready: playlistItemsTableExists[0].exists && missingPlaylistItemColumns.length === 0,
           total_playlists: samplePlaylists.length,
           total_playlist_items: samplePlaylistItems.length,
+          all_systems_ready:
+            playlistsTableExists[0].exists &&
+            playlistItemsTableExists[0].exists &&
+            missingPlaylistColumns.length === 0 &&
+            missingPlaylistItemColumns.length === 0 &&
+            testQueryError === null,
         },
       },
     })
@@ -153,6 +190,10 @@ export async function GET() {
       {
         error: "Failed to get debug info",
         details: error instanceof Error ? error.message : "Unknown error",
+        debug: {
+          error_occurred: true,
+          error_message: error instanceof Error ? error.message : "Unknown error",
+        },
       },
       { status: 500 },
     )

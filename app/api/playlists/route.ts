@@ -11,18 +11,25 @@ export async function GET() {
     const user = await getCurrentUser()
     if (!user) {
       console.log("❌ [PLAYLISTS API] No user authenticated")
-      return NextResponse.json({ error: "Unauthorized", playlists: [] }, { status: 401 })
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
     const sql = getDb()
 
-    // Get playlists with all columns (now that they exist)
+    // Get playlists with item count
     const playlists = await sql`
       SELECT 
         p.id,
         p.name,
         p.description,
         p.status,
+        p.loop_enabled,
+        p.schedule_enabled,
+        p.start_time,
+        p.end_time,
+        p.selected_days,
+        p.created_at,
+        p.updated_at,
         p.scale_image,
         p.scale_video,
         p.scale_document,
@@ -32,60 +39,26 @@ export async function GET() {
         p.auto_advance,
         p.background_color,
         p.text_overlay,
-        p.loop_enabled,
-        p.schedule_enabled,
-        p.start_time,
-        p.end_time,
-        p.selected_days,
-        p.created_at,
-        p.updated_at,
         COUNT(pi.id) as item_count,
         COALESCE(SUM(pi.duration), 0) as total_duration
       FROM playlists p
       LEFT JOIN playlist_items pi ON p.id = pi.playlist_id
       WHERE p.user_id = ${user.id}
-      GROUP BY p.id, p.name, p.description, p.status, p.scale_image, p.scale_video, 
-               p.scale_document, p.shuffle, p.default_transition, p.transition_speed, 
-               p.auto_advance, p.background_color, p.text_overlay, p.loop_enabled, 
-               p.schedule_enabled, p.start_time, p.end_time, p.selected_days, 
-               p.created_at, p.updated_at
+      GROUP BY p.id, p.name, p.description, p.status, p.loop_enabled, p.schedule_enabled, 
+               p.start_time, p.end_time, p.selected_days, p.created_at, p.updated_at,
+               p.scale_image, p.scale_video, p.scale_document, p.shuffle, p.default_transition,
+               p.transition_speed, p.auto_advance, p.background_color, p.text_overlay
       ORDER BY p.updated_at DESC
     `
 
     console.log(`✅ [PLAYLISTS API] Found ${playlists.length} playlists for user ${user.id}`)
 
-    const formattedPlaylists = playlists.map((playlist) => ({
-      id: playlist.id,
-      name: playlist.name,
-      description: playlist.description,
-      status: playlist.status,
-      item_count: Number(playlist.item_count),
-      total_duration: Number(playlist.total_duration),
-      created_at: playlist.created_at,
-      updated_at: playlist.updated_at,
-      // Now using actual database values
-      scale_image: playlist.scale_image,
-      scale_video: playlist.scale_video,
-      scale_document: playlist.scale_document,
-      shuffle: playlist.shuffle,
-      default_transition: playlist.default_transition,
-      transition_speed: playlist.transition_speed,
-      auto_advance: playlist.auto_advance,
-      background_color: playlist.background_color,
-      text_overlay: playlist.text_overlay,
-      loop_enabled: playlist.loop_enabled,
-      schedule_enabled: playlist.schedule_enabled,
-      start_time: playlist.start_time,
-      end_time: playlist.end_time,
-      selected_days: playlist.selected_days ? JSON.parse(playlist.selected_days) : [],
-      device_count: 0, // TODO: Calculate from device assignments
-      assigned_devices: [], // TODO: Get from device assignments
-    }))
+    // Ensure we always return an array
+    const playlistsArray = Array.isArray(playlists) ? playlists : []
 
     return NextResponse.json({
       success: true,
-      playlists: formattedPlaylists,
-      total: formattedPlaylists.length,
+      playlists: playlistsArray,
     })
   } catch (error) {
     console.error("❌ [PLAYLISTS API] Error:", error)
@@ -93,7 +66,7 @@ export async function GET() {
       {
         error: "Failed to fetch playlists",
         details: error instanceof Error ? error.message : "Unknown error",
-        playlists: [],
+        playlists: [], // Always return empty array on error
       },
       { status: 500 },
     )
@@ -121,13 +94,15 @@ export async function POST(request: Request) {
 
     const sql = getDb()
 
-    // Create new playlist with all columns
+    // Create new playlist with all default values
     const newPlaylist = await sql`
       INSERT INTO playlists (
         user_id, 
         name, 
-        description, 
+        description,
         status,
+        loop_enabled,
+        schedule_enabled,
         scale_image,
         scale_video,
         scale_document,
@@ -136,16 +111,15 @@ export async function POST(request: Request) {
         transition_speed,
         auto_advance,
         background_color,
-        text_overlay,
-        loop_enabled,
-        schedule_enabled,
-        selected_days
+        text_overlay
       )
       VALUES (
         ${user.id}, 
         ${name.trim()}, 
-        ${description?.trim() || ""}, 
+        ${description || ""},
         'draft',
+        true,
+        false,
         'fit',
         'fit',
         'fit',
@@ -154,48 +128,17 @@ export async function POST(request: Request) {
         'normal',
         true,
         '#000000',
-        false,
-        false,
-        false,
-        '[]'
+        false
       )
       RETURNING *
     `
 
-    console.log(`✅ [PLAYLISTS API] Created playlist with ID: ${newPlaylist[0].id}`)
-
-    const playlist = {
-      id: newPlaylist[0].id,
-      name: newPlaylist[0].name,
-      description: newPlaylist[0].description,
-      status: newPlaylist[0].status,
-      item_count: 0,
-      total_duration: 0,
-      created_at: newPlaylist[0].created_at,
-      updated_at: newPlaylist[0].updated_at,
-      // Using actual database values
-      scale_image: newPlaylist[0].scale_image,
-      scale_video: newPlaylist[0].scale_video,
-      scale_document: newPlaylist[0].scale_document,
-      shuffle: newPlaylist[0].shuffle,
-      default_transition: newPlaylist[0].default_transition,
-      transition_speed: newPlaylist[0].transition_speed,
-      auto_advance: newPlaylist[0].auto_advance,
-      background_color: newPlaylist[0].background_color,
-      text_overlay: newPlaylist[0].text_overlay,
-      loop_enabled: newPlaylist[0].loop_enabled,
-      schedule_enabled: newPlaylist[0].schedule_enabled,
-      start_time: newPlaylist[0].start_time,
-      end_time: newPlaylist[0].end_time,
-      selected_days: newPlaylist[0].selected_days ? JSON.parse(newPlaylist[0].selected_days) : [],
-      device_count: 0,
-      assigned_devices: [],
-    }
+    console.log(`✅ [PLAYLISTS API] Created playlist with ID ${newPlaylist[0].id}`)
 
     return NextResponse.json(
       {
         success: true,
-        playlist,
+        playlist: newPlaylist[0],
       },
       { status: 201 },
     )

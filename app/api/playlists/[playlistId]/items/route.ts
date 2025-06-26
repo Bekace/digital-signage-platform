@@ -35,17 +35,18 @@ export async function GET(request: Request, { params }: { params: { playlistId: 
 
     console.log("✅ [PLAYLIST ITEMS API] Playlist ownership verified")
 
-    // Get playlist items with media details
+    // Get playlist items with media details - using media_file_id instead of media_id
     console.log("🔍 [PLAYLIST ITEMS API] Fetching playlist items...")
     const items = await sql`
       SELECT 
         pi.id,
         pi.playlist_id,
-        pi.media_id,
+        pi.media_file_id,
         pi.position,
         pi.duration,
+        pi.transition_type,
         pi.created_at,
-        mf.id as media_file_id,
+        mf.id as media_id,
         mf.filename,
         mf.original_name,
         mf.file_type,
@@ -54,7 +55,7 @@ export async function GET(request: Request, { params }: { params: { playlistId: 
         mf.thumbnail_url,
         mf.metadata
       FROM playlist_items pi
-      LEFT JOIN media_files mf ON pi.media_id = mf.id
+      LEFT JOIN media_files mf ON pi.media_file_id = mf.id
       WHERE pi.playlist_id = ${playlistId}
       ORDER BY pi.position ASC
     `
@@ -64,13 +65,14 @@ export async function GET(request: Request, { params }: { params: { playlistId: 
     const formattedItems = items.map((item) => ({
       id: item.id,
       playlist_id: item.playlist_id,
-      media_id: item.media_id,
+      media_id: item.media_file_id, // Map media_file_id to media_id for frontend compatibility
       position: item.position,
       duration: item.duration,
+      transition_type: item.transition_type,
       created_at: item.created_at,
-      media: item.media_id
+      media: item.media_file_id
         ? {
-            id: item.media_file_id,
+            id: item.media_id,
             filename: item.filename,
             original_filename: item.original_name,
             file_type: item.file_type,
@@ -153,10 +155,10 @@ export async function POST(request: Request, { params }: { params: { playlistId:
 
     const nextPosition = (maxPosition[0]?.max_pos || 0) + 1
 
-    // Add item to playlist
+    // Add item to playlist - using media_file_id instead of media_id
     const newItem = await sql`
-      INSERT INTO playlist_items (playlist_id, media_id, position, duration)
-      VALUES (${playlistId}, ${media_id}, ${nextPosition}, ${duration || 30})
+      INSERT INTO playlist_items (playlist_id, media_file_id, position, duration, transition_type)
+      VALUES (${playlistId}, ${media_id}, ${nextPosition}, ${duration || 30}, 'fade')
       RETURNING *
     `
 
@@ -167,11 +169,12 @@ export async function POST(request: Request, { params }: { params: { playlistId:
       SELECT 
         pi.id,
         pi.playlist_id,
-        pi.media_id,
+        pi.media_file_id,
         pi.position,
         pi.duration,
+        pi.transition_type,
         pi.created_at,
-        mf.id as media_file_id,
+        mf.id as media_id,
         mf.filename,
         mf.original_name,
         mf.file_type,
@@ -180,7 +183,7 @@ export async function POST(request: Request, { params }: { params: { playlistId:
         mf.thumbnail_url,
         mf.metadata
       FROM playlist_items pi
-      LEFT JOIN media_files mf ON pi.media_id = mf.id
+      LEFT JOIN media_files mf ON pi.media_file_id = mf.id
       WHERE pi.id = ${newItem[0].id}
     `
 
@@ -192,12 +195,13 @@ export async function POST(request: Request, { params }: { params: { playlistId:
         item: {
           id: item.id,
           playlist_id: item.playlist_id,
-          media_id: item.media_id,
+          media_id: item.media_file_id, // Map media_file_id to media_id for frontend compatibility
           position: item.position,
           duration: item.duration,
+          transition_type: item.transition_type,
           created_at: item.created_at,
           media: {
-            id: item.media_file_id,
+            id: item.media_id,
             filename: item.filename,
             original_filename: item.original_name,
             file_type: item.file_type,
