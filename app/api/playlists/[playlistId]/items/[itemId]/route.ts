@@ -4,14 +4,13 @@ import { getDb } from "@/lib/db"
 
 export const dynamic = "force-dynamic"
 
-// DELETE - Remove an item from playlist
 export async function DELETE(request: Request, { params }: { params: { playlistId: string; itemId: string } }) {
-  console.log("🎵 [PLAYLIST ITEM DELETE API] Starting DELETE request:", params)
+  console.log("🗑️ [DELETE ITEM API] Starting delete request for item:", params.itemId)
 
   try {
     const user = await getCurrentUser()
     if (!user) {
-      console.log("❌ [PLAYLIST ITEM DELETE API] No user authenticated")
+      console.log("❌ [DELETE ITEM API] No user authenticated")
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
@@ -26,47 +25,33 @@ export async function DELETE(request: Request, { params }: { params: { playlistI
     `
 
     if (playlists.length === 0) {
-      console.log("❌ [PLAYLIST ITEM DELETE API] Playlist not found or not owned by user")
+      console.log("❌ [DELETE ITEM API] Playlist not found or not owned by user")
       return NextResponse.json({ error: "Playlist not found" }, { status: 404 })
     }
 
-    // Get item position before deletion
-    const items = await sql`
-      SELECT position FROM playlist_items 
+    // Delete the item
+    const deletedItems = await sql`
+      DELETE FROM playlist_items 
       WHERE id = ${itemId} AND playlist_id = ${playlistId}
+      RETURNING *
     `
 
-    if (items.length === 0) {
-      console.log("❌ [PLAYLIST ITEM DELETE API] Item not found")
+    if (deletedItems.length === 0) {
+      console.log("❌ [DELETE ITEM API] Item not found")
       return NextResponse.json({ error: "Item not found" }, { status: 404 })
     }
 
-    const deletedPosition = items[0].position
-
-    // Delete the item
-    await sql`
-      DELETE FROM playlist_items 
-      WHERE id = ${itemId} AND playlist_id = ${playlistId}
-    `
-
-    // Reorder remaining items to fill the gap
-    await sql`
-      UPDATE playlist_items 
-      SET position = position - 1
-      WHERE playlist_id = ${playlistId} AND position > ${deletedPosition}
-    `
-
-    console.log(`✅ [PLAYLIST ITEM DELETE API] Deleted item ${itemId}`)
+    console.log(`✅ [DELETE ITEM API] Deleted item with ID: ${itemId}`)
 
     return NextResponse.json({
       success: true,
-      message: "Item removed from playlist",
+      message: "Item deleted successfully",
     })
   } catch (error) {
-    console.error("❌ [PLAYLIST ITEM DELETE API] Error:", error)
+    console.error("❌ [DELETE ITEM API] Error:", error)
     return NextResponse.json(
       {
-        error: "Failed to remove item from playlist",
+        error: "Failed to delete item",
         details: error instanceof Error ? error.message : "Unknown error",
       },
       { status: 500 },

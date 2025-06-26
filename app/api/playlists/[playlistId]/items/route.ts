@@ -29,23 +29,25 @@ export async function GET(request: Request, { params }: { params: { playlistId: 
       return NextResponse.json({ error: "Playlist not found" }, { status: 404 })
     }
 
-    // Get playlist items with media details
+    // Get playlist items with media details - using correct table names
     const items = await sql`
       SELECT 
         pi.id,
         pi.playlist_id,
-        pi.media_id,
+        pi.media_file_id,
         pi.position,
         pi.duration,
+        pi.transition_type,
         pi.created_at,
-        m.filename,
-        m.original_filename,
-        m.file_type,
-        m.file_size,
-        m.url,
-        m.thumbnail_url
+        mf.filename,
+        mf.original_name,
+        mf.file_type,
+        mf.file_size,
+        mf.mime_type,
+        mf.url,
+        mf.thumbnail_url
       FROM playlist_items pi
-      LEFT JOIN media m ON pi.media_id = m.id
+      LEFT JOIN media_files mf ON pi.media_file_id = mf.id
       WHERE pi.playlist_id = ${playlistId}
       ORDER BY pi.position ASC
     `
@@ -57,16 +59,18 @@ export async function GET(request: Request, { params }: { params: { playlistId: 
       items: items.map((item) => ({
         id: item.id,
         playlist_id: item.playlist_id,
-        media_id: item.media_id,
+        media_file_id: item.media_file_id,
         position: item.position,
         duration: item.duration || 30,
+        transition_type: item.transition_type || "fade",
         created_at: item.created_at,
         media: {
-          id: item.media_id,
+          id: item.media_file_id,
           filename: item.filename,
-          original_filename: item.original_filename,
+          original_name: item.original_name,
           file_type: item.file_type,
           file_size: item.file_size,
+          mime_type: item.mime_type,
           url: item.url,
           thumbnail_url: item.thumbnail_url,
         },
@@ -96,10 +100,10 @@ export async function POST(request: Request, { params }: { params: { playlistId:
     }
 
     const body = await request.json()
-    const { media_id, duration = 30 } = body
+    const { media_file_id, duration = 30, transition_type = "fade" } = body
 
-    if (!media_id) {
-      return NextResponse.json({ error: "Media ID is required" }, { status: 400 })
+    if (!media_file_id) {
+      return NextResponse.json({ error: "Media file ID is required" }, { status: 400 })
     }
 
     const sql = getDb()
@@ -116,15 +120,15 @@ export async function POST(request: Request, { params }: { params: { playlistId:
       return NextResponse.json({ error: "Playlist not found" }, { status: 404 })
     }
 
-    // Verify media ownership
-    const media = await sql`
-      SELECT id FROM media 
-      WHERE id = ${media_id} AND user_id = ${user.id}
+    // Verify media file ownership
+    const mediaFiles = await sql`
+      SELECT id FROM media_files 
+      WHERE id = ${media_file_id} AND user_id = ${user.id}
     `
 
-    if (media.length === 0) {
-      console.log("❌ [PLAYLIST ITEMS API] Media not found or not owned by user")
-      return NextResponse.json({ error: "Media not found" }, { status: 404 })
+    if (mediaFiles.length === 0) {
+      console.log("❌ [PLAYLIST ITEMS API] Media file not found or not owned by user")
+      return NextResponse.json({ error: "Media file not found" }, { status: 404 })
     }
 
     // Get next position
@@ -137,9 +141,25 @@ export async function POST(request: Request, { params }: { params: { playlistId:
 
     // Add item to playlist
     const newItem = await sql`
-      INSERT INTO playlist_items (playlist_id, media_id, position, duration)
-      VALUES (${playlistId}, ${media_id}, ${nextPosition}, ${duration})
+      INSERT INTO playlist_items (playlist_id, media_file_id, position, duration, transition_type)
+      VALUES (${playlistId}, ${media_file_id}, ${nextPosition}, ${duration}, ${transition_type})
       RETURNING *
+    `
+
+    // Get the complete item with media details
+    const itemWithMedia = await sql`
+      SELECT 
+        pi.*,
+        mf.filename,
+        mf.original_name,
+        mf.file_type,
+        mf.file_size,
+        mf.mime_type,
+        mf.url,
+        mf.thumbnail_url
+      FROM playlist_items pi
+      LEFT JOIN media_files mf ON pi.media_file_id = mf.id
+      WHERE pi.id = ${newItem[0].id}
     `
 
     console.log(`✅ [PLAYLIST ITEMS API] Added item with ID: ${newItem[0].id}`)
@@ -147,7 +167,24 @@ export async function POST(request: Request, { params }: { params: { playlistId:
     return NextResponse.json(
       {
         success: true,
-        item: newItem[0],
+        item: {
+          id: itemWithMedia[0].id,
+          playlist_id: itemWithMedia[0].playlist_id,
+          media_file_id: itemWithMedia[0].media_file_id,
+          position: itemWithMedia[0].position,
+          duration: itemWithMedia[0].duration,
+          transition_type: itemWithMedia[0].transition_type,
+          media: {
+            id: itemWithMedia[0].media_file_id,
+            filename: itemWithMedia[0].filename,
+            original_name: itemWithMedia[0].original_name,
+            file_type: itemWithMedia[0].file_type,
+            file_size: itemWithMedia[0].file_size,
+            mime_type: itemWithMedia[0].mime_type,
+            url: itemWithMedia[0].url,
+            thumbnail_url: itemWithMedia[0].thumbnail_url,
+          },
+        },
       },
       { status: 201 },
     )

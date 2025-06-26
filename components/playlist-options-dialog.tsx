@@ -2,8 +2,6 @@
 
 import { useState } from "react"
 import { Settings, ChevronDown, ChevronRight } from "lucide-react"
-import { toast } from "sonner"
-
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -12,6 +10,7 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
+  DialogTrigger,
 } from "@/components/ui/dialog"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Switch } from "@/components/ui/switch"
@@ -32,8 +31,8 @@ interface PlaylistOptions {
 }
 
 interface PlaylistOptionsDialogProps {
-  open: boolean
-  onOpenChange: (open: boolean) => void
+  open?: boolean
+  onOpenChange?: (open: boolean) => void
   options: PlaylistOptions
   onSave: (options: PlaylistOptions) => void
 }
@@ -41,16 +40,24 @@ interface PlaylistOptionsDialogProps {
 export function PlaylistOptionsDialog({ open, onOpenChange, options, onSave }: PlaylistOptionsDialogProps) {
   const [localOptions, setLocalOptions] = useState<PlaylistOptions>(options)
   const [isAdvancedOpen, setIsAdvancedOpen] = useState(false)
+  const [isDialogOpen, setIsDialogOpen] = useState(false)
 
   const handleSave = () => {
     onSave(localOptions)
-    toast.success("Playlist options saved successfully")
-    onOpenChange(false)
+    if (onOpenChange) {
+      onOpenChange(false)
+    } else {
+      setIsDialogOpen(false)
+    }
   }
 
   const handleCancel = () => {
     setLocalOptions(options) // Reset to original options
-    onOpenChange(false)
+    if (onOpenChange) {
+      onOpenChange(false)
+    } else {
+      setIsDialogOpen(false)
+    }
   }
 
   const updateOption = (key: keyof PlaylistOptions, value: any) => {
@@ -60,23 +67,30 @@ export function PlaylistOptionsDialog({ open, onOpenChange, options, onSave }: P
     }))
   }
 
+  const dialogOpen = open !== undefined ? open : isDialogOpen
+  const setDialogOpen = onOpenChange || setIsDialogOpen
+
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+      <DialogTrigger asChild>
+        <Button variant="outline">
+          <Settings className="h-4 w-4 mr-2" />
+          Settings
+        </Button>
+      </DialogTrigger>
       <DialogContent className="sm:max-w-[500px]">
         <DialogHeader className="text-center">
-          <div className="flex justify-center mb-4">
-            <Settings className="h-12 w-12 text-gray-400" />
+          <div className="mx-auto mb-4 p-3 bg-gray-100 rounded-full w-fit">
+            <Settings className="h-6 w-6 text-gray-600" />
           </div>
-          <DialogTitle className="text-xl font-semibold text-gray-700">Playlist Options</DialogTitle>
-          <DialogDescription>
-            Configure how media items are displayed and transitioned in your playlist
-          </DialogDescription>
+          <DialogTitle className="text-xl">Playlist Options</DialogTitle>
+          <DialogDescription>Configure how your playlist content is displayed and behaves.</DialogDescription>
         </DialogHeader>
 
         <div className="space-y-6 py-4">
           {/* Scale Image */}
           <div className="flex items-center justify-between">
-            <Label htmlFor="scale-image" className="text-sm font-medium text-gray-600">
+            <Label htmlFor="scale-image" className="text-sm font-medium text-gray-700">
               Scale Image
             </Label>
             <Select value={localOptions.scale_image} onValueChange={(value) => updateOption("scale_image", value)}>
@@ -94,7 +108,7 @@ export function PlaylistOptionsDialog({ open, onOpenChange, options, onSave }: P
 
           {/* Scale Video */}
           <div className="flex items-center justify-between">
-            <Label htmlFor="scale-video" className="text-sm font-medium text-gray-600">
+            <Label htmlFor="scale-video" className="text-sm font-medium text-gray-700">
               Scale Video
             </Label>
             <Select value={localOptions.scale_video} onValueChange={(value) => updateOption("scale_video", value)}>
@@ -112,7 +126,7 @@ export function PlaylistOptionsDialog({ open, onOpenChange, options, onSave }: P
 
           {/* Scale Document */}
           <div className="flex items-center justify-between">
-            <Label htmlFor="scale-document" className="text-sm font-medium text-gray-600">
+            <Label htmlFor="scale-document" className="text-sm font-medium text-gray-700">
               Scale Document
             </Label>
             <Select
@@ -133,7 +147,7 @@ export function PlaylistOptionsDialog({ open, onOpenChange, options, onSave }: P
 
           {/* Shuffle */}
           <div className="flex items-center justify-between">
-            <Label htmlFor="shuffle" className="text-sm font-medium text-gray-600">
+            <Label htmlFor="shuffle" className="text-sm font-medium text-gray-700">
               Shuffle
             </Label>
             <div className="flex items-center space-x-2">
@@ -142,13 +156,15 @@ export function PlaylistOptionsDialog({ open, onOpenChange, options, onSave }: P
                 checked={localOptions.shuffle}
                 onCheckedChange={(checked) => updateOption("shuffle", checked)}
               />
-              <span className="text-xs font-medium text-teal-600">{localOptions.shuffle ? "ON" : "OFF"}</span>
+              <span className="text-xs font-medium text-teal-600 bg-teal-50 px-2 py-1 rounded">
+                {localOptions.shuffle ? "ON" : "OFF"}
+              </span>
             </div>
           </div>
 
           {/* Default Transition */}
           <div className="flex items-center justify-between">
-            <Label htmlFor="default-transition" className="text-sm font-medium text-gray-600">
+            <Label htmlFor="default-transition" className="text-sm font-medium text-gray-700">
               Default Transition
             </Label>
             <Select
@@ -169,7 +185,7 @@ export function PlaylistOptionsDialog({ open, onOpenChange, options, onSave }: P
 
           {/* Transition Speed */}
           <div className="flex items-center justify-between">
-            <Label htmlFor="transition-speed" className="text-sm font-medium text-gray-600">
+            <Label htmlFor="transition-speed" className="text-sm font-medium text-gray-700">
               Transition Speed
             </Label>
             <Select
@@ -190,18 +206,15 @@ export function PlaylistOptionsDialog({ open, onOpenChange, options, onSave }: P
           {/* Advanced Options */}
           <Collapsible open={isAdvancedOpen} onOpenChange={setIsAdvancedOpen}>
             <CollapsibleTrigger asChild>
-              <Button
-                variant="ghost"
-                className="flex items-center justify-center w-full p-2 text-blue-600 hover:text-blue-700"
-              >
-                <span className="mr-2">Advanced</span>
+              <Button variant="ghost" className="w-full justify-between p-0 h-auto text-blue-600 hover:text-blue-700">
+                <span className="text-sm font-medium">Advanced</span>
                 {isAdvancedOpen ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
               </Button>
             </CollapsibleTrigger>
-            <CollapsibleContent className="space-y-4 mt-4">
+            <CollapsibleContent className="space-y-4 mt-4 pt-4 border-t">
               {/* Auto Advance */}
               <div className="flex items-center justify-between">
-                <Label htmlFor="auto-advance" className="text-sm font-medium text-gray-600">
+                <Label htmlFor="auto-advance" className="text-sm font-medium text-gray-700">
                   Auto Advance
                 </Label>
                 <Switch
@@ -213,7 +226,7 @@ export function PlaylistOptionsDialog({ open, onOpenChange, options, onSave }: P
 
               {/* Loop Playlist */}
               <div className="flex items-center justify-between">
-                <Label htmlFor="loop-playlist" className="text-sm font-medium text-gray-600">
+                <Label htmlFor="loop-playlist" className="text-sm font-medium text-gray-700">
                   Loop Playlist
                 </Label>
                 <Switch
@@ -225,7 +238,7 @@ export function PlaylistOptionsDialog({ open, onOpenChange, options, onSave }: P
 
               {/* Background Color */}
               <div className="flex items-center justify-between">
-                <Label htmlFor="background-color" className="text-sm font-medium text-gray-600">
+                <Label htmlFor="background-color" className="text-sm font-medium text-gray-700">
                   Background Color
                 </Label>
                 <Select
@@ -246,7 +259,7 @@ export function PlaylistOptionsDialog({ open, onOpenChange, options, onSave }: P
 
               {/* Text Overlay */}
               <div className="flex items-center justify-between">
-                <Label htmlFor="text-overlay" className="text-sm font-medium text-gray-600">
+                <Label htmlFor="text-overlay" className="text-sm font-medium text-gray-700">
                   Text Overlay
                 </Label>
                 <Switch
@@ -259,11 +272,11 @@ export function PlaylistOptionsDialog({ open, onOpenChange, options, onSave }: P
           </Collapsible>
         </div>
 
-        <DialogFooter className="flex justify-end space-x-2">
+        <DialogFooter className="flex justify-between">
           <Button variant="outline" onClick={handleCancel}>
             Close
           </Button>
-          <Button onClick={handleSave} className="bg-teal-600 hover:bg-teal-700 text-white">
+          <Button onClick={handleSave} className="bg-teal-600 hover:bg-teal-700">
             Save
           </Button>
         </DialogFooter>
