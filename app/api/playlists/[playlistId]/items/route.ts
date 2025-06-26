@@ -35,8 +35,8 @@ export async function GET(request: Request, { params }: { params: { playlistId: 
 
     console.log("✅ [PLAYLIST ITEMS API] Playlist ownership verified")
 
-    // Get playlist items with media details - using media_file_id instead of media_id
-    console.log("🔍 [PLAYLIST ITEMS API] Fetching playlist items...")
+    // Get playlist items with complete media details - using media_file_id instead of media_id
+    console.log("🔍 [PLAYLIST ITEMS API] Fetching playlist items with media details...")
     const items = await sql`
       SELECT 
         pi.id,
@@ -51,9 +51,14 @@ export async function GET(request: Request, { params }: { params: { playlistId: 
         mf.original_name,
         mf.file_type,
         mf.file_size,
+        mf.mime_type,
         mf.url,
+        mf.storage_url,
         mf.thumbnail_url,
-        mf.metadata
+        mf.metadata,
+        mf.dimensions,
+        mf.duration as media_duration,
+        mf.created_at as media_created_at
       FROM playlist_items pi
       LEFT JOIN media_files mf ON pi.media_file_id = mf.id
       WHERE pi.playlist_id = ${playlistId}
@@ -61,6 +66,7 @@ export async function GET(request: Request, { params }: { params: { playlistId: 
     `
 
     console.log(`✅ [PLAYLIST ITEMS API] Found ${items.length} items for playlist ${playlistId}`)
+    console.log("📋 [PLAYLIST ITEMS API] Sample item data:", items[0])
 
     const formattedItems = items.map((item) => ({
       id: item.id,
@@ -73,16 +79,41 @@ export async function GET(request: Request, { params }: { params: { playlistId: 
       media: item.media_file_id
         ? {
             id: item.media_id,
-            filename: item.filename,
-            original_filename: item.original_name,
-            file_type: item.file_type,
-            file_size: item.file_size,
-            url: item.url,
+            filename: item.filename || "",
+            original_filename: item.original_name || item.filename || "Untitled",
+            original_name: item.original_name || item.filename || "Untitled",
+            file_type: item.file_type || "unknown",
+            file_size: item.file_size || 0,
+            mime_type: item.mime_type || "application/octet-stream",
+            url: item.url || item.storage_url || "",
             thumbnail_url: item.thumbnail_url,
             metadata: item.metadata,
+            dimensions: item.dimensions,
+            duration: item.media_duration,
+            created_at: item.media_created_at,
+          }
+        : null,
+      // Also include media_file for backward compatibility
+      media_file: item.media_file_id
+        ? {
+            id: item.media_id,
+            filename: item.filename || "",
+            original_filename: item.original_name || item.filename || "Untitled",
+            original_name: item.original_name || item.filename || "Untitled",
+            file_type: item.file_type || "unknown",
+            file_size: item.file_size || 0,
+            mime_type: item.mime_type || "application/octet-stream",
+            url: item.url || item.storage_url || "",
+            thumbnail_url: item.thumbnail_url,
+            metadata: item.metadata,
+            dimensions: item.dimensions,
+            duration: item.media_duration,
+            created_at: item.media_created_at,
           }
         : null,
     }))
+
+    console.log("📋 [PLAYLIST ITEMS API] Formatted items:", formattedItems)
 
     return NextResponse.json({
       success: true,
@@ -179,9 +210,14 @@ export async function POST(request: Request, { params }: { params: { playlistId:
         mf.original_name,
         mf.file_type,
         mf.file_size,
+        mf.mime_type,
         mf.url,
+        mf.storage_url,
         mf.thumbnail_url,
-        mf.metadata
+        mf.metadata,
+        mf.dimensions,
+        mf.duration as media_duration,
+        mf.created_at as media_created_at
       FROM playlist_items pi
       LEFT JOIN media_files mf ON pi.media_file_id = mf.id
       WHERE pi.id = ${newItem[0].id}
@@ -202,13 +238,33 @@ export async function POST(request: Request, { params }: { params: { playlistId:
           created_at: item.created_at,
           media: {
             id: item.media_id,
-            filename: item.filename,
-            original_filename: item.original_name,
-            file_type: item.file_type,
-            file_size: item.file_size,
-            url: item.url,
+            filename: item.filename || "",
+            original_filename: item.original_name || item.filename || "Untitled",
+            original_name: item.original_name || item.filename || "Untitled",
+            file_type: item.file_type || "unknown",
+            file_size: item.file_size || 0,
+            mime_type: item.mime_type || "application/octet-stream",
+            url: item.url || item.storage_url || "",
             thumbnail_url: item.thumbnail_url,
             metadata: item.metadata,
+            dimensions: item.dimensions,
+            duration: item.media_duration,
+            created_at: item.media_created_at,
+          },
+          media_file: {
+            id: item.media_id,
+            filename: item.filename || "",
+            original_filename: item.original_name || item.filename || "Untitled",
+            original_name: item.original_name || item.filename || "Untitled",
+            file_type: item.file_type || "unknown",
+            file_size: item.file_size || 0,
+            mime_type: item.mime_type || "application/octet-stream",
+            url: item.url || item.storage_url || "",
+            thumbnail_url: item.thumbnail_url,
+            metadata: item.metadata,
+            dimensions: item.dimensions,
+            duration: item.media_duration,
+            created_at: item.media_created_at,
           },
         },
       },
