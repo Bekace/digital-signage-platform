@@ -1,24 +1,11 @@
 import { type NextRequest, NextResponse } from "next/server"
+import { put } from "@vercel/blob"
+import sharp from "sharp"
 import { getCurrentUser } from "@/lib/auth"
 import { getDb } from "@/lib/db"
-import { Buffer } from "buffer"
 
-const MAX_FILE_SIZE = 10 * 1024 * 1024 // 10MB per file
-const ALLOWED_TYPES = [
-  "image/jpeg",
-  "image/jpg",
-  "image/png",
-  "image/gif",
-  "image/webp",
-  "video/mp4",
-  "video/webm",
-  "application/pdf",
-]
-
-export async function POST(request: NextRequest): Promise<NextResponse> {
+export async function POST(request: NextRequest) {
   try {
-    console.log("🔍 Starting file upload...")
-
     const user = await getCurrentUser()
     if (!user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
@@ -31,116 +18,124 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       return NextResponse.json({ error: "No file provided" }, { status: 400 })
     }
 
-    console.log("📁 File details:", {
-      name: file.name,
-      size: file.size,
-      type: file.type,
+    console.log("📁 [UPLOAD] Starting upload for:", file.name, "Size:", file.size, "Type:", file.type)
+
+    // Check plan limits before upload
+    const planResponse = await fetch(`${process.env.NEXT_PUBLIC_APP_URL}/api/user/plan`, {
+      headers: {
+        Cookie: request.headers.get("cookie") || "",
+      },
     })
 
-    // Validate file type
-    if (!ALLOWED_TYPES.includes(file.type)) {
-      return NextResponse.json({ error: `File type ${file.type} not supported` }, { status: 400 })
+    if (planResponse.ok) {
+      const planData = await planResponse.json()
+      const { usage, limits } = planData
+
+      // Check file count limit
+      if (limits.max_media_files !== -1 && usage.media_files_count >= limits.max_media_files) {
+        return NextResponse.json(
+          {
+            error: `You've reached your plan's limit of ${limits.max_media_files} media files. Upgrade to upload more.`,
+          },
+          { status: 403 },
+        )
+      }
+
+      // Check storage limit
+      if (limits.max_storage_bytes !== -1 && usage.storage_used_bytes + file.size > limits.max_storage_bytes) {
+        const limitMB = Math.round(limits.max_storage_bytes / (1024 * 1024))
+        return NextResponse.json(
+          {
+            error: `This file would exceed your storage limit of ${limitMB}MB. Upgrade for more storage.`,
+          },
+          { status: 403 },
+        )
+      }
     }
 
-    // Validate file size
-    if (file.size > MAX_FILE_SIZE) {
-      return NextResponse.json(
-        { error: `File too large. Maximum size: ${MAX_FILE_SIZE / 1024 / 1024}MB` },
-        { status: 400 },
-      )
-    }
-
-    // Convert file to base64 for storage
-    const arrayBuffer = await file.arrayBuffer()
-    const base64 = Buffer.from(arrayBuffer).toString("base64")
-    const dataUrl = `data:${file.type};base64,${base64}`
-
-    const db = getDb()
-
-    // Create unique filename
+    // Generate unique filename
     const timestamp = Date.now()
-    const sanitizedName = file.name.replace(/[^a-zA-Z0-9.-]/g, "_")
-    const uniqueFilename = `${user.id}/${timestamp}-${sanitizedName}`
+    const randomString = Math.random().toString(36).substring(2, 15)
+    const fileExtension = file.name.split(".").pop()
+    const uniqueFilename = `${timestamp}-${randomString}.${fileExtension}`
 
-    // Determine file type category
-    const getFileTypeCategory = (mimeType: string): string => {
-      if (mimeType.startsWith("image/")) return "image"
-      if (mimeType.startsWith("video/")) return "video"
-      if (mimeType === "application/pdf") return "document"
-      return "other"
-    }
+    // Upload main file
+    const arrayBuffer = await file.arrayBuffer()
+    const buffer = Buffer.from(arrayBuffer)
 
-    // Generate thumbnail URL
+    const blob = await put(uniqueFilename, buffer, {
+      access: "public",
+      contentType: file.type,
+    })
+
+    console.log("☁️ [UPLOAD] File uploaded to blob:", blob.url)
+
+    // Generate thumbnail for images
     let thumbnailUrl = null
+    let dimensions = null
+    const duration = null
+
     if (file.type.startsWith("image/")) {
-      thumbnailUrl = dataUrl // Use the image itself as thumbnail
-    } else if (file.type.startsWith("video/")) {
-      thumbnailUrl = "/thumbnails/video.png"
-    } else if (file.type === "application/pdf") {
-      thumbnailUrl = "/thumbnails/pdf.png"
-    } else {
-      thumbnailUrl = "/thumbnails/generic.png"
+      try {
+        console.log("🖼️ [UPLOAD] Generating thumbnail for image...")
+
+        // Get image metadata
+        const metadata = await sharp(buffer).metadata()
+        dimensions = `${metadata.width}x${metadata.height}`
+
+        // Generate thumbnail
+        const thumbnailBuffer = await sharp(buffer)
+          .resize(300, 200, { fit: "cover", position: "center" })
+          .jpeg({ quality: 80 })
+          .toBuffer()
+
+        const thumbnailFilename = `thumb-${uniqueFilename.replace(/\.[^/.]+$/, ".jpg")}`
+        const thumbnailBlob = await put(thumbnailFilename, thumbnailBuffer, {
+          access: "public",
+          contentType: "image/jpeg",
+        })
+
+        thumbnailUrl = thumbnailBlob.url
+        console.log("✅ [UPLOAD] Thumbnail generated:", thumbnailUrl)
+      } catch (error) {
+        console.error("❌ [UPLOAD] Thumbnail generation failed:", error)
+        // Continue without thumbnail
+      }
     }
 
-    console.log("🔍 Saving to database...")
-
-    // Insert into media_files table
-    const mediaResult = await db`
+    // Save to database
+    const sql = getDb()
+    const result = await sql`
       INSERT INTO media_files (
-        user_id, 
-        filename, 
-        original_name,
-        file_type,
-        file_size, 
-        url,
-        thumbnail_url,
-        mime_type,
-        created_at
+        user_id, filename, original_name, file_type, file_size, 
+        mime_type, url, thumbnail_url, dimensions, duration
       ) VALUES (
-        ${user.id}, 
-        ${uniqueFilename}, 
-        ${file.name},
-        ${getFileTypeCategory(file.type)},
-        ${file.size}, 
-        ${dataUrl},
-        ${thumbnailUrl},
-        ${file.type},
-        NOW()
+        ${user.id}, ${uniqueFilename}, ${file.name}, ${file.type}, ${file.size},
+        ${file.type}, ${blob.url}, ${thumbnailUrl}, ${dimensions}, ${duration}
       )
       RETURNING *
     `
 
-    console.log("✅ Media file saved successfully!")
-
-    // Update user's usage counters
-    await db`
-      UPDATE users 
-      SET 
-        media_files_count = COALESCE(media_files_count, 0) + 1,
-        storage_used_bytes = COALESCE(storage_used_bytes::bigint, 0) + ${file.size}
-      WHERE id = ${user.id}
-    `
-
-    console.log("✅ User usage updated")
+    console.log("💾 [UPLOAD] Saved to database:", result[0])
 
     return NextResponse.json({
       success: true,
-      file: mediaResult.rows[0],
-      message: "File uploaded successfully",
-      debug: {
-        file_type: file.type,
-        file_size: file.size,
-        base64_length: dataUrl.length,
-        saved_to_db: true,
+      file: {
+        id: result[0].id,
+        filename: result[0].filename,
+        original_name: result[0].original_name,
+        file_type: result[0].file_type,
+        file_size: result[0].file_size,
+        url: result[0].url,
+        thumbnail_url: result[0].thumbnail_url,
+        dimensions: result[0].dimensions,
+        created_at: result[0].created_at,
       },
     })
-  } catch (error: any) {
-    console.error("❌ Upload error:", error)
+  } catch (error) {
+    console.error("❌ [UPLOAD] Upload failed:", error)
     return NextResponse.json(
-      {
-        error: "Failed to upload file",
-        details: error instanceof Error ? error.message : "Unknown error",
-      },
+      { error: "Upload failed", details: error instanceof Error ? error.message : "Unknown error" },
       { status: 500 },
     )
   }
