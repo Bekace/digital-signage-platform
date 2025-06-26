@@ -22,16 +22,33 @@ export async function GET(request: Request, { params }: { params: { playlistId: 
 
     const sql = getDb()
 
-    // Get playlist details
+    // Get playlist with item count and total duration
     const playlists = await sql`
       SELECT 
-        p.*,
+        p.id,
+        p.name,
+        p.description,
+        p.status,
+        p.created_at,
+        p.updated_at,
+        p.scale_image,
+        p.scale_video,
+        p.scale_document,
+        p.shuffle,
+        p.default_transition,
+        p.transition_speed,
+        p.auto_advance,
+        p.background_color,
+        p.text_overlay,
         COUNT(pi.id) as item_count,
-        COALESCE(SUM(COALESCE(pi.duration, 30)), 0) as total_duration
+        COALESCE(SUM(pi.duration), 0) as total_duration
       FROM playlists p
       LEFT JOIN playlist_items pi ON p.id = pi.playlist_id
       WHERE p.id = ${playlistId} AND p.user_id = ${user.id}
-      GROUP BY p.id
+      GROUP BY p.id, p.name, p.description, p.status, p.created_at, p.updated_at,
+               p.scale_image, p.scale_video, p.scale_document, p.shuffle,
+               p.default_transition, p.transition_speed, p.auto_advance,
+               p.background_color, p.text_overlay
     `
 
     if (playlists.length === 0) {
@@ -40,34 +57,32 @@ export async function GET(request: Request, { params }: { params: { playlistId: 
     }
 
     const playlist = playlists[0]
-    console.log("✅ [PLAYLIST API] Found playlist:", playlist.name)
+
+    console.log(`✅ [PLAYLIST API] Found playlist: ${playlist.name}`)
+
+    const formattedPlaylist = {
+      id: playlist.id,
+      name: playlist.name,
+      description: playlist.description,
+      status: playlist.status,
+      item_count: Number(playlist.item_count),
+      total_duration: Number(playlist.total_duration),
+      created_at: playlist.created_at,
+      updated_at: playlist.updated_at,
+      scale_image: playlist.scale_image,
+      scale_video: playlist.scale_video,
+      scale_document: playlist.scale_document,
+      shuffle: playlist.shuffle,
+      default_transition: playlist.default_transition,
+      transition_speed: playlist.transition_speed,
+      auto_advance: playlist.auto_advance,
+      background_color: playlist.background_color,
+      text_overlay: playlist.text_overlay,
+    }
 
     return NextResponse.json({
       success: true,
-      playlist: {
-        id: playlist.id,
-        name: playlist.name,
-        description: playlist.description,
-        status: playlist.status,
-        loop_enabled: playlist.loop_enabled,
-        schedule_enabled: playlist.schedule_enabled,
-        start_time: playlist.start_time,
-        end_time: playlist.end_time,
-        selected_days: playlist.selected_days || [],
-        scale_image: playlist.scale_image || "fit",
-        scale_video: playlist.scale_video || "fit",
-        scale_document: playlist.scale_document || "fit",
-        shuffle: playlist.shuffle || false,
-        default_transition: playlist.default_transition || "fade",
-        transition_speed: playlist.transition_speed || "medium",
-        auto_advance: playlist.auto_advance !== false,
-        background_color: playlist.background_color || "black",
-        text_overlay: playlist.text_overlay || false,
-        item_count: Number(playlist.item_count) || 0,
-        total_duration: Number(playlist.total_duration) || 0,
-        created_at: playlist.created_at,
-        updated_at: playlist.updated_at,
-      },
+      playlist: formattedPlaylist,
     })
   } catch (error) {
     console.error("❌ [PLAYLIST API] Error:", error)
@@ -82,7 +97,7 @@ export async function GET(request: Request, { params }: { params: { playlistId: 
 }
 
 export async function PUT(request: Request, { params }: { params: { playlistId: string } }) {
-  console.log("📝 [PLAYLIST API] Starting PUT request for playlist:", params.playlistId)
+  console.log("✏️ [PLAYLIST API] Starting PUT request for playlist:", params.playlistId)
 
   try {
     const user = await getCurrentUser()
@@ -96,49 +111,77 @@ export async function PUT(request: Request, { params }: { params: { playlistId: 
     }
 
     const body = await request.json()
-    console.log("📝 [PLAYLIST API] Update data:", body)
+    console.log("📝 [PLAYLIST API] Update body:", body)
 
     const sql = getDb()
 
-    // Verify ownership
-    const existing = await sql`
+    // Verify playlist ownership
+    const existingPlaylist = await sql`
       SELECT id FROM playlists WHERE id = ${playlistId} AND user_id = ${user.id}
     `
 
-    if (existing.length === 0) {
+    if (existingPlaylist.length === 0) {
       return NextResponse.json({ error: "Playlist not found" }, { status: 404 })
     }
 
     // Update playlist
-    const updated = await sql`
-      UPDATE playlists SET
-        name = ${body.name || existing[0].name},
-        description = ${body.description !== undefined ? body.description : existing[0].description},
-        status = ${body.status || existing[0].status},
-        loop_enabled = ${body.loop_enabled !== undefined ? body.loop_enabled : existing[0].loop_enabled},
-        schedule_enabled = ${body.schedule_enabled !== undefined ? body.schedule_enabled : existing[0].schedule_enabled},
-        start_time = ${body.start_time !== undefined ? body.start_time : existing[0].start_time},
-        end_time = ${body.end_time !== undefined ? body.end_time : existing[0].end_time},
-        selected_days = ${body.selected_days || existing[0].selected_days},
-        scale_image = ${body.scale_image || existing[0].scale_image},
-        scale_video = ${body.scale_video || existing[0].scale_video},
-        scale_document = ${body.scale_document || existing[0].scale_document},
-        shuffle = ${body.shuffle !== undefined ? body.shuffle : existing[0].shuffle},
-        default_transition = ${body.default_transition || existing[0].default_transition},
-        transition_speed = ${body.transition_speed || existing[0].transition_speed},
-        auto_advance = ${body.auto_advance !== undefined ? body.auto_advance : existing[0].auto_advance},
-        background_color = ${body.background_color || existing[0].background_color},
-        text_overlay = ${body.text_overlay !== undefined ? body.text_overlay : existing[0].text_overlay},
+    const updatedPlaylist = await sql`
+      UPDATE playlists 
+      SET 
+        name = COALESCE(${body.name}, name),
+        description = COALESCE(${body.description}, description),
+        status = COALESCE(${body.status}, status),
+        scale_image = COALESCE(${body.scale_image}, scale_image),
+        scale_video = COALESCE(${body.scale_video}, scale_video),
+        scale_document = COALESCE(${body.scale_document}, scale_document),
+        shuffle = COALESCE(${body.shuffle}, shuffle),
+        default_transition = COALESCE(${body.default_transition}, default_transition),
+        transition_speed = COALESCE(${body.transition_speed}, transition_speed),
+        auto_advance = COALESCE(${body.auto_advance}, auto_advance),
+        background_color = COALESCE(${body.background_color}, background_color),
+        text_overlay = COALESCE(${body.text_overlay}, text_overlay),
         updated_at = NOW()
-      WHERE id = ${playlistId}
+      WHERE id = ${playlistId} AND user_id = ${user.id}
       RETURNING *
     `
 
-    console.log("✅ [PLAYLIST API] Updated playlist:", updated[0].name)
+    console.log(`✅ [PLAYLIST API] Updated playlist: ${updatedPlaylist[0].name}`)
+
+    // Get updated playlist with counts
+    const playlists = await sql`
+      SELECT 
+        p.*,
+        COUNT(pi.id) as item_count,
+        COALESCE(SUM(pi.duration), 0) as total_duration
+      FROM playlists p
+      LEFT JOIN playlist_items pi ON p.id = pi.playlist_id
+      WHERE p.id = ${playlistId}
+      GROUP BY p.id
+    `
+
+    const playlist = playlists[0]
 
     return NextResponse.json({
       success: true,
-      playlist: updated[0],
+      playlist: {
+        id: playlist.id,
+        name: playlist.name,
+        description: playlist.description,
+        status: playlist.status,
+        item_count: Number(playlist.item_count),
+        total_duration: Number(playlist.total_duration),
+        created_at: playlist.created_at,
+        updated_at: playlist.updated_at,
+        scale_image: playlist.scale_image,
+        scale_video: playlist.scale_video,
+        scale_document: playlist.scale_document,
+        shuffle: playlist.shuffle,
+        default_transition: playlist.default_transition,
+        transition_speed: playlist.transition_speed,
+        auto_advance: playlist.auto_advance,
+        background_color: playlist.background_color,
+        text_overlay: playlist.text_overlay,
+      },
     })
   } catch (error) {
     console.error("❌ [PLAYLIST API] Error:", error)
@@ -168,18 +211,22 @@ export async function DELETE(request: Request, { params }: { params: { playlistI
 
     const sql = getDb()
 
-    // Verify ownership and delete
-    const deleted = await sql`
-      DELETE FROM playlists 
-      WHERE id = ${playlistId} AND user_id = ${user.id}
-      RETURNING *
+    // Verify playlist ownership
+    const existingPlaylist = await sql`
+      SELECT id FROM playlists WHERE id = ${playlistId} AND user_id = ${user.id}
     `
 
-    if (deleted.length === 0) {
+    if (existingPlaylist.length === 0) {
       return NextResponse.json({ error: "Playlist not found" }, { status: 404 })
     }
 
-    console.log("✅ [PLAYLIST API] Deleted playlist:", deleted[0].name)
+    // Delete playlist items first
+    await sql`DELETE FROM playlist_items WHERE playlist_id = ${playlistId}`
+
+    // Delete playlist
+    await sql`DELETE FROM playlists WHERE id = ${playlistId} AND user_id = ${user.id}`
+
+    console.log(`✅ [PLAYLIST API] Deleted playlist: ${playlistId}`)
 
     return NextResponse.json({
       success: true,

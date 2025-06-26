@@ -5,108 +5,121 @@ import { getDb } from "@/lib/db"
 export const dynamic = "force-dynamic"
 
 export async function GET() {
-  console.log("🔍 [DEBUG PLAYLISTS] Starting debug request")
+  console.log("🔍 [DEBUG PLAYLISTS API] Starting debug request")
 
   try {
     const user = await getCurrentUser()
+    if (!user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    }
+
     const sql = getDb()
 
-    const debugInfo: any = {
-      timestamp: new Date().toISOString(),
-      user: user ? { id: user.id, email: user.email } : null,
-      tables: {},
-      data: {},
-      errors: [],
-    }
+    // Check table structures
+    const playlistsTableInfo = await sql`
+      SELECT column_name, data_type, is_nullable, column_default
+      FROM information_schema.columns 
+      WHERE table_name = 'playlists' 
+      ORDER BY ordinal_position
+    `
 
-    // Check table existence
-    const tables = ["playlists", "playlist_items", "media_files", "users"]
-    for (const table of tables) {
-      try {
-        const exists = await sql`
-          SELECT EXISTS (
-            SELECT FROM information_schema.tables 
-            WHERE table_name = ${table}
-          );
+    const playlistItemsTableInfo = await sql`
+      SELECT column_name, data_type, is_nullable, column_default
+      FROM information_schema.columns 
+      WHERE table_name = 'playlist_items' 
+      ORDER BY ordinal_position
+    `
+
+    const mediaFilesTableInfo = await sql`
+      SELECT column_name, data_type, is_nullable, column_default
+      FROM information_schema.columns 
+      WHERE table_name = 'media_files' 
+      ORDER BY ordinal_position
+    `
+
+    // Get sample data
+    const playlists = await sql`
+      SELECT * FROM playlists WHERE user_id = ${user.id} LIMIT 5
+    `
+
+    const playlistItems = await sql`
+      SELECT pi.*, p.name as playlist_name 
+      FROM playlist_items pi
+      JOIN playlists p ON pi.playlist_id = p.id
+      WHERE p.user_id = ${user.id}
+      LIMIT 10
+    `
+
+    const mediaFiles = await sql`
+      SELECT * FROM media_files WHERE user_id = ${user.id} LIMIT 5
+    `
+
+    // Test the problematic query
+    let testQueryResult = null
+    let testQueryError = null
+
+    try {
+      if (playlists.length > 0) {
+        const testPlaylistId = playlists[0].id
+        testQueryResult = await sql`
+          SELECT 
+            pi.id,
+            pi.playlist_id,
+            pi.media_id,
+            pi.position,
+            pi.duration,
+            pi.created_at,
+            mf.id as media_file_id,
+            mf.filename,
+            mf.original_name,
+            mf.file_type,
+            mf.file_size,
+            mf.url,
+            mf.thumbnail_url,
+            mf.metadata
+          FROM playlist_items pi
+          LEFT JOIN media_files mf ON pi.media_id = mf.id
+          WHERE pi.playlist_id = ${testPlaylistId}
+          ORDER BY pi.position ASC
         `
-        debugInfo.tables[table] = {
-          exists: exists[0]?.exists || false,
-          columns: [],
-        }
-
-        if (exists[0]?.exists) {
-          const columns = await sql`
-            SELECT column_name, data_type, is_nullable
-            FROM information_schema.columns
-            WHERE table_name = ${table}
-            ORDER BY ordinal_position;
-          `
-          debugInfo.tables[table].columns = columns
-        }
-      } catch (error) {
-        debugInfo.errors.push(`Error checking table ${table}: ${error}`)
       }
+    } catch (error) {
+      testQueryError = error instanceof Error ? error.message : "Unknown error"
     }
 
-    // Get data counts if user is authenticated
-    if (user) {
-      try {
-        if (debugInfo.tables.playlists?.exists) {
-          const playlistCount = await sql`
-            SELECT COUNT(*) as count FROM playlists WHERE user_id = ${user.id}
-          `
-          debugInfo.data.playlists = {
-            count: Number(playlistCount[0]?.count || 0),
-          }
-
-          // Get sample playlists
-          const samplePlaylists = await sql`
-            SELECT id, name, status, created_at FROM playlists 
-            WHERE user_id = ${user.id} 
-            ORDER BY created_at DESC 
-            LIMIT 5
-          `
-          debugInfo.data.playlists.samples = samplePlaylists
-        }
-
-        if (debugInfo.tables.playlist_items?.exists) {
-          const itemCount = await sql`
-            SELECT COUNT(*) as count FROM playlist_items pi
-            JOIN playlists p ON pi.playlist_id = p.id
-            WHERE p.user_id = ${user.id}
-          `
-          debugInfo.data.playlist_items = {
-            count: Number(itemCount[0]?.count || 0),
-          }
-        }
-
-        if (debugInfo.tables.media_files?.exists) {
-          const mediaCount = await sql`
-            SELECT COUNT(*) as count FROM media_files WHERE user_id = ${user.id}
-          `
-          debugInfo.data.media_files = {
-            count: Number(mediaCount[0]?.count || 0),
-          }
-        }
-      } catch (error) {
-        debugInfo.errors.push(`Error getting data counts: ${error}`)
-      }
-    }
-
-    console.log("✅ [DEBUG PLAYLISTS] Debug info collected")
-
-    return NextResponse.json(debugInfo, {
-      headers: {
-        "Content-Type": "application/json",
+    return NextResponse.json({
+      success: true,
+      debug_info: {
+        user_id: user.id,
+        tables: {
+          playlists: {
+            structure: playlistsTableInfo,
+            sample_data: playlists,
+            count: playlists.length,
+          },
+          playlist_items: {
+            structure: playlistItemsTableInfo,
+            sample_data: playlistItems,
+            count: playlistItems.length,
+          },
+          media_files: {
+            structure: mediaFilesTableInfo,
+            sample_data: mediaFiles,
+            count: mediaFiles.length,
+          },
+        },
+        test_query: {
+          result: testQueryResult,
+          error: testQueryError,
+        },
       },
     })
   } catch (error) {
-    console.error("❌ [DEBUG PLAYLISTS] Error:", error)
+    console.error("❌ [DEBUG PLAYLISTS API] Error:", error)
     return NextResponse.json(
       {
         error: "Debug failed",
         details: error instanceof Error ? error.message : "Unknown error",
-        timestamp: new Date().toISOString(),
       },
       { status: 500 },
     )

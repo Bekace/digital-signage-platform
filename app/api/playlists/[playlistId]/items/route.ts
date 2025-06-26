@@ -22,7 +22,8 @@ export async function GET(request: Request, { params }: { params: { playlistId: 
 
     const sql = getDb()
 
-    // Verify playlist ownership
+    // First verify playlist ownership
+    console.log("🔍 [PLAYLIST ITEMS API] Verifying playlist ownership...")
     const playlist = await sql`
       SELECT id FROM playlists WHERE id = ${playlistId} AND user_id = ${user.id}
     `
@@ -32,7 +33,10 @@ export async function GET(request: Request, { params }: { params: { playlistId: 
       return NextResponse.json({ error: "Playlist not found" }, { status: 404 })
     }
 
-    // Get playlist items with media details
+    console.log("✅ [PLAYLIST ITEMS API] Playlist ownership verified")
+
+    // Get playlist items with media details - using correct table name
+    console.log("🔍 [PLAYLIST ITEMS API] Fetching playlist items...")
     const items = await sql`
       SELECT 
         pi.id,
@@ -41,6 +45,7 @@ export async function GET(request: Request, { params }: { params: { playlistId: 
         pi.position,
         pi.duration,
         pi.created_at,
+        mf.id as media_file_id,
         mf.filename,
         mf.original_name,
         mf.file_type,
@@ -65,9 +70,9 @@ export async function GET(request: Request, { params }: { params: { playlistId: 
       created_at: item.created_at,
       media: item.media_id
         ? {
-            id: item.media_id,
+            id: item.media_file_id,
             filename: item.filename,
-            original_name: item.original_name,
+            original_filename: item.original_name, // Map original_name to original_filename for consistency
             file_type: item.file_type,
             file_size: item.file_size,
             url: item.url,
@@ -83,6 +88,7 @@ export async function GET(request: Request, { params }: { params: { playlistId: 
     })
   } catch (error) {
     console.error("❌ [PLAYLIST ITEMS API] Error:", error)
+    console.error("❌ [PLAYLIST ITEMS API] Error stack:", error instanceof Error ? error.stack : "No stack")
     return NextResponse.json(
       {
         error: "Failed to fetch playlist items",
@@ -99,11 +105,13 @@ export async function POST(request: Request, { params }: { params: { playlistId:
   try {
     const user = await getCurrentUser()
     if (!user) {
+      console.log("❌ [PLAYLIST ITEMS API] No user authenticated")
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
     const playlistId = Number.parseInt(params.playlistId)
     if (isNaN(playlistId)) {
+      console.log("❌ [PLAYLIST ITEMS API] Invalid playlist ID:", params.playlistId)
       return NextResponse.json({ error: "Invalid playlist ID" }, { status: 400 })
     }
 
@@ -124,6 +132,7 @@ export async function POST(request: Request, { params }: { params: { playlistId:
     `
 
     if (playlist.length === 0) {
+      console.log("❌ [PLAYLIST ITEMS API] Playlist not found or not owned by user")
       return NextResponse.json({ error: "Playlist not found" }, { status: 404 })
     }
 
@@ -133,7 +142,8 @@ export async function POST(request: Request, { params }: { params: { playlistId:
     `
 
     if (media.length === 0) {
-      return NextResponse.json({ error: "Media not found" }, { status: 404 })
+      console.log("❌ [PLAYLIST ITEMS API] Media file not found or not owned by user")
+      return NextResponse.json({ error: "Media file not found" }, { status: 404 })
     }
 
     // Get next position
@@ -161,6 +171,7 @@ export async function POST(request: Request, { params }: { params: { playlistId:
         pi.position,
         pi.duration,
         pi.created_at,
+        mf.id as media_file_id,
         mf.filename,
         mf.original_name,
         mf.file_type,
@@ -186,9 +197,9 @@ export async function POST(request: Request, { params }: { params: { playlistId:
           duration: item.duration,
           created_at: item.created_at,
           media: {
-            id: item.media_id,
+            id: item.media_file_id,
             filename: item.filename,
-            original_name: item.original_name,
+            original_filename: item.original_name,
             file_type: item.file_type,
             file_size: item.file_size,
             url: item.url,

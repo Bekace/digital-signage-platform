@@ -10,11 +10,13 @@ export async function PUT(request: Request, { params }: { params: { playlistId: 
   try {
     const user = await getCurrentUser()
     if (!user) {
+      console.log("❌ [PLAYLIST REORDER API] No user authenticated")
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
     const playlistId = Number.parseInt(params.playlistId)
     if (isNaN(playlistId)) {
+      console.log("❌ [PLAYLIST REORDER API] Invalid playlist ID:", params.playlistId)
       return NextResponse.json({ error: "Invalid playlist ID" }, { status: 400 })
     }
 
@@ -35,17 +37,19 @@ export async function PUT(request: Request, { params }: { params: { playlistId: 
     `
 
     if (playlist.length === 0) {
+      console.log("❌ [PLAYLIST REORDER API] Playlist not found or not owned by user")
       return NextResponse.json({ error: "Playlist not found" }, { status: 404 })
     }
 
-    // Update positions for all items
-    for (let i = 0; i < items.length; i++) {
-      const item = items[i]
-      await sql`
-        UPDATE playlist_items 
-        SET position = ${i + 1}
-        WHERE id = ${item.id} AND playlist_id = ${playlistId}
-      `
+    // Update positions for each item
+    for (const item of items) {
+      if (item.id && typeof item.position === "number") {
+        await sql`
+          UPDATE playlist_items 
+          SET position = ${item.position}
+          WHERE id = ${item.id} AND playlist_id = ${playlistId}
+        `
+      }
     }
 
     console.log(`✅ [PLAYLIST REORDER API] Reordered ${items.length} items`)
