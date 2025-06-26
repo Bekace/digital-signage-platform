@@ -3,12 +3,9 @@ import { getCurrentUser } from "@/lib/auth"
 import { getDb } from "@/lib/db"
 
 export async function DELETE(request: Request, { params }: { params: { playlistId: string; itemId: string } }) {
-  console.log("🗑️ [PLAYLIST ITEM DELETE API] Starting DELETE request for item:", params.itemId)
-
   try {
     const user = await getCurrentUser()
     if (!user) {
-      console.log("❌ [PLAYLIST ITEM DELETE API] No user authenticated")
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
@@ -16,45 +13,54 @@ export async function DELETE(request: Request, { params }: { params: { playlistI
     const itemId = Number.parseInt(params.itemId)
 
     if (isNaN(playlistId) || isNaN(itemId)) {
-      console.log("❌ [PLAYLIST ITEM DELETE API] Invalid IDs:", params)
       return NextResponse.json({ error: "Invalid playlist or item ID" }, { status: 400 })
     }
 
     const sql = getDb()
 
-    // Verify playlist ownership
+    // Verify the playlist belongs to the user
     const playlist = await sql`
-      SELECT id FROM playlists WHERE id = ${playlistId} AND user_id = ${user.id}
+      SELECT id FROM playlists 
+      WHERE id = ${playlistId} AND user_id = ${user.id}
     `
 
     if (playlist.length === 0) {
-      console.log("❌ [PLAYLIST ITEM DELETE API] Playlist not found or not owned by user")
       return NextResponse.json({ error: "Playlist not found" }, { status: 404 })
     }
 
-    // Verify item exists in this playlist
-    const item = await sql`
-      SELECT id FROM playlist_items WHERE id = ${itemId} AND playlist_id = ${playlistId}
+    // Get the item to delete (for position reordering)
+    const itemToDelete = await sql`
+      SELECT position FROM playlist_items 
+      WHERE id = ${itemId} AND playlist_id = ${playlistId}
     `
 
-    if (item.length === 0) {
-      console.log("❌ [PLAYLIST ITEM DELETE API] Item not found in playlist")
-      return NextResponse.json({ error: "Item not found" }, { status: 404 })
+    if (itemToDelete.length === 0) {
+      return NextResponse.json({ error: "Playlist item not found" }, { status: 404 })
     }
+
+    const deletedPosition = itemToDelete[0].position
 
     // Delete the item
     await sql`
-      DELETE FROM playlist_items WHERE id = ${itemId} AND playlist_id = ${playlistId}
+      DELETE FROM playlist_items 
+      WHERE id = ${itemId} AND playlist_id = ${playlistId}
     `
 
-    console.log(`✅ [PLAYLIST ITEM DELETE API] Deleted item ${itemId} from playlist ${playlistId}`)
+    // Reorder remaining items (shift positions down)
+    await sql`
+      UPDATE playlist_items 
+      SET position = position - 1
+      WHERE playlist_id = ${playlistId} AND position > ${deletedPosition}
+    `
+
+    console.log(`🗑️ [PLAYLIST ITEMS API] Deleted item ${itemId} from playlist ${playlistId}`)
 
     return NextResponse.json({
       success: true,
-      message: "Item deleted successfully",
+      message: "Playlist item deleted successfully",
     })
   } catch (error) {
-    console.error("❌ [PLAYLIST ITEM DELETE API] Error:", error)
+    console.error("Error deleting playlist item:", error)
     return NextResponse.json(
       {
         error: "Failed to delete playlist item",
@@ -66,12 +72,9 @@ export async function DELETE(request: Request, { params }: { params: { playlistI
 }
 
 export async function PUT(request: Request, { params }: { params: { playlistId: string; itemId: string } }) {
-  console.log("✏️ [PLAYLIST ITEM UPDATE API] Starting PUT request for item:", params.itemId)
-
   try {
     const user = await getCurrentUser()
     if (!user) {
-      console.log("❌ [PLAYLIST ITEM UPDATE API] No user authenticated")
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
@@ -79,24 +82,21 @@ export async function PUT(request: Request, { params }: { params: { playlistId: 
     const itemId = Number.parseInt(params.itemId)
 
     if (isNaN(playlistId) || isNaN(itemId)) {
-      console.log("❌ [PLAYLIST ITEM UPDATE API] Invalid IDs:", params)
       return NextResponse.json({ error: "Invalid playlist or item ID" }, { status: 400 })
     }
 
     const body = await request.json()
-    console.log("📝 [PLAYLIST ITEM UPDATE API] Request body:", body)
-
     const { duration, transition_type } = body
 
     const sql = getDb()
 
-    // Verify playlist ownership
+    // Verify the playlist belongs to the user
     const playlist = await sql`
-      SELECT id FROM playlists WHERE id = ${playlistId} AND user_id = ${user.id}
+      SELECT id FROM playlists 
+      WHERE id = ${playlistId} AND user_id = ${user.id}
     `
 
     if (playlist.length === 0) {
-      console.log("❌ [PLAYLIST ITEM UPDATE API] Playlist not found or not owned by user")
       return NextResponse.json({ error: "Playlist not found" }, { status: 404 })
     }
 
@@ -105,24 +105,25 @@ export async function PUT(request: Request, { params }: { params: { playlistId: 
       UPDATE playlist_items 
       SET 
         duration = COALESCE(${duration}, duration),
-        transition_type = COALESCE(${transition_type}, transition_type)
+        transition_type = COALESCE(${transition_type}, transition_type),
+        updated_at = NOW()
       WHERE id = ${itemId} AND playlist_id = ${playlistId}
       RETURNING *
     `
 
     if (updatedItem.length === 0) {
-      console.log("❌ [PLAYLIST ITEM UPDATE API] Item not found in playlist")
-      return NextResponse.json({ error: "Item not found" }, { status: 404 })
+      return NextResponse.json({ error: "Playlist item not found" }, { status: 404 })
     }
 
-    console.log(`✅ [PLAYLIST ITEM UPDATE API] Updated item ${itemId}`)
+    console.log(`✏️ [PLAYLIST ITEMS API] Updated item ${itemId} in playlist ${playlistId}`)
 
     return NextResponse.json({
       success: true,
       item: updatedItem[0],
+      message: "Playlist item updated successfully",
     })
   } catch (error) {
-    console.error("❌ [PLAYLIST ITEM UPDATE API] Error:", error)
+    console.error("Error updating playlist item:", error)
     return NextResponse.json(
       {
         error: "Failed to update playlist item",

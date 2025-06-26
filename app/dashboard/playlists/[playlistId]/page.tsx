@@ -5,7 +5,6 @@ import { useParams, useRouter } from "next/navigation"
 import {
   ArrowLeft,
   Play,
-  Pause,
   SkipForward,
   SkipBack,
   Settings,
@@ -19,6 +18,7 @@ import {
   Loader2,
   HardDrive,
   Hash,
+  Eye,
 } from "lucide-react"
 import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors } from "@dnd-kit/core"
 import { arrayMove, SortableContext, sortableKeyboardCoordinates, verticalListSortingStrategy } from "@dnd-kit/sortable"
@@ -34,6 +34,7 @@ import { Separator } from "@/components/ui/separator"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { DashboardLayout } from "@/components/dashboard-layout"
 import { PlaylistOptionsDialog } from "@/components/playlist-options-dialog"
+import { PlaylistPreviewModal } from "@/components/playlist-preview-modal"
 import { MediaThumbnail } from "@/components/media-thumbnail"
 import {
   AlertDialog,
@@ -227,8 +228,8 @@ export default function PlaylistEditorPage() {
   const [mediaError, setMediaError] = useState<string | null>(null)
   const [searchQuery, setSearchQuery] = useState("")
   const [showSettings, setShowSettings] = useState(false)
+  const [showPreview, setShowPreview] = useState(false)
   const [removeItem, setRemoveItem] = useState<PlaylistItem | null>(null)
-  const [isPlaying, setIsPlaying] = useState(false)
   const [currentItemIndex, setCurrentItemIndex] = useState(0)
 
   const sensors = useSensors(
@@ -481,9 +482,9 @@ export default function PlaylistEditorPage() {
               <Settings className="h-4 w-4 mr-2" />
               Settings
             </Button>
-            <Button variant={isPlaying ? "secondary" : "default"} onClick={() => setIsPlaying(!isPlaying)}>
-              {isPlaying ? <Pause className="h-4 w-4 mr-2" /> : <Play className="h-4 w-4 mr-2" />}
-              {isPlaying ? "Pause" : "Preview"}
+            <Button variant="default" onClick={() => setShowPreview(true)} disabled={playlistItems.length === 0}>
+              <Eye className="h-4 w-4 mr-2" />
+              Preview
             </Button>
           </div>
         </div>
@@ -563,7 +564,7 @@ export default function PlaylistEditorPage() {
                   <div className="text-center py-8">
                     <Plus className="h-12 w-12 mx-auto text-gray-400 mb-4" />
                     <h3 className="text-lg font-medium text-gray-900 mb-2">No items in playlist</h3>
-                    <p className="text-gray-500">Add media files from the library to get started.</p>
+                    <p className="text-gray-500">Add some media files from the library to get started.</p>
                   </div>
                 ) : (
                   <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
@@ -712,6 +713,16 @@ export default function PlaylistEditorPage() {
                 toast.error("Failed to update settings")
               }
             }}
+          />
+        )}
+
+        {/* Preview Modal */}
+        {showPreview && playlist && (
+          <PlaylistPreviewModal
+            open={showPreview}
+            onOpenChange={setShowPreview}
+            playlist={playlist}
+            items={playlistItems}
           />
         )}
 
