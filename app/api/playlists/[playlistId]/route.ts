@@ -6,6 +6,8 @@ export const dynamic = "force-dynamic"
 
 // GET - Fetch a specific playlist with its items
 export async function GET(request: Request, { params }: { params: { playlistId: string } }) {
+  console.log(`🎵 [PLAYLIST API] Getting playlist: ${params.playlistId}`)
+
   try {
     const user = await getCurrentUser()
     if (!user) {
@@ -19,19 +21,17 @@ export async function GET(request: Request, { params }: { params: { playlistId: 
 
     const sql = getDb()
 
-    // Fetch playlist details
-    const playlistResult = await sql`
+    // Get playlist details
+    const playlist = await sql`
       SELECT * FROM playlists 
       WHERE id = ${playlistId} AND user_id = ${user.id}
     `
 
-    if (playlistResult.length === 0) {
+    if (playlist.length === 0) {
       return NextResponse.json({ error: "Playlist not found" }, { status: 404 })
     }
 
-    const playlist = playlistResult[0]
-
-    // Fetch playlist items with media file details
+    // Get playlist items
     const items = await sql`
       SELECT 
         pi.*,
@@ -39,61 +39,61 @@ export async function GET(request: Request, { params }: { params: { playlistId: 
         mf.original_name,
         mf.file_type,
         mf.file_size,
-        mf.mime_type,
-        mf.url,
-        mf.thumbnail_url,
         mf.duration as media_duration,
-        mf.dimensions
+        mf.url
       FROM playlist_items pi
-      JOIN media_files mf ON pi.media_file_id = mf.id
+      LEFT JOIN media_files mf ON pi.media_file_id = mf.id
       WHERE pi.playlist_id = ${playlistId}
       ORDER BY pi.position ASC
     `
 
-    // Fetch assigned devices
+    // Get device assignments
     const assignments = await sql`
-      SELECT d.id, d.name, d.status
+      SELECT 
+        pa.*,
+        d.name as device_name,
+        d.status as device_status
       FROM playlist_assignments pa
-      JOIN devices d ON pa.device_id = d.id
+      LEFT JOIN devices d ON pa.device_id = d.id
       WHERE pa.playlist_id = ${playlistId}
+      ORDER BY pa.priority ASC
     `
 
-    return NextResponse.json({
-      playlist: {
-        id: playlist.id,
-        name: playlist.name,
-        description: playlist.description,
-        status: playlist.status,
-        loop_enabled: playlist.loop_enabled,
-        schedule_enabled: playlist.schedule_enabled,
-        start_time: playlist.start_time,
-        end_time: playlist.end_time,
-        selected_days: playlist.selected_days || [],
-        created_at: playlist.created_at,
-        updated_at: playlist.updated_at,
-      },
+    const playlistData = {
+      ...playlist[0],
+      selected_days: playlist[0].selected_days || [],
       items: items.map((item) => ({
         id: item.id,
         media_file_id: item.media_file_id,
         position: item.position,
         duration: item.duration,
         transition_type: item.transition_type,
-        media: {
-          filename: item.filename,
-          original_name: item.original_name,
-          file_type: item.file_type,
-          file_size: item.file_size,
-          mime_type: item.mime_type,
-          url: item.url,
-          thumbnail_url: item.thumbnail_url,
-          duration: item.media_duration,
-          dimensions: item.dimensions,
-        },
+        media: item.media_file_id
+          ? {
+              filename: item.filename,
+              original_name: item.original_name,
+              file_type: item.file_type,
+              file_size: item.file_size,
+              duration: item.media_duration,
+              url: item.url,
+            }
+          : null,
       })),
-      assigned_devices: assignments,
+      assignments: assignments.map((assignment) => ({
+        id: assignment.id,
+        device_id: assignment.device_id,
+        device_name: assignment.device_name,
+        device_status: assignment.device_status,
+        priority: assignment.priority,
+      })),
+    }
+
+    return NextResponse.json({
+      success: true,
+      playlist: playlistData,
     })
   } catch (error) {
-    console.error("Error fetching playlist:", error)
+    console.error("❌ [PLAYLIST API] Error fetching playlist:", error)
     return NextResponse.json(
       {
         error: "Failed to fetch playlist",
@@ -106,6 +106,8 @@ export async function GET(request: Request, { params }: { params: { playlistId: 
 
 // PUT - Update a playlist
 export async function PUT(request: Request, { params }: { params: { playlistId: string } }) {
+  console.log(`🎵 [PLAYLIST API] Updating playlist: ${params.playlistId}`)
+
   try {
     const user = await getCurrentUser()
     if (!user) {
@@ -122,28 +124,27 @@ export async function PUT(request: Request, { params }: { params: { playlistId: 
 
     const sql = getDb()
 
-    // Verify playlist ownership
-    const existingPlaylist = await sql`
+    // Verify ownership
+    const existing = await sql`
       SELECT id FROM playlists 
       WHERE id = ${playlistId} AND user_id = ${user.id}
     `
 
-    if (existingPlaylist.length === 0) {
+    if (existing.length === 0) {
       return NextResponse.json({ error: "Playlist not found" }, { status: 404 })
     }
 
-    // Update the playlist
-    const updatedPlaylist = await sql`
-      UPDATE playlists 
-      SET 
+    // Update playlist
+    const updated = await sql`
+      UPDATE playlists SET
         name = COALESCE(${name}, name),
         description = COALESCE(${description}, description),
         status = COALESCE(${status}, status),
         loop_enabled = COALESCE(${loop_enabled}, loop_enabled),
         schedule_enabled = COALESCE(${schedule_enabled}, schedule_enabled),
-        start_time = COALESCE(${start_time}, start_time),
-        end_time = COALESCE(${end_time}, end_time),
-        selected_days = COALESCE(${selected_days}, selected_days),
+        start_time = CASE WHEN ${schedule_enabled} = false THEN NULL ELSE COALESCE(${start_time}, start_time) END,
+        end_time = CASE WHEN ${schedule_enabled} = false THEN NULL ELSE COALESCE(${end_time}, end_time) END,
+        selected_days = CASE WHEN ${schedule_enabled} = false THEN '{}' ELSE COALESCE(${selected_days}, selected_days) END,
         updated_at = CURRENT_TIMESTAMP
       WHERE id = ${playlistId} AND user_id = ${user.id}
       RETURNING *
@@ -151,10 +152,10 @@ export async function PUT(request: Request, { params }: { params: { playlistId: 
 
     return NextResponse.json({
       success: true,
-      playlist: updatedPlaylist[0],
+      playlist: updated[0],
     })
   } catch (error) {
-    console.error("Error updating playlist:", error)
+    console.error("❌ [PLAYLIST API] Error updating playlist:", error)
     return NextResponse.json(
       {
         error: "Failed to update playlist",
@@ -167,6 +168,8 @@ export async function PUT(request: Request, { params }: { params: { playlistId: 
 
 // DELETE - Delete a playlist
 export async function DELETE(request: Request, { params }: { params: { playlistId: string } }) {
+  console.log(`🎵 [PLAYLIST API] Deleting playlist: ${params.playlistId}`)
+
   try {
     const user = await getCurrentUser()
     if (!user) {
@@ -180,28 +183,25 @@ export async function DELETE(request: Request, { params }: { params: { playlistI
 
     const sql = getDb()
 
-    // Verify playlist ownership and get details
-    const existingPlaylist = await sql`
-      SELECT name FROM playlists 
+    // Verify ownership and delete
+    const deleted = await sql`
+      DELETE FROM playlists 
       WHERE id = ${playlistId} AND user_id = ${user.id}
+      RETURNING id, name
     `
 
-    if (existingPlaylist.length === 0) {
+    if (deleted.length === 0) {
       return NextResponse.json({ error: "Playlist not found" }, { status: 404 })
     }
 
-    // Delete the playlist (cascade will handle items and assignments)
-    await sql`
-      DELETE FROM playlists 
-      WHERE id = ${playlistId} AND user_id = ${user.id}
-    `
+    console.log(`✅ [PLAYLIST API] Deleted playlist: ${deleted[0].name}`)
 
     return NextResponse.json({
       success: true,
-      message: `Playlist "${existingPlaylist[0].name}" deleted successfully`,
+      message: `Playlist "${deleted[0].name}" deleted successfully`,
     })
   } catch (error) {
-    console.error("Error deleting playlist:", error)
+    console.error("❌ [PLAYLIST API] Error deleting playlist:", error)
     return NextResponse.json(
       {
         error: "Failed to delete playlist",

@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { Plus, Play, MoreHorizontal, Edit, Trash2, Copy, Clock, Monitor, AlertCircle } from "lucide-react"
+import { Plus, Play, MoreHorizontal, Edit, Trash2, Copy, Clock, Monitor, AlertCircle, RefreshCw } from "lucide-react"
 import { toast } from "sonner"
 
 import { Button } from "@/components/ui/button"
@@ -45,76 +45,73 @@ export default function PlaylistsPage() {
   const [loading, setLoading] = useState(true)
   const [showCreateDialog, setShowCreateDialog] = useState(false)
   const [deletePlaylist, setDeletePlaylist] = useState<Playlist | null>(null)
+  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     fetchPlaylists()
   }, [])
 
   const fetchPlaylists = async () => {
+    console.log("🎵 [PLAYLISTS PAGE] Fetching playlists...")
     try {
       setLoading(true)
+      setError(null)
+
       const response = await fetch("/api/playlists")
+      console.log("🎵 [PLAYLISTS PAGE] Response status:", response.status)
 
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}: ${response.statusText}`)
       }
 
       const data = await response.json()
-      setPlaylists(data.playlists || [])
+      console.log("🎵 [PLAYLISTS PAGE] Response data:", data)
+
+      if (data.success) {
+        setPlaylists(data.playlists || [])
+      } else {
+        throw new Error(data.error || "Failed to fetch playlists")
+      }
     } catch (error) {
-      console.error("Error fetching playlists:", error)
+      console.error("🎵 [PLAYLISTS PAGE] Error fetching playlists:", error)
+      setError(error instanceof Error ? error.message : "Failed to load playlists")
       toast.error("Failed to load playlists")
     } finally {
       setLoading(false)
     }
   }
 
-  const handleCreatePlaylist = async (playlistData: any) => {
-    try {
-      const response = await fetch("/api/playlists", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(playlistData),
-      })
-
-      if (!response.ok) {
-        const error = await response.json()
-        throw new Error(error.error || "Failed to create playlist")
-      }
-
-      const data = await response.json()
-      setPlaylists((prev) => [data.playlist, ...prev])
-      toast.success("Playlist created successfully")
-      setShowCreateDialog(false)
-    } catch (error) {
-      console.error("Error creating playlist:", error)
-      toast.error(error instanceof Error ? error.message : "Failed to create playlist")
-    }
+  const handlePlaylistCreated = () => {
+    console.log("🎵 [PLAYLISTS PAGE] Playlist created, refreshing list...")
+    fetchPlaylists()
   }
 
   const handleDeletePlaylist = async (playlist: Playlist) => {
+    console.log("🎵 [PLAYLISTS PAGE] Deleting playlist:", playlist.id)
     try {
       const response = await fetch(`/api/playlists/${playlist.id}`, {
         method: "DELETE",
       })
 
       if (!response.ok) {
-        const error = await response.json()
-        throw new Error(error.error || "Failed to delete playlist")
+        const errorData = await response.json()
+        throw new Error(errorData.error || "Failed to delete playlist")
       }
+
+      const data = await response.json()
+      console.log("🎵 [PLAYLISTS PAGE] Delete response:", data)
 
       setPlaylists((prev) => prev.filter((p) => p.id !== playlist.id))
       toast.success("Playlist deleted successfully")
       setDeletePlaylist(null)
     } catch (error) {
-      console.error("Error deleting playlist:", error)
+      console.error("🎵 [PLAYLISTS PAGE] Error deleting playlist:", error)
       toast.error(error instanceof Error ? error.message : "Failed to delete playlist")
     }
   }
 
   const handleDuplicatePlaylist = async (playlist: Playlist) => {
+    console.log("🎵 [PLAYLISTS PAGE] Duplicating playlist:", playlist.id)
     try {
       const duplicateData = {
         name: `${playlist.name} (Copy)`,
@@ -126,10 +123,29 @@ export default function PlaylistsPage() {
         selected_days: [],
       }
 
-      await handleCreatePlaylist(duplicateData)
+      const response = await fetch("/api/playlists", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(duplicateData),
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.error || "Failed to duplicate playlist")
+      }
+
+      const data = await response.json()
+      console.log("🎵 [PLAYLISTS PAGE] Duplicate response:", data)
+
+      if (data.success) {
+        setPlaylists((prev) => [data.playlist, ...prev])
+        toast.success("Playlist duplicated successfully")
+      }
     } catch (error) {
-      console.error("Error duplicating playlist:", error)
-      toast.error("Failed to duplicate playlist")
+      console.error("🎵 [PLAYLISTS PAGE] Error duplicating playlist:", error)
+      toast.error(error instanceof Error ? error.message : "Failed to duplicate playlist")
     }
   }
 
@@ -202,6 +218,42 @@ export default function PlaylistsPage() {
     )
   }
 
+  if (error) {
+    return (
+      <DashboardLayout>
+        <div className="space-y-6">
+          <div className="flex justify-between items-center">
+            <div>
+              <h1 className="text-3xl font-bold">Playlists</h1>
+              <p className="text-gray-600">Create and manage content playlists for your screens</p>
+            </div>
+            <Button onClick={fetchPlaylists}>
+              <RefreshCw className="h-4 w-4 mr-2" />
+              Retry
+            </Button>
+          </div>
+
+          <Card>
+            <CardContent className="flex flex-col items-center justify-center py-12">
+              <AlertCircle className="h-12 w-12 text-red-400 mb-4" />
+              <h3 className="text-lg font-semibold text-gray-900 mb-2">Failed to Load Playlists</h3>
+              <p className="text-gray-600 text-center mb-4">{error}</p>
+              <div className="flex space-x-2">
+                <Button onClick={fetchPlaylists}>
+                  <RefreshCw className="h-4 w-4 mr-2" />
+                  Try Again
+                </Button>
+                <Button variant="outline" onClick={() => window.open("/api/debug-playlists", "_blank")}>
+                  Debug Info
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      </DashboardLayout>
+    )
+  }
+
   return (
     <DashboardLayout>
       <div className="space-y-6">
@@ -210,10 +262,16 @@ export default function PlaylistsPage() {
             <h1 className="text-3xl font-bold">Playlists</h1>
             <p className="text-gray-600">Create and manage content playlists for your screens</p>
           </div>
-          <Button onClick={() => setShowCreateDialog(true)}>
-            <Plus className="h-4 w-4 mr-2" />
-            Create Playlist
-          </Button>
+          <div className="flex space-x-2">
+            <Button variant="outline" onClick={fetchPlaylists}>
+              <RefreshCw className="h-4 w-4 mr-2" />
+              Refresh
+            </Button>
+            <Button onClick={() => setShowCreateDialog(true)}>
+              <Plus className="h-4 w-4 mr-2" />
+              Create Playlist
+            </Button>
+          </div>
         </div>
 
         {/* Stats */}
@@ -367,7 +425,7 @@ export default function PlaylistsPage() {
         <CreatePlaylistDialog
           open={showCreateDialog}
           onOpenChange={setShowCreateDialog}
-          onCreatePlaylist={handleCreatePlaylist}
+          onPlaylistCreated={handlePlaylistCreated}
         />
 
         <AlertDialog open={!!deletePlaylist} onOpenChange={() => setDeletePlaylist(null)}>

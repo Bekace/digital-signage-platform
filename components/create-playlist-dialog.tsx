@@ -1,8 +1,9 @@
 "use client"
 
 import type React from "react"
-
 import { useState } from "react"
+import { toast } from "sonner"
+
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -14,7 +15,7 @@ import { Checkbox } from "@/components/ui/checkbox"
 interface CreatePlaylistDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
-  onCreatePlaylist: (playlistData: any) => Promise<void>
+  onPlaylistCreated?: () => void
 }
 
 const daysOfWeek = [
@@ -27,7 +28,7 @@ const daysOfWeek = [
   { id: "sunday", label: "Sunday" },
 ]
 
-export function CreatePlaylistDialog({ open, onOpenChange, onCreatePlaylist }: CreatePlaylistDialogProps) {
+export function CreatePlaylistDialog({ open, onOpenChange, onPlaylistCreated }: CreatePlaylistDialogProps) {
   const [formData, setFormData] = useState({
     name: "",
     description: "",
@@ -39,17 +40,31 @@ export function CreatePlaylistDialog({ open, onOpenChange, onCreatePlaylist }: C
   })
   const [isSubmitting, setIsSubmitting] = useState(false)
 
+  const resetForm = () => {
+    setFormData({
+      name: "",
+      description: "",
+      loop_enabled: true,
+      schedule_enabled: false,
+      start_time: "09:00",
+      end_time: "17:00",
+      selected_days: ["monday", "tuesday", "wednesday", "thursday", "friday"],
+    })
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    console.log("🎵 [CREATE PLAYLIST] Form submitted:", formData)
 
     if (!formData.name.trim()) {
+      toast.error("Playlist name is required")
       return
     }
 
     setIsSubmitting(true)
 
     try {
-      await onCreatePlaylist({
+      const payload = {
         name: formData.name.trim(),
         description: formData.description.trim() || null,
         loop_enabled: formData.loop_enabled,
@@ -57,20 +72,40 @@ export function CreatePlaylistDialog({ open, onOpenChange, onCreatePlaylist }: C
         start_time: formData.schedule_enabled ? formData.start_time : null,
         end_time: formData.schedule_enabled ? formData.end_time : null,
         selected_days: formData.schedule_enabled ? formData.selected_days : [],
+      }
+
+      console.log("🎵 [CREATE PLAYLIST] Sending payload:", payload)
+
+      const response = await fetch("/api/playlists", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(payload),
       })
 
-      // Reset form
-      setFormData({
-        name: "",
-        description: "",
-        loop_enabled: true,
-        schedule_enabled: false,
-        start_time: "09:00",
-        end_time: "17:00",
-        selected_days: ["monday", "tuesday", "wednesday", "thursday", "friday"],
-      })
+      console.log("🎵 [CREATE PLAYLIST] Response status:", response.status)
+
+      if (!response.ok) {
+        const errorData = await response.json()
+        console.error("🎵 [CREATE PLAYLIST] Error response:", errorData)
+        throw new Error(errorData.error || `HTTP ${response.status}: ${response.statusText}`)
+      }
+
+      const data = await response.json()
+      console.log("🎵 [CREATE PLAYLIST] Success response:", data)
+
+      toast.success("Playlist created successfully!")
+      resetForm()
+      onOpenChange(false)
+
+      // Notify parent component to refresh data
+      if (onPlaylistCreated) {
+        onPlaylistCreated()
+      }
     } catch (error) {
-      // Error handling is done in the parent component
+      console.error("🎵 [CREATE PLAYLIST] Error:", error)
+      toast.error(error instanceof Error ? error.message : "Failed to create playlist")
     } finally {
       setIsSubmitting(false)
     }
@@ -83,8 +118,15 @@ export function CreatePlaylistDialog({ open, onOpenChange, onCreatePlaylist }: C
     }))
   }
 
+  const handleClose = () => {
+    if (!isSubmitting) {
+      resetForm()
+      onOpenChange(false)
+    }
+  }
+
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={handleClose}>
       <DialogContent className="sm:max-w-[500px]">
         <DialogHeader>
           <DialogTitle>Create New Playlist</DialogTitle>
@@ -102,6 +144,7 @@ export function CreatePlaylistDialog({ open, onOpenChange, onCreatePlaylist }: C
                 placeholder="e.g., Morning Announcements"
                 required
                 disabled={isSubmitting}
+                maxLength={255}
               />
             </div>
 
@@ -114,6 +157,7 @@ export function CreatePlaylistDialog({ open, onOpenChange, onCreatePlaylist }: C
                 placeholder="Brief description of this playlist..."
                 rows={3}
                 disabled={isSubmitting}
+                maxLength={1000}
               />
             </div>
 
@@ -153,6 +197,7 @@ export function CreatePlaylistDialog({ open, onOpenChange, onCreatePlaylist }: C
                         value={formData.start_time}
                         onChange={(e) => setFormData((prev) => ({ ...prev, start_time: e.target.value }))}
                         disabled={isSubmitting}
+                        required={formData.schedule_enabled}
                       />
                     </div>
                     <div className="space-y-2">
@@ -163,6 +208,7 @@ export function CreatePlaylistDialog({ open, onOpenChange, onCreatePlaylist }: C
                         value={formData.end_time}
                         onChange={(e) => setFormData((prev) => ({ ...prev, end_time: e.target.value }))}
                         disabled={isSubmitting}
+                        required={formData.schedule_enabled}
                       />
                     </div>
                   </div>
@@ -184,6 +230,9 @@ export function CreatePlaylistDialog({ open, onOpenChange, onCreatePlaylist }: C
                         </div>
                       ))}
                     </div>
+                    {formData.schedule_enabled && formData.selected_days.length === 0 && (
+                      <p className="text-sm text-red-600">At least one day must be selected</p>
+                    )}
                   </div>
                 </div>
               )}
@@ -191,10 +240,17 @@ export function CreatePlaylistDialog({ open, onOpenChange, onCreatePlaylist }: C
           </div>
 
           <div className="flex justify-end space-x-2">
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={isSubmitting}>
+            <Button type="button" variant="outline" onClick={handleClose} disabled={isSubmitting}>
               Cancel
             </Button>
-            <Button type="submit" disabled={!formData.name.trim() || isSubmitting}>
+            <Button
+              type="submit"
+              disabled={
+                !formData.name.trim() ||
+                isSubmitting ||
+                (formData.schedule_enabled && formData.selected_days.length === 0)
+              }
+            >
               {isSubmitting ? "Creating..." : "Create Playlist"}
             </Button>
           </div>
