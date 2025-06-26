@@ -3,7 +3,7 @@
 import type React from "react"
 
 import { useState, useEffect } from "react"
-import { Home, Monitor, ImageIcon, Play, Settings, Shield, Menu, DollarSign, Users, Tag } from "lucide-react"
+import { Home, Monitor, ImageIcon, Play, Settings, Shield, Menu, DollarSign, Users, Tag, Bug } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet"
@@ -29,6 +29,7 @@ const adminNavigation = [
   { name: "User Management", href: "/dashboard/admin/users", icon: Users },
   { name: "Plan Management", href: "/dashboard/admin/plans", icon: DollarSign },
   { name: "Feature Management", href: "/dashboard/admin/features", icon: Tag },
+  { name: "Debug Dashboard", href: "/dashboard/debug", icon: Bug },
 ]
 
 export function DashboardLayout({ children }: DashboardLayoutProps) {
