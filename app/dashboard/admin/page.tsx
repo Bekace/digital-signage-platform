@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { Shield, Users, Loader2, AlertCircle } from "lucide-react"
+import { Shield, Users, Loader2, AlertCircle, Bug, ExternalLink } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
@@ -221,6 +221,23 @@ export default function AdminPage() {
             </CardContent>
           </Card>
         </div>
+
+        {/* Debug Dashboard Link */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center space-x-2">
+              <Bug className="h-5 w-5" />
+              <span>Debug Dashboard</span>
+            </CardTitle>
+            <CardDescription>Access all debugging tools and diagnostic utilities</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Button onClick={() => window.open("/dashboard/debug", "_blank")} className="w-full">
+              <ExternalLink className="h-4 w-4 mr-2" />
+              Open Debug Dashboard
+            </Button>
+          </CardContent>
+        </Card>
 
         {/* Users Table */}
         {users.length > 0 && (
