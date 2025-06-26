@@ -238,6 +238,7 @@ export default function PlaylistEditorPage({ params }: { params: { playlistId: s
   const [playlistItems, setPlaylistItems] = useState<PlaylistItem[]>([])
   const [mediaFiles, setMediaFiles] = useState<MediaFile[]>([])
   const [loading, setLoading] = useState(true)
+  const [mediaLoading, setMediaLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [showOptionsDialog, setShowOptionsDialog] = useState(false)
   const [removeItem, setRemoveItem] = useState<PlaylistItem | null>(null)
@@ -293,14 +294,28 @@ export default function PlaylistEditorPage({ params }: { params: { playlistId: s
 
   const fetchMediaFiles = async () => {
     try {
+      setMediaLoading(true)
+      console.log("🎬 [PLAYLIST EDITOR] Fetching media files...")
+
       const response = await fetch("/api/media")
       const data = await response.json()
 
+      console.log("🎬 [PLAYLIST EDITOR] Media API response:", data)
+
       if (response.ok) {
-        setMediaFiles(data.media || [])
+        // Try both 'media' and 'files' properties for compatibility
+        const mediaArray = data.media || data.files || []
+        console.log("🎬 [PLAYLIST EDITOR] Setting media files:", mediaArray)
+        setMediaFiles(mediaArray)
+      } else {
+        console.error("🎬 [PLAYLIST EDITOR] Failed to fetch media:", data.error)
+        toast.error("Failed to load media library")
       }
     } catch (error) {
-      console.error("Error fetching media files:", error)
+      console.error("🎬 [PLAYLIST EDITOR] Error fetching media files:", error)
+      toast.error("Failed to load media library")
+    } finally {
+      setMediaLoading(false)
     }
   }
 
@@ -345,6 +360,8 @@ export default function PlaylistEditorPage({ params }: { params: { playlistId: s
 
   const handleAddMedia = async (mediaId: number) => {
     try {
+      console.log("➕ [PLAYLIST EDITOR] Adding media to playlist:", mediaId)
+
       const response = await fetch(`/api/playlists/${playlistId}/items`, {
         method: "POST",
         headers: {
@@ -356,9 +373,11 @@ export default function PlaylistEditorPage({ params }: { params: { playlistId: s
         }),
       })
 
+      const responseData = await response.json()
+      console.log("➕ [PLAYLIST EDITOR] Add media response:", responseData)
+
       if (!response.ok) {
-        const errorData = await response.json()
-        throw new Error(errorData.error || "Failed to add media to playlist")
+        throw new Error(responseData.error || "Failed to add media to playlist")
       }
 
       toast.success("Media added to playlist")
@@ -581,7 +600,7 @@ export default function PlaylistEditorPage({ params }: { params: { playlistId: s
                     </div>
                     <h3 className="text-lg font-medium text-gray-900 mb-2">Empty Playlist</h3>
                     <p className="text-gray-600 mb-4">
-                      Drag and Drop asset from the right or playlist from the left to here!
+                      Click on media files from the Media Library on the right to add them to your playlist!
                     </p>
                   </div>
                 ) : (
@@ -615,9 +634,9 @@ export default function PlaylistEditorPage({ params }: { params: { playlistId: s
               <CardHeader>
                 <div className="flex items-center justify-between">
                   <CardTitle>Media Library</CardTitle>
-                  <Button size="sm" variant="outline">
-                    <Plus className="h-4 w-4 mr-2" />
-                    New
+                  <Button size="sm" variant="outline" onClick={fetchMediaFiles}>
+                    <RefreshCw className="h-4 w-4 mr-2" />
+                    Refresh
                   </Button>
                 </div>
                 <div className="relative">
@@ -631,18 +650,37 @@ export default function PlaylistEditorPage({ params }: { params: { playlistId: s
                 </div>
               </CardHeader>
               <CardContent>
-                <div className="space-y-3 max-h-96 overflow-y-auto">
-                  {filteredMediaFiles.length === 0 ? (
-                    <div className="text-center py-8">
-                      <File className="h-8 w-8 text-gray-400 mx-auto mb-2" />
-                      <p className="text-sm text-gray-600">No media files found</p>
-                    </div>
-                  ) : (
-                    filteredMediaFiles.map((media) => (
-                      <MediaLibraryItem key={media.id} media={media} onAdd={handleAddMedia} />
-                    ))
-                  )}
-                </div>
+                {mediaLoading ? (
+                  <div className="space-y-3">
+                    {[1, 2, 3].map((i) => (
+                      <div key={i} className="flex items-center space-x-3 p-3">
+                        <Skeleton className="w-12 h-12 rounded" />
+                        <div className="flex-1">
+                          <Skeleton className="h-4 w-full mb-2" />
+                          <Skeleton className="h-3 w-20" />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="space-y-3 max-h-96 overflow-y-auto">
+                    {filteredMediaFiles.length === 0 ? (
+                      <div className="text-center py-8">
+                        <File className="h-8 w-8 text-gray-400 mx-auto mb-2" />
+                        <p className="text-sm text-gray-600 mb-2">
+                          {searchQuery ? "No media files match your search" : "No media files found"}
+                        </p>
+                        <p className="text-xs text-gray-500">
+                          Upload media files to your library to add them to playlists
+                        </p>
+                      </div>
+                    ) : (
+                      filteredMediaFiles.map((media) => (
+                        <MediaLibraryItem key={media.id} media={media} onAdd={handleAddMedia} />
+                      ))
+                    )}
+                  </div>
+                )}
               </CardContent>
             </Card>
           </div>

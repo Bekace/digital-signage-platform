@@ -1,30 +1,19 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import Image from "next/image"
-import {
-  Upload,
-  Search,
-  Filter,
-  MoreHorizontal,
-  Download,
-  Trash2,
-  Eye,
-  Video,
-  FileText,
-  Loader2,
-  ExternalLink,
-} from "lucide-react"
+import { Upload, Search, Filter, Grid, List, Trash2, Eye, Download, Plus } from "lucide-react"
+import { toast } from "sonner"
 
 import { Button } from "@/components/ui/button"
-import { Card, CardContent } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
+import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
+import { Skeleton } from "@/components/ui/skeleton"
 import { DashboardLayout } from "@/components/dashboard-layout"
 import { UploadMediaDialog } from "@/components/upload-media-dialog"
-import { UsageDashboard } from "@/components/usage-dashboard"
+import { GoogleSlidesDialog } from "@/components/google-slides-dialog"
 import { MediaPreviewModal } from "@/components/media-preview-modal"
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -35,163 +24,72 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
-import { GoogleSlidesDialog } from "@/components/google-slides-dialog"
 
 interface MediaFile {
   id: number
   filename: string
-  original_name: string
+  original_filename: string
   file_type: string
   file_size: number
   url: string
   thumbnail_url?: string
   created_at: string
-  mime_type?: string
-  dimensions?: string
   duration?: number
+  dimensions?: string
 }
 
 export default function MediaPage() {
-  const [showUploadDialog, setShowUploadDialog] = useState(false)
-  const [searchTerm, setSearchTerm] = useState("")
   const [mediaFiles, setMediaFiles] = useState<MediaFile[]>([])
   const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-  const [previewFile, setPreviewFile] = useState<MediaFile | null>(null)
-  const [showPreview, setShowPreview] = useState(false)
-  const [deleteFile, setDeleteFile] = useState<MediaFile | null>(null)
-  const [showDeleteDialog, setShowDeleteDialog] = useState(false)
-  const [deleting, setDeleting] = useState(false)
-  const [refreshTrigger, setRefreshTrigger] = useState(0)
+  const [searchQuery, setSearchQuery] = useState("")
+  const [viewMode, setViewMode] = useState<"grid" | "list">("grid")
+  const [showUploadDialog, setShowUploadDialog] = useState(false)
   const [showGoogleSlidesDialog, setShowGoogleSlidesDialog] = useState(false)
+  const [selectedFile, setSelectedFile] = useState<MediaFile | null>(null)
+  const [fileToDelete, setFileToDelete] = useState<MediaFile | null>(null)
 
-  const loadMediaFiles = async () => {
+  useEffect(() => {
+    fetchMediaFiles()
+  }, [])
+
+  const fetchMediaFiles = async () => {
     try {
       setLoading(true)
       const response = await fetch("/api/media")
       const data = await response.json()
 
       if (response.ok) {
+        // Use 'files' property for media library page
         setMediaFiles(data.files || [])
-        setError(null)
       } else {
-        setError(data.error || "Failed to load media files")
+        toast.error("Failed to load media files")
       }
-    } catch (err) {
-      setError("Failed to load media files")
-      console.error("Error loading media files:", err)
+    } catch (error) {
+      console.error("Error fetching media files:", error)
+      toast.error("Failed to load media files")
     } finally {
       setLoading(false)
     }
   }
 
-  useEffect(() => {
-    loadMediaFiles()
-  }, [])
-
-  const triggerRefresh = () => {
-    setRefreshTrigger((prev) => prev + 1)
-  }
-
-  const handleUploadComplete = () => {
-    loadMediaFiles()
-    setShowUploadDialog(false)
-    triggerRefresh() // This should trigger usage dashboard refresh
-  }
-
-  const handleGoogleSlidesAdded = () => {
-    loadMediaFiles()
-    setShowGoogleSlidesDialog(false)
-    triggerRefresh()
-  }
-
-  const handlePreview = (file: MediaFile) => {
-    setPreviewFile(file)
-    setShowPreview(true)
-  }
-
-  const handleDelete = async (file: MediaFile) => {
-    setDeleteFile(file)
-    setShowDeleteDialog(true)
-  }
-
-  const confirmDelete = async () => {
-    if (!deleteFile) return
-
+  const handleDeleteFile = async (file: MediaFile) => {
     try {
-      setDeleting(true)
-      const response = await fetch(`/api/media/${deleteFile.id}`, {
+      const response = await fetch(`/api/media/${file.id}`, {
         method: "DELETE",
       })
 
-      const data = await response.json()
-
       if (response.ok) {
-        setMediaFiles((prev) => prev.filter((f) => f.id !== deleteFile.id))
-        setShowDeleteDialog(false)
-        setDeleteFile(null)
-        triggerRefresh() // This should refresh usage data
-        console.log(data.message)
+        setMediaFiles((prev) => prev.filter((f) => f.id !== file.id))
+        toast.success("File deleted successfully")
       } else {
-        setError(data.error || "Failed to delete file")
+        toast.error("Failed to delete file")
       }
-    } catch (err) {
-      setError("Failed to delete file")
-      console.error("Error deleting file:", err)
+    } catch (error) {
+      console.error("Error deleting file:", error)
+      toast.error("Failed to delete file")
     } finally {
-      setDeleting(false)
+      setFileToDelete(null)
     }
-  }
-
-  const getFileIcon = (file: MediaFile) => {
-    const isImage = file.mime_type?.startsWith("image/") || file.file_type === "image"
-    const isVideo = file.mime_type?.startsWith("video/") || file.file_type === "video"
-    const isPresentation = file.file_type === "presentation"
-
-    if (isVideo) return <Video className="h-4 w-4" />
-    if (isPresentation) return <ExternalLink className="h-4 w-4" />
-    if (isImage) return <Image className="h-4 w-4" />
-    return <FileText className="h-4 w-4" />
-  }
-
-  const getFileTypeColor = (file: MediaFile) => {
-    const isImage = file.mime_type?.startsWith("image/") || file.file_type === "image"
-    const isVideo = file.mime_type?.startsWith("video/") || file.file_type === "video"
-    const isPDF = file.mime_type === "application/pdf"
-    const isAudio = file.mime_type?.startsWith("audio/")
-    const isPresentation = file.file_type === "presentation"
-    const isOffice =
-      file.mime_type?.includes("office") ||
-      file.mime_type?.includes("powerpoint") ||
-      file.mime_type?.includes("presentation")
-
-    if (isVideo) return "bg-blue-100 text-blue-800"
-    if (isPresentation) return "bg-purple-100 text-purple-800"
-    if (isImage) return "bg-green-100 text-green-800"
-    if (isPDF) return "bg-red-100 text-red-800"
-    if (isAudio) return "bg-purple-100 text-purple-800"
-    if (isOffice) return "bg-orange-100 text-orange-800"
-    return "bg-gray-100 text-gray-800"
-  }
-
-  const getFileTypeLabel = (file: MediaFile) => {
-    const isImage = file.mime_type?.startsWith("image/") || file.file_type === "image"
-    const isVideo = file.mime_type?.startsWith("video/") || file.file_type === "video"
-    const isPDF = file.mime_type === "application/pdf"
-    const isAudio = file.mime_type?.startsWith("audio/")
-    const isPresentation = file.file_type === "presentation"
-    const isOffice =
-      file.mime_type?.includes("office") ||
-      file.mime_type?.includes("powerpoint") ||
-      file.mime_type?.includes("presentation")
-
-    if (isVideo) return "video"
-    if (isPresentation) return "slides"
-    if (isImage) return "image"
-    if (isPDF) return "pdf"
-    if (isAudio) return "audio"
-    if (isOffice) return "office"
-    return "document"
   }
 
   const formatFileSize = (bytes: number) => {
@@ -202,264 +100,264 @@ export default function MediaPage() {
     return Number.parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i]
   }
 
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString()
+  const getFileTypeColor = (fileType: string) => {
+    if (fileType.startsWith("image/")) return "bg-blue-100 text-blue-800"
+    if (fileType.startsWith("video/")) return "bg-purple-100 text-purple-800"
+    if (fileType.includes("pdf")) return "bg-red-100 text-red-800"
+    if (fileType.includes("presentation") || fileType.includes("slides")) return "bg-orange-100 text-orange-800"
+    return "bg-gray-100 text-gray-800"
   }
 
-  const getThumbnail = (file: MediaFile) => {
-    const isImage = file.mime_type?.startsWith("image/") || file.file_type === "image"
-    const isPresentation = file.file_type === "presentation"
+  const filteredFiles = mediaFiles.filter((file) =>
+    file.original_filename.toLowerCase().includes(searchQuery.toLowerCase()),
+  )
 
-    if (isImage) {
-      return file.url
-    }
-
-    if (isPresentation) {
-      return "/thumbnails/slides.png"
-    }
-
-    // Use custom thumbnails based on file type
-    const mimeType = file.mime_type?.toLowerCase() || ""
-    const fileName = file.original_name.toLowerCase()
-
-    // PDF files
-    if (mimeType === "application/pdf" || fileName.endsWith(".pdf")) {
-      return "/thumbnails/pdf.png"
-    }
-
-    // Video files
-    if (mimeType.startsWith("video/") || fileName.match(/\.(mp4|avi|mov|wmv|flv|webm|mkv)$/)) {
-      return "/thumbnails/video.png"
-    }
-
-    // Audio files
-    if (mimeType.startsWith("audio/") || fileName.match(/\.(mp3|wav|flac|aac|ogg|wma)$/)) {
-      return "/thumbnails/audio.png"
-    }
-
-    // Office files (PowerPoint, Word, Excel)
-    if (
-      mimeType.includes("powerpoint") ||
-      mimeType.includes("presentation") ||
-      mimeType.includes("word") ||
-      mimeType.includes("excel") ||
-      mimeType.includes("spreadsheet") ||
-      fileName.match(/\.(ppt|pptx|doc|docx|xls|xlsx)$/)
-    ) {
-      return "/thumbnails/office.png"
-    }
-
-    // Generic fallback for other file types
-    return "/thumbnails/generic.png"
-  }
-
-  const filteredFiles = mediaFiles.filter((file) => file.original_name.toLowerCase().includes(searchTerm.toLowerCase()))
-
-  return (
-    <DashboardLayout>
-      <div className="space-y-6">
-        <div className="flex justify-between items-center">
-          <div>
-            <h1 className="text-3xl font-bold">Media Library</h1>
-            <p className="text-gray-600">Upload and manage your digital content</p>
+  const MediaCard = ({ file }: { file: MediaFile }) => (
+    <Card className="group hover:shadow-md transition-shadow">
+      <CardContent className="p-4">
+        <div className="aspect-video bg-gray-100 rounded-lg mb-3 overflow-hidden relative">
+          {file.thumbnail_url ? (
+            <img
+              src={file.thumbnail_url || "/placeholder.svg"}
+              alt={file.original_filename}
+              className="w-full h-full object-cover"
+              onError={(e) => {
+                const target = e.target as HTMLImageElement
+                target.style.display = "none"
+                target.nextElementSibling?.classList.remove("hidden")
+              }}
+            />
+          ) : null}
+          <div className={`w-full h-full flex items-center justify-center ${file.thumbnail_url ? "hidden" : ""}`}>
+            <div className="text-center">
+              <div className="w-12 h-12 bg-gray-200 rounded-lg flex items-center justify-center mx-auto mb-2">
+                {file.file_type.startsWith("image/") && <Eye className="h-6 w-6 text-gray-500" />}
+                {file.file_type.startsWith("video/") && <Eye className="h-6 w-6 text-gray-500" />}
+                {file.file_type.includes("pdf") && <Eye className="h-6 w-6 text-gray-500" />}
+              </div>
+              <p className="text-xs text-gray-500 capitalize">{file.file_type.split("/")[0]}</p>
+            </div>
           </div>
-          <div className="flex gap-2">
+          <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button>
-                  <Upload className="h-4 w-4 mr-2" />
-                  Add Media
+                <Button variant="secondary" size="sm">
+                  •••
                 </Button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuItem onClick={() => setShowUploadDialog(true)}>
-                  <Upload className="h-4 w-4 mr-2" />
-                  Upload Files
+              <DropdownMenuContent>
+                <DropdownMenuItem onClick={() => setSelectedFile(file)}>
+                  <Eye className="h-4 w-4 mr-2" />
+                  Preview
                 </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => setShowGoogleSlidesDialog(true)}>
-                  <ExternalLink className="h-4 w-4 mr-2" />
-                  Add Google Slides
+                <DropdownMenuItem onClick={() => window.open(file.url, "_blank")}>
+                  <Download className="h-4 w-4 mr-2" />
+                  Download
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => setFileToDelete(file)} className="text-red-600 focus:text-red-600">
+                  <Trash2 className="h-4 w-4 mr-2" />
+                  Delete
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
           </div>
         </div>
-
-        {/* Search and Filter */}
-        <div className="flex space-x-4">
-          <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
-            <Input
-              placeholder="Search media files..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-10"
-            />
+        <div className="space-y-2">
+          <h3 className="font-medium text-sm truncate" title={file.original_filename}>
+            {file.original_filename}
+          </h3>
+          <div className="flex items-center justify-between">
+            <Badge variant="secondary" className={getFileTypeColor(file.file_type)}>
+              {file.file_type.split("/")[0]}
+            </Badge>
+            <span className="text-xs text-gray-500">{formatFileSize(file.file_size)}</span>
           </div>
-          <Button variant="outline">
-            <Filter className="h-4 w-4 mr-2" />
-            Filter
-          </Button>
         </div>
+      </CardContent>
+    </Card>
+  )
 
-        {/* Usage Dashboard */}
-        <UsageDashboard refreshTrigger={refreshTrigger} />
-
-        {/* Loading State */}
-        {loading && (
-          <div className="flex items-center justify-center py-12">
-            <Loader2 className="h-8 w-8 animate-spin" />
-            <span className="ml-2">Loading media files...</span>
+  const MediaListItem = ({ file }: { file: MediaFile }) => (
+    <Card>
+      <CardContent className="p-4">
+        <div className="flex items-center space-x-4">
+          <div className="w-16 h-16 bg-gray-100 rounded-lg overflow-hidden flex-shrink-0">
+            {file.thumbnail_url ? (
+              <img
+                src={file.thumbnail_url || "/placeholder.svg"}
+                alt={file.original_filename}
+                className="w-full h-full object-cover"
+              />
+            ) : (
+              <div className="w-full h-full flex items-center justify-center">
+                <Eye className="h-6 w-6 text-gray-400" />
+              </div>
+            )}
           </div>
-        )}
-
-        {/* Error State */}
-        {error && (
-          <div className="text-center py-12">
-            <p className="text-red-600 mb-4">{error}</p>
-            <Button onClick={loadMediaFiles} variant="outline">
-              Try Again
+          <div className="flex-1 min-w-0">
+            <h3 className="font-medium truncate">{file.original_filename}</h3>
+            <div className="flex items-center space-x-4 mt-1">
+              <Badge variant="secondary" className={getFileTypeColor(file.file_type)}>
+                {file.file_type.split("/")[0]}
+              </Badge>
+              <span className="text-sm text-gray-500">{formatFileSize(file.file_size)}</span>
+              <span className="text-sm text-gray-500">{new Date(file.created_at).toLocaleDateString()}</span>
+            </div>
+          </div>
+          <div className="flex items-center space-x-2">
+            <Button variant="ghost" size="sm" onClick={() => setSelectedFile(file)}>
+              <Eye className="h-4 w-4" />
+            </Button>
+            <Button variant="ghost" size="sm" onClick={() => window.open(file.url, "_blank")}>
+              <Download className="h-4 w-4" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setFileToDelete(file)}
+              className="text-red-500 hover:text-red-700"
+            >
+              <Trash2 className="h-4 w-4" />
             </Button>
           </div>
-        )}
+        </div>
+      </CardContent>
+    </Card>
+  )
 
-        {/* Empty State */}
-        {!loading && !error && filteredFiles.length === 0 && (
-          <div className="text-center py-12">
-            <Upload className="h-12 w-12 mx-auto text-gray-400 mb-4" />
-            <h3 className="text-lg font-medium text-gray-900 mb-2">No media files yet</h3>
-            <p className="text-gray-500 mb-4">Upload your first image, video, or document to get started.</p>
+  return (
+    <DashboardLayout>
+      <div className="space-y-6">
+        {/* Header */}
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-bold">Media Library</h1>
+            <p className="text-gray-600">Manage your media files and assets</p>
+          </div>
+          <div className="flex items-center space-x-2">
+            <Button onClick={() => setShowGoogleSlidesDialog(true)} variant="outline">
+              <Plus className="h-4 w-4 mr-2" />
+              Google Slides
+            </Button>
             <Button onClick={() => setShowUploadDialog(true)}>
               <Upload className="h-4 w-4 mr-2" />
               Upload Media
             </Button>
           </div>
-        )}
+        </div>
 
-        {/* Media Grid */}
-        {!loading && !error && filteredFiles.length > 0 && (
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-            {filteredFiles.map((file) => (
-              <Card key={file.id} className="group hover:shadow-md transition-shadow">
+        {/* Filters and Search */}
+        <div className="flex items-center justify-between">
+          <div className="flex items-center space-x-4">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+              <Input
+                placeholder="Search media files..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="pl-10 w-80"
+              />
+            </div>
+            <Button variant="outline" size="sm">
+              <Filter className="h-4 w-4 mr-2" />
+              Filter
+            </Button>
+          </div>
+          <div className="flex items-center space-x-2">
+            <Button variant={viewMode === "grid" ? "default" : "outline"} size="sm" onClick={() => setViewMode("grid")}>
+              <Grid className="h-4 w-4" />
+            </Button>
+            <Button variant={viewMode === "list" ? "default" : "outline"} size="sm" onClick={() => setViewMode("list")}>
+              <List className="h-4 w-4" />
+            </Button>
+          </div>
+        </div>
+
+        {/* Media Grid/List */}
+        {loading ? (
+          <div className={viewMode === "grid" ? "grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-6" : "space-y-4"}>
+            {[...Array(8)].map((_, i) => (
+              <Card key={i}>
                 <CardContent className="p-4">
-                  <div className="space-y-3">
-                    <div className="relative">
-                      <img
-                        src={getThumbnail(file) || "/placeholder.svg"}
-                        alt={file.original_name}
-                        className="w-full h-32 object-cover rounded-lg bg-gray-100 cursor-pointer"
-                        onClick={() => handlePreview(file)}
-                        onError={(e) => {
-                          // Fallback to generic thumbnail if custom thumbnail fails
-                          e.currentTarget.src = "/thumbnails/generic.png"
-                        }}
-                      />
-                      <div className="absolute top-2 right-2">
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" size="sm" className="h-8 w-8 p-0 bg-white/80 hover:bg-white">
-                              <MoreHorizontal className="h-4 w-4" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
-                            <DropdownMenuItem onClick={() => handlePreview(file)}>
-                              <Eye className="h-4 w-4 mr-2" />
-                              Preview
-                            </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => window.open(file.url, "_blank")}>
-                              <Download className="h-4 w-4 mr-2" />
-                              Download
-                            </DropdownMenuItem>
-                            <DropdownMenuItem className="text-red-600" onClick={() => handleDelete(file)}>
-                              <Trash2 className="h-4 w-4 mr-2" />
-                              Delete
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      </div>
-                      <div className="absolute bottom-2 left-2">
-                        <Badge className={`${getFileTypeColor(file)} text-xs`}>
-                          {getFileIcon(file)}
-                          <span className="ml-1 capitalize">{getFileTypeLabel(file)}</span>
-                        </Badge>
-                      </div>
-                    </div>
-                    <div className="space-y-1">
-                      <h3 className="font-medium text-sm truncate" title={file.original_name}>
-                        {file.original_name}
-                      </h3>
-                      <div className="text-xs text-gray-500 space-y-1">
-                        <div className="flex justify-between">
-                          <span>Size:</span>
-                          <span>{formatFileSize(file.file_size)}</span>
-                        </div>
-                        {file.dimensions && (
-                          <div className="flex justify-between">
-                            <span>Dimensions:</span>
-                            <span>{file.dimensions}</span>
-                          </div>
-                        )}
-                        {file.duration && (
-                          <div className="flex justify-between">
-                            <span>Duration:</span>
-                            <span>
-                              {Math.floor(file.duration / 60)}:{(file.duration % 60).toString().padStart(2, "0")}
-                            </span>
-                          </div>
-                        )}
-                        <div className="flex justify-between">
-                          <span>Uploaded:</span>
-                          <span>{formatDate(file.created_at)}</span>
-                        </div>
-                      </div>
-                    </div>
+                  <Skeleton className="aspect-video w-full mb-3" />
+                  <Skeleton className="h-4 w-full mb-2" />
+                  <div className="flex justify-between">
+                    <Skeleton className="h-4 w-16" />
+                    <Skeleton className="h-4 w-12" />
                   </div>
                 </CardContent>
               </Card>
             ))}
           </div>
+        ) : filteredFiles.length === 0 ? (
+          <Card>
+            <CardContent className="flex flex-col items-center justify-center py-12">
+              <Upload className="h-12 w-12 text-gray-400 mb-4" />
+              <h3 className="text-lg font-semibold text-gray-900 mb-2">No media files</h3>
+              <p className="text-gray-600 text-center mb-4">
+                {searchQuery ? "No files match your search criteria." : "Upload your first media file to get started."}
+              </p>
+              {!searchQuery && (
+                <Button onClick={() => setShowUploadDialog(true)}>
+                  <Upload className="h-4 w-4 mr-2" />
+                  Upload Media
+                </Button>
+              )}
+            </CardContent>
+          </Card>
+        ) : viewMode === "grid" ? (
+          <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-6">
+            {filteredFiles.map((file) => (
+              <MediaCard key={file.id} file={file} />
+            ))}
+          </div>
+        ) : (
+          <div className="space-y-4">
+            {filteredFiles.map((file) => (
+              <MediaListItem key={file.id} file={file} />
+            ))}
+          </div>
         )}
 
+        {/* Upload Dialog */}
         <UploadMediaDialog
           open={showUploadDialog}
           onOpenChange={setShowUploadDialog}
-          onUploadComplete={handleUploadComplete}
+          onUploadComplete={fetchMediaFiles}
         />
 
-        <MediaPreviewModal file={previewFile} open={showPreview} onOpenChange={setShowPreview} />
+        {/* Google Slides Dialog */}
+        <GoogleSlidesDialog
+          open={showGoogleSlidesDialog}
+          onOpenChange={setShowGoogleSlidesDialog}
+          onUploadComplete={fetchMediaFiles}
+        />
 
-        {/* Delete Confirmation Dialog */}
-        <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+        {/* Preview Modal */}
+        {selectedFile && (
+          <MediaPreviewModal file={selectedFile} open={!!selectedFile} onOpenChange={() => setSelectedFile(null)} />
+        )}
+
+        {/* Delete Confirmation */}
+        <AlertDialog open={!!fileToDelete} onOpenChange={() => setFileToDelete(null)}>
           <AlertDialogContent>
             <AlertDialogHeader>
-              <AlertDialogTitle>Delete File</AlertDialogTitle>
+              <AlertDialogTitle>Delete Media File</AlertDialogTitle>
               <AlertDialogDescription>
-                Are you sure you want to delete "{deleteFile?.original_name}"? This action cannot be undone.
+                Are you sure you want to delete "{fileToDelete?.original_filename}"? This action cannot be undone.
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
-              <AlertDialogCancel disabled={deleting}>Cancel</AlertDialogCancel>
-              <AlertDialogAction onClick={confirmDelete} disabled={deleting} className="bg-red-600 hover:bg-red-700">
-                {deleting ? (
-                  <>
-                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                    Deleting...
-                  </>
-                ) : (
-                  <>
-                    <Trash2 className="h-4 w-4 mr-2" />
-                    Delete
-                  </>
-                )}
+              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogAction
+                onClick={() => fileToDelete && handleDeleteFile(fileToDelete)}
+                className="bg-red-600 hover:bg-red-700"
+              >
+                Delete
               </AlertDialogAction>
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
-        <GoogleSlidesDialog
-          open={showGoogleSlidesDialog}
-          onOpenChange={setShowGoogleSlidesDialog}
-          onSlidesAdded={handleGoogleSlidesAdded}
-        />
       </div>
     </DashboardLayout>
   )
