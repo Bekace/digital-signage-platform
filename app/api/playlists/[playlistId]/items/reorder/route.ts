@@ -15,6 +15,12 @@ export async function PUT(request: Request, { params }: { params: { playlistId: 
     }
 
     const body = await request.json()
+    const { items } = body
+
+    if (!items || !Array.isArray(items)) {
+      return NextResponse.json({ error: "Items array is required" }, { status: 400 })
+    }
+
     const sql = getDb()
     const playlistId = Number.parseInt(params.playlistId)
 
@@ -29,8 +35,8 @@ export async function PUT(request: Request, { params }: { params: { playlistId: 
       return NextResponse.json({ error: "Playlist not found" }, { status: 404 })
     }
 
-    // Update positions for all items
-    for (const item of body.items) {
+    // Update positions for each item
+    for (const item of items) {
       await sql`
         UPDATE playlist_items 
         SET position = ${item.position}
@@ -38,7 +44,7 @@ export async function PUT(request: Request, { params }: { params: { playlistId: 
       `
     }
 
-    console.log(`✅ [PLAYLIST REORDER API] Reordered ${body.items.length} items`)
+    console.log(`✅ [PLAYLIST REORDER API] Reordered ${items.length} items`)
 
     return NextResponse.json({
       success: true,
