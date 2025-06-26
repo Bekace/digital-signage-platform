@@ -17,7 +17,7 @@ export async function PUT(request: Request, { params }: { params: { playlistId: 
     const body = await request.json()
     const { items } = body
 
-    if (!items || !Array.isArray(items)) {
+    if (!Array.isArray(items)) {
       return NextResponse.json({ error: "Items array is required" }, { status: 400 })
     }
 

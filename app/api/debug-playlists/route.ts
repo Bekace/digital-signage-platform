@@ -24,11 +24,12 @@ export async function GET() {
       )
     `
 
+    console.log("📋 [DEBUG PLAYLISTS API] Playlists table exists:", tableExists[0].exists)
+
     if (!tableExists[0].exists) {
       return NextResponse.json({
         error: "Playlists table does not exist",
-        user_id: user.id,
-        table_exists: false,
+        suggestion: "Run the playlist setup script",
       })
     }
 
@@ -40,11 +41,9 @@ export async function GET() {
       ORDER BY ordinal_position
     `
 
-    // Get all playlists for debugging
+    // Get all playlists for this user
     const playlists = await sql`
-      SELECT * FROM playlists 
-      WHERE user_id = ${user.id}
-      ORDER BY created_at DESC
+      SELECT * FROM playlists WHERE user_id = ${user.id}
     `
 
     // Get playlist items table structure
@@ -69,9 +68,8 @@ export async function GET() {
       playlistItems = await sql`
         SELECT pi.*, p.name as playlist_name
         FROM playlist_items pi
-        LEFT JOIN playlists p ON pi.playlist_id = p.id
+        JOIN playlists p ON pi.playlist_id = p.id
         WHERE p.user_id = ${user.id}
-        ORDER BY pi.playlist_id, pi.position
       `
     }
 
@@ -79,16 +77,28 @@ export async function GET() {
 
     return NextResponse.json({
       success: true,
-      user_id: user.id,
-      user_email: user.email,
-      playlists_table_exists: tableExists[0].exists,
-      playlists_table_structure: tableStructure,
-      playlists_count: playlists.length,
-      playlists: playlists,
-      items_table_exists: itemsTableExists[0].exists,
-      items_table_structure: itemsTableStructure,
-      playlist_items_count: playlistItems.length,
-      playlist_items: playlistItems,
+      debug: {
+        user: {
+          id: user.id,
+          email: user.email,
+        },
+        tables: {
+          playlists_exists: tableExists[0].exists,
+          playlist_items_exists: itemsTableExists[0].exists,
+        },
+        structure: {
+          playlists: tableStructure,
+          playlist_items: itemsTableStructure,
+        },
+        data: {
+          playlists: playlists,
+          playlist_items: playlistItems,
+        },
+        counts: {
+          playlists: playlists.length,
+          playlist_items: playlistItems.length,
+        },
+      },
     })
   } catch (error) {
     console.error("❌ [DEBUG PLAYLISTS API] Error:", error)
@@ -96,6 +106,7 @@ export async function GET() {
       {
         error: "Debug failed",
         details: error instanceof Error ? error.message : "Unknown error",
+        stack: error instanceof Error ? error.stack : undefined,
       },
       { status: 500 },
     )

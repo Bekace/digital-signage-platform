@@ -5,7 +5,7 @@ import { getDb } from "@/lib/db"
 export const dynamic = "force-dynamic"
 
 export async function GET() {
-  console.log("📋 [PLAYLISTS API] Starting GET request")
+  console.log("🎵 [PLAYLISTS API] Starting GET request")
 
   try {
     const user = await getCurrentUser()
@@ -14,9 +14,11 @@ export async function GET() {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
+    console.log("✅ [PLAYLISTS API] User authenticated:", user.id)
+
     const sql = getDb()
 
-    // Get all playlists for the user with item counts
+    // Get playlists with item counts
     const playlists = await sql`
       SELECT 
         p.id,
@@ -40,7 +42,7 @@ export async function GET() {
       ORDER BY p.updated_at DESC
     `
 
-    console.log(`✅ [PLAYLISTS API] Found ${playlists.length} playlists for user ${user.id}`)
+    console.log(`✅ [PLAYLISTS API] Found ${playlists.length} playlists`)
 
     const formattedPlaylists = playlists.map((playlist) => ({
       id: playlist.id,
@@ -85,16 +87,15 @@ export async function POST(request: Request) {
     }
 
     const body = await request.json()
-    const { name, description } = body
+    console.log("📝 [PLAYLISTS API] Request body:", body)
 
-    if (!name) {
+    if (!body.name || !body.name.trim()) {
       return NextResponse.json({ error: "Playlist name is required" }, { status: 400 })
     }
 
     const sql = getDb()
 
-    // Create new playlist
-    const newPlaylists = await sql`
+    const newPlaylist = await sql`
       INSERT INTO playlists (
         user_id, 
         name, 
@@ -102,42 +103,30 @@ export async function POST(request: Request) {
         status,
         loop_enabled,
         schedule_enabled,
-        scale_image,
-        scale_video,
-        scale_document,
-        shuffle,
-        default_transition,
-        transition_speed,
-        auto_advance,
-        background_color,
-        text_overlay
+        start_time,
+        end_time,
+        selected_days
       )
       VALUES (
-        ${user.id}, 
-        ${name}, 
-        ${description || ""}, 
-        'draft',
-        false,
-        false,
-        'fit',
-        'fit',
-        'fit',
-        false,
-        'fade',
-        'medium',
-        true,
-        'black',
-        false
+        ${user.id},
+        ${body.name.trim()},
+        ${body.description?.trim() || null},
+        ${body.status || "draft"},
+        ${body.loop_enabled || true},
+        ${body.schedule_enabled || false},
+        ${body.start_time || null},
+        ${body.end_time || null},
+        ${body.selected_days || []}
       )
       RETURNING *
     `
 
-    console.log(`✅ [PLAYLISTS API] Created playlist: ${newPlaylists[0].name}`)
+    console.log(`✅ [PLAYLISTS API] Created playlist: ${newPlaylist[0].name}`)
 
     return NextResponse.json(
       {
         success: true,
-        playlist: newPlaylists[0],
+        playlist: newPlaylist[0],
       },
       { status: 201 },
     )

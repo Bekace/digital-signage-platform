@@ -5,12 +5,12 @@ import { getDb } from "@/lib/db"
 export const dynamic = "force-dynamic"
 
 export async function DELETE(request: Request, { params }: { params: { playlistId: string; itemId: string } }) {
-  console.log("🗑️ [PLAYLIST ITEM DELETE API] Starting DELETE request for item:", params.itemId)
+  console.log("🗑️ [PLAYLIST ITEM API] Starting DELETE request:", params)
 
   try {
     const user = await getCurrentUser()
     if (!user) {
-      console.log("❌ [PLAYLIST ITEM DELETE API] No user authenticated")
+      console.log("❌ [PLAYLIST ITEM API] No user authenticated")
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
@@ -25,44 +25,30 @@ export async function DELETE(request: Request, { params }: { params: { playlistI
     `
 
     if (playlists.length === 0) {
-      console.log("❌ [PLAYLIST ITEM DELETE API] Playlist not found or not owned by user")
+      console.log("❌ [PLAYLIST ITEM API] Playlist not found or not owned by user")
       return NextResponse.json({ error: "Playlist not found" }, { status: 404 })
     }
 
-    // Get the item to be deleted
-    const items = await sql`
-      SELECT id, position FROM playlist_items 
+    // Delete the item
+    const deletedItems = await sql`
+      DELETE FROM playlist_items 
       WHERE id = ${itemId} AND playlist_id = ${playlistId}
+      RETURNING *
     `
 
-    if (items.length === 0) {
-      console.log("❌ [PLAYLIST ITEM DELETE API] Item not found")
+    if (deletedItems.length === 0) {
+      console.log("❌ [PLAYLIST ITEM API] Item not found")
       return NextResponse.json({ error: "Item not found" }, { status: 404 })
     }
 
-    const deletedPosition = items[0].position
-
-    // Delete the item
-    await sql`
-      DELETE FROM playlist_items 
-      WHERE id = ${itemId} AND playlist_id = ${playlistId}
-    `
-
-    // Update positions of remaining items
-    await sql`
-      UPDATE playlist_items 
-      SET position = position - 1
-      WHERE playlist_id = ${playlistId} AND position > ${deletedPosition}
-    `
-
-    console.log(`✅ [PLAYLIST ITEM DELETE API] Deleted item: ${itemId}`)
+    console.log(`✅ [PLAYLIST ITEM API] Deleted item: ${itemId}`)
 
     return NextResponse.json({
       success: true,
       message: "Item deleted successfully",
     })
   } catch (error) {
-    console.error("❌ [PLAYLIST ITEM DELETE API] Error:", error)
+    console.error("❌ [PLAYLIST ITEM API] Error:", error)
     return NextResponse.json(
       {
         error: "Failed to delete item",
@@ -74,12 +60,12 @@ export async function DELETE(request: Request, { params }: { params: { playlistI
 }
 
 export async function PUT(request: Request, { params }: { params: { playlistId: string; itemId: string } }) {
-  console.log("📝 [PLAYLIST ITEM UPDATE API] Starting PUT request for item:", params.itemId)
+  console.log("📝 [PLAYLIST ITEM API] Starting PUT request:", params)
 
   try {
     const user = await getCurrentUser()
     if (!user) {
-      console.log("❌ [PLAYLIST ITEM UPDATE API] No user authenticated")
+      console.log("❌ [PLAYLIST ITEM API] No user authenticated")
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
@@ -95,7 +81,7 @@ export async function PUT(request: Request, { params }: { params: { playlistId: 
     `
 
     if (playlists.length === 0) {
-      console.log("❌ [PLAYLIST ITEM UPDATE API] Playlist not found or not owned by user")
+      console.log("❌ [PLAYLIST ITEM API] Playlist not found or not owned by user")
       return NextResponse.json({ error: "Playlist not found" }, { status: 404 })
     }
 
@@ -110,18 +96,18 @@ export async function PUT(request: Request, { params }: { params: { playlistId: 
     `
 
     if (updatedItems.length === 0) {
-      console.log("❌ [PLAYLIST ITEM UPDATE API] Item not found")
+      console.log("❌ [PLAYLIST ITEM API] Item not found")
       return NextResponse.json({ error: "Item not found" }, { status: 404 })
     }
 
-    console.log(`✅ [PLAYLIST ITEM UPDATE API] Updated item: ${itemId}`)
+    console.log(`✅ [PLAYLIST ITEM API] Updated item: ${itemId}`)
 
     return NextResponse.json({
       success: true,
       item: updatedItems[0],
     })
   } catch (error) {
-    console.error("❌ [PLAYLIST ITEM UPDATE API] Error:", error)
+    console.error("❌ [PLAYLIST ITEM API] Error:", error)
     return NextResponse.json(
       {
         error: "Failed to update item",
