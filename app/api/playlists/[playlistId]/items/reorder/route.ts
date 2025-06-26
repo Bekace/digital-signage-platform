@@ -38,12 +38,11 @@ export async function PUT(request: Request, { params }: { params: { playlistId: 
       return NextResponse.json({ error: "Playlist not found" }, { status: 404 })
     }
 
-    // Update positions for all items
-    for (let i = 0; i < items.length; i++) {
-      const item = items[i]
+    // Update positions for each item
+    for (const item of items) {
       await sql`
         UPDATE playlist_items 
-        SET position = ${i}
+        SET position = ${item.position}
         WHERE id = ${item.id} AND playlist_id = ${playlistId}
       `
     }

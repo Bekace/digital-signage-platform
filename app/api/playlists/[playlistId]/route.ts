@@ -31,66 +31,23 @@ export async function GET(request: Request, { params }: { params: { playlistId: 
       return NextResponse.json({ error: "Playlist not found" }, { status: 404 })
     }
 
-    // Get playlist items
-    const items = await sql`
-      SELECT 
-        pi.*,
-        mf.filename,
-        mf.original_name,
-        mf.file_type,
-        mf.file_size,
-        mf.duration as media_duration,
-        mf.url
-      FROM playlist_items pi
-      LEFT JOIN media_files mf ON pi.media_file_id = mf.id
-      WHERE pi.playlist_id = ${playlistId}
-      ORDER BY pi.position ASC
-    `
-
-    // Get device assignments
-    const assignments = await sql`
-      SELECT 
-        pa.*,
-        d.name as device_name,
-        d.status as device_status
-      FROM playlist_assignments pa
-      LEFT JOIN devices d ON pa.device_id = d.id
-      WHERE pa.playlist_id = ${playlistId}
-      ORDER BY pa.priority ASC
-    `
-
-    const playlistData = {
-      ...playlist[0],
-      selected_days: playlist[0].selected_days || [],
-      items: items.map((item) => ({
-        id: item.id,
-        media_file_id: item.media_file_id,
-        position: item.position,
-        duration: item.duration,
-        transition_type: item.transition_type,
-        media: item.media_file_id
-          ? {
-              filename: item.filename,
-              original_name: item.original_name,
-              file_type: item.file_type,
-              file_size: item.file_size,
-              duration: item.media_duration,
-              url: item.url,
-            }
-          : null,
-      })),
-      assignments: assignments.map((assignment) => ({
-        id: assignment.id,
-        device_id: assignment.device_id,
-        device_name: assignment.device_name,
-        device_status: assignment.device_status,
-        priority: assignment.priority,
-      })),
-    }
+    console.log(`✅ [PLAYLIST API] Found playlist: ${playlist[0].name}`)
 
     return NextResponse.json({
       success: true,
-      playlist: playlistData,
+      playlist: {
+        id: playlist[0].id,
+        name: playlist[0].name,
+        description: playlist[0].description,
+        status: playlist[0].status,
+        loop_enabled: playlist[0].loop_enabled,
+        schedule_enabled: playlist[0].schedule_enabled,
+        start_time: playlist[0].start_time,
+        end_time: playlist[0].end_time,
+        selected_days: playlist[0].selected_days || [],
+        created_at: playlist[0].created_at,
+        updated_at: playlist[0].updated_at,
+      },
     })
   } catch (error) {
     console.error("❌ [PLAYLIST API] Error fetching playlist:", error)

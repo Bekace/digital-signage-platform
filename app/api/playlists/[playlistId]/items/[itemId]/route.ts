@@ -6,7 +6,7 @@ export const dynamic = "force-dynamic"
 
 // DELETE - Remove item from playlist
 export async function DELETE(request: Request, { params }: { params: { playlistId: string; itemId: string } }) {
-  console.log(`🎵 [PLAYLIST ITEM API] Deleting item ${params.itemId} from playlist ${params.playlistId}`)
+  console.log(`🎵 [PLAYLIST ITEM DELETE API] Removing item ${params.itemId} from playlist ${params.playlistId}`)
 
   try {
     const user = await getCurrentUser()
@@ -33,34 +33,37 @@ export async function DELETE(request: Request, { params }: { params: { playlistI
       return NextResponse.json({ error: "Playlist not found" }, { status: 404 })
     }
 
-    // Delete the item
-    const deletedItem = await sql`
-      DELETE FROM playlist_items 
+    // Get item details before deletion
+    const item = await sql`
+      SELECT * FROM playlist_items 
       WHERE id = ${itemId} AND playlist_id = ${playlistId}
-      RETURNING id
     `
 
-    if (deletedItem.length === 0) {
+    if (item.length === 0) {
       return NextResponse.json({ error: "Item not found" }, { status: 404 })
     }
 
-    // Reorder remaining items to fill gaps
+    // Delete the item
+    await sql`
+      DELETE FROM playlist_items 
+      WHERE id = ${itemId} AND playlist_id = ${playlistId}
+    `
+
+    // Reorder remaining items to fill the gap
     await sql`
       UPDATE playlist_items 
       SET position = position - 1
-      WHERE playlist_id = ${playlistId} AND position > (
-        SELECT position FROM playlist_items WHERE id = ${itemId}
-      )
+      WHERE playlist_id = ${playlistId} AND position > ${item[0].position}
     `
 
-    console.log(`✅ [PLAYLIST ITEM API] Deleted item ${itemId}`)
+    console.log(`✅ [PLAYLIST ITEM DELETE API] Removed item ${itemId}`)
 
     return NextResponse.json({
       success: true,
       message: "Item removed from playlist",
     })
   } catch (error) {
-    console.error("❌ [PLAYLIST ITEM API] Error deleting item:", error)
+    console.error("❌ [PLAYLIST ITEM DELETE API] Error removing item:", error)
     return NextResponse.json(
       {
         error: "Failed to remove item from playlist",
