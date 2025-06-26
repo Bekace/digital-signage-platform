@@ -20,9 +20,10 @@ interface MediaThumbnailProps {
   size?: "sm" | "md" | "lg"
   className?: string
   showIcon?: boolean
+  onClick?: () => void
 }
 
-export function MediaThumbnail({ file, size = "md", className, showIcon = true }: MediaThumbnailProps) {
+export function MediaThumbnail({ file, size = "md", className, showIcon = true, onClick }: MediaThumbnailProps) {
   const [imageLoading, setImageLoading] = useState(true)
   const [imageError, setImageError] = useState(false)
 
@@ -68,7 +69,15 @@ export function MediaThumbnail({ file, size = "md", className, showIcon = true }
   // If it's an image and has a thumbnail or direct URL, try to show it
   if (isImage && (file.thumbnail_url || file.url) && !imageError) {
     return (
-      <div className={cn("relative overflow-hidden rounded-lg", sizeClasses[size], className)}>
+      <div
+        className={cn(
+          "relative overflow-hidden rounded-lg",
+          sizeClasses[size],
+          className,
+          onClick ? "cursor-pointer" : "",
+        )}
+        onClick={onClick}
+      >
         {imageLoading && (
           <div className={cn("absolute inset-0 flex items-center justify-center", getBackgroundColor())}>
             <Loader2 className={cn("animate-spin text-gray-400", iconSizes[size])} />
@@ -76,7 +85,7 @@ export function MediaThumbnail({ file, size = "md", className, showIcon = true }
         )}
         <img
           src={file.thumbnail_url || file.url}
-          alt={file.original_filename || file.original_name || file.filename}
+          alt={file.original_filename || file.original_name || file.filename || "Media file"}
           className={cn("w-full h-full object-cover transition-opacity", imageLoading ? "opacity-0" : "opacity-100")}
           onLoad={() => setImageLoading(false)}
           onError={() => {
@@ -91,7 +100,14 @@ export function MediaThumbnail({ file, size = "md", className, showIcon = true }
   // Fallback to icon-based thumbnail
   return (
     <div
-      className={cn("flex items-center justify-center rounded-lg", sizeClasses[size], getBackgroundColor(), className)}
+      className={cn(
+        "flex items-center justify-center rounded-lg",
+        sizeClasses[size],
+        getBackgroundColor(),
+        className,
+        onClick ? "cursor-pointer" : "",
+      )}
+      onClick={onClick}
     >
       {showIcon && <div className="text-gray-600">{getIcon()}</div>}
     </div>

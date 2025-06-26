@@ -5,14 +5,20 @@ import { useParams, useRouter } from "next/navigation"
 import {
   ArrowLeft,
   Play,
+  Pause,
+  SkipForward,
+  SkipBack,
   Settings,
   Plus,
-  GripVertical,
   Trash2,
-  Clock,
-  FileText,
+  GripVertical,
   RefreshCw,
-  Search,
+  Clock,
+  ImageIcon,
+  Video,
+  FileText,
+  Music,
+  Presentation,
   Loader2,
 } from "lucide-react"
 import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors } from "@dnd-kit/core"
@@ -25,6 +31,8 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
+import { Separator } from "@/components/ui/separator"
+import { ScrollArea } from "@/components/ui/scroll-area"
 import { DashboardLayout } from "@/components/dashboard-layout"
 import { PlaylistOptionsDialog } from "@/components/playlist-options-dialog"
 import { MediaThumbnail } from "@/components/media-thumbnail"
@@ -32,12 +40,12 @@ import { MediaThumbnail } from "@/components/media-thumbnail"
 interface MediaFile {
   id: number
   filename: string
-  original_filename: string
+  original_filename?: string
+  original_name?: string
   file_type: string
   file_size: number
   url: string
   thumbnail_url?: string
-  created_at: string
   mime_type?: string
   dimensions?: string
   duration?: number
@@ -50,7 +58,7 @@ interface PlaylistItem {
   position: number
   duration?: number
   transition_type: string
-  media_file: MediaFile
+  media_file?: MediaFile
 }
 
 interface Playlist {
@@ -58,23 +66,22 @@ interface Playlist {
   name: string
   description?: string
   status: string
-  created_at: string
-  updated_at: string
-  // Playlist options
-  scale_image?: string
-  scale_video?: string
-  scale_document?: string
-  shuffle?: boolean
-  default_transition?: string
-  transition_speed?: string
-  auto_advance?: boolean
-  background_color?: string
-  text_overlay?: boolean
-  loop_enabled?: boolean
-  schedule_enabled?: boolean
+  loop_enabled: boolean
+  schedule_enabled: boolean
   start_time?: string
   end_time?: string
-  selected_days?: string[]
+  selected_days: string[]
+  scale_image: string
+  scale_video: string
+  scale_document: string
+  shuffle: boolean
+  default_transition: string
+  transition_speed: string
+  auto_advance: boolean
+  background_color: string
+  text_overlay: boolean
+  created_at: string
+  updated_at: string
 }
 
 function SortablePlaylistItem({ item, onRemove }: { item: PlaylistItem; onRemove: (id: number) => void }) {
@@ -88,6 +95,21 @@ function SortablePlaylistItem({ item, onRemove }: { item: PlaylistItem; onRemove
     opacity: isDragging ? 0.5 : 1,
   }
 
+  const getFileIcon = () => {
+    if (!item.media_file) return <FileText className="h-4 w-4" />
+
+    const isImage = item.media_file.mime_type?.startsWith("image/") || item.media_file.file_type === "image"
+    const isVideo = item.media_file.mime_type?.startsWith("video/") || item.media_file.file_type === "video"
+    const isAudio = item.media_file.mime_type?.startsWith("audio/")
+    const isPresentation = item.media_file.file_type === "presentation"
+
+    if (isVideo) return <Video className="h-4 w-4" />
+    if (isAudio) return <Music className="h-4 w-4" />
+    if (isPresentation) return <Presentation className="h-4 w-4" />
+    if (isImage) return <ImageIcon className="h-4 w-4" />
+    return <FileText className="h-4 w-4" />
+  }
+
   const formatFileSize = (bytes: number) => {
     if (bytes === 0) return "0 Bytes"
     const k = 1024
@@ -97,37 +119,54 @@ function SortablePlaylistItem({ item, onRemove }: { item: PlaylistItem; onRemove
   }
 
   return (
-    <div ref={setNodeRef} style={style} className="touch-none">
-      <Card className="mb-3">
+    <div ref={setNodeRef} style={style} className="mb-2">
+      <Card className="group hover:shadow-md transition-shadow">
         <CardContent className="p-4">
           <div className="flex items-center space-x-4">
             <div {...attributes} {...listeners} className="cursor-grab active:cursor-grabbing">
-              <GripVertical className="h-5 w-5 text-gray-400" />
+              <GripVertical className="h-4 w-4 text-gray-400" />
             </div>
 
-            <MediaThumbnail file={item.media_file} size="md" />
+            <div className="w-12 h-12 flex-shrink-0">
+              {item.media_file && (
+                <MediaThumbnail
+                  file={{
+                    ...item.media_file,
+                    original_filename: item.media_file.original_name || item.media_file.filename,
+                  }}
+                  size="sm"
+                />
+              )}
+            </div>
 
             <div className="flex-1 min-w-0">
-              <h4 className="font-medium truncate">{item.media_file.original_filename}</h4>
-              <div className="flex items-center space-x-4 mt-1">
-                <Badge variant="secondary" className="text-xs">
-                  {item.media_file.file_type}
-                </Badge>
-                <span className="text-sm text-gray-500">{formatFileSize(item.media_file.file_size)}</span>
+              <h4 className="font-medium text-sm truncate">
+                {item.media_file?.original_name || item.media_file?.filename || `Media ${item.media_id}`}
+              </h4>
+              <div className="flex items-center space-x-4 text-xs text-gray-500 mt-1">
+                <div className="flex items-center space-x-1">
+                  {getFileIcon()}
+                  <span className="capitalize">{item.media_file?.file_type || "Unknown"}</span>
+                </div>
+                {item.media_file?.file_size && <span>{formatFileSize(item.media_file.file_size)}</span>}
                 {item.duration && (
-                  <div className="flex items-center text-sm text-gray-500">
-                    <Clock className="h-3 w-3 mr-1" />
-                    {item.duration}s
+                  <div className="flex items-center space-x-1">
+                    <Clock className="h-3 w-3" />
+                    <span>{item.duration}s</span>
                   </div>
                 )}
               </div>
             </div>
 
+            <Badge variant="outline" className="text-xs">
+              {item.transition_type}
+            </Badge>
+
             <Button
               variant="ghost"
               size="sm"
               onClick={() => onRemove(item.id)}
-              className="text-red-500 hover:text-red-700"
+              className="opacity-0 group-hover:opacity-100 transition-opacity text-red-500 hover:text-red-700"
             >
               <Trash2 className="h-4 w-4" />
             </Button>
@@ -150,8 +189,10 @@ export default function PlaylistEditorPage() {
   const [mediaLoading, setMediaLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [mediaError, setMediaError] = useState<string | null>(null)
-  const [showOptions, setShowOptions] = useState(false)
-  const [searchTerm, setSearchTerm] = useState("")
+  const [searchQuery, setSearchQuery] = useState("")
+  const [showSettings, setShowSettings] = useState(false)
+  const [isPlaying, setIsPlaying] = useState(false)
+  const [currentItemIndex, setCurrentItemIndex] = useState(0)
 
   const sensors = useSensors(
     useSensor(PointerSensor),
@@ -162,47 +203,42 @@ export default function PlaylistEditorPage() {
 
   useEffect(() => {
     if (playlistId) {
-      fetchPlaylistData()
+      fetchPlaylist()
+      fetchPlaylistItems()
       fetchMediaFiles()
     }
   }, [playlistId])
 
-  const fetchPlaylistData = async () => {
+  const fetchPlaylist = async () => {
     try {
-      setLoading(true)
-      setError(null)
+      const response = await fetch(`/api/playlists/${playlistId}`)
+      const data = await response.json()
 
-      console.log("🎵 [PLAYLIST EDITOR] Fetching playlist data for ID:", playlistId)
-
-      // Fetch playlist details
-      const playlistResponse = await fetch(`/api/playlists/${playlistId}`)
-      const playlistData = await playlistResponse.json()
-
-      console.log("📋 [PLAYLIST EDITOR] Playlist response:", playlistData)
-
-      if (!playlistResponse.ok) {
-        throw new Error(playlistData.error || "Failed to fetch playlist")
-      }
-
-      setPlaylist(playlistData.playlist)
-
-      // Fetch playlist items
-      const itemsResponse = await fetch(`/api/playlists/${playlistId}/items`)
-      const itemsData = await itemsResponse.json()
-
-      console.log("📝 [PLAYLIST EDITOR] Items response:", itemsData)
-
-      if (itemsResponse.ok) {
-        setPlaylistItems(itemsData.items || [])
+      if (response.ok) {
+        setPlaylist(data.playlist)
       } else {
-        console.error("Failed to fetch playlist items:", itemsData.error)
-        setPlaylistItems([])
+        setError(data.error || "Failed to load playlist")
       }
-    } catch (error) {
-      console.error("❌ [PLAYLIST EDITOR] Error:", error)
-      setError(error instanceof Error ? error.message : "Failed to load playlist")
+    } catch (err) {
+      setError("Failed to load playlist")
+      console.error("Error fetching playlist:", err)
     } finally {
       setLoading(false)
+    }
+  }
+
+  const fetchPlaylistItems = async () => {
+    try {
+      const response = await fetch(`/api/playlists/${playlistId}/items`)
+      const data = await response.json()
+
+      if (response.ok) {
+        setPlaylistItems(data.items || [])
+      } else {
+        console.error("Failed to load playlist items:", data.error)
+      }
+    } catch (err) {
+      console.error("Error fetching playlist items:", err)
     }
   }
 
@@ -210,23 +246,27 @@ export default function PlaylistEditorPage() {
     try {
       setMediaLoading(true)
       setMediaError(null)
-
-      console.log("📁 [PLAYLIST EDITOR] Fetching media files...")
+      console.log("Fetching media files...")
 
       const response = await fetch("/api/media")
       const data = await response.json()
 
-      console.log("📁 [PLAYLIST EDITOR] Media response:", data)
+      console.log("Media API response:", data)
 
       if (response.ok) {
-        // Use 'media' property for playlist editor, fallback to 'files'
-        setMediaFiles(data.media || data.files || [])
+        // Use 'media' property for playlist editor compatibility
+        const files = data.media || data.files || []
+        console.log("Setting media files:", files)
+        setMediaFiles(files)
       } else {
-        setMediaError(data.error || "Failed to load media files")
+        const errorMsg = data.error || "Failed to load media files"
+        setMediaError(errorMsg)
+        console.error("Media API error:", errorMsg)
       }
-    } catch (error) {
-      console.error("❌ [PLAYLIST EDITOR] Media error:", error)
-      setMediaError("Failed to load media files")
+    } catch (err) {
+      const errorMsg = "Failed to load media files"
+      setMediaError(errorMsg)
+      console.error("Error fetching media files:", err)
     } finally {
       setMediaLoading(false)
     }
@@ -251,29 +291,30 @@ export default function PlaylistEditorPage() {
 
     // Update positions on server
     try {
-      const updates = newItems.map((item, index) => ({
-        id: item.id,
-        position: index,
-      }))
-
       const response = await fetch(`/api/playlists/${playlistId}/items/reorder`, {
-        method: "PUT",
+        method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ items: updates }),
+        body: JSON.stringify({
+          items: newItems.map((item, index) => ({
+            id: item.id,
+            position: index,
+          })),
+        }),
       })
 
       if (!response.ok) {
-        throw new Error("Failed to update item positions")
+        // Revert on error
+        setPlaylistItems(playlistItems)
+        toast.error("Failed to reorder items")
+      } else {
+        toast.success("Playlist order updated")
       }
-
-      toast.success("Playlist order updated")
     } catch (error) {
-      console.error("Error updating playlist order:", error)
-      toast.error("Failed to update playlist order")
-      // Revert the change
-      fetchPlaylistData()
+      // Revert on error
+      setPlaylistItems(playlistItems)
+      toast.error("Failed to reorder items")
     }
   }
 
@@ -286,15 +327,16 @@ export default function PlaylistEditorPage() {
         },
         body: JSON.stringify({
           media_id: mediaFile.id,
-          position: playlistItems.length,
+          duration: 10, // Default duration
+          transition_type: "fade",
         }),
       })
 
       const data = await response.json()
 
       if (response.ok) {
-        setPlaylistItems((prev) => [...prev, data.item])
-        toast.success(`Added "${mediaFile.original_filename}" to playlist`)
+        await fetchPlaylistItems() // Refresh the items
+        toast.success(`Added "${mediaFile.original_name || mediaFile.filename}" to playlist`)
       } else {
         toast.error(data.error || "Failed to add media to playlist")
       }
@@ -314,30 +356,23 @@ export default function PlaylistEditorPage() {
         setPlaylistItems((prev) => prev.filter((item) => item.id !== itemId))
         toast.success("Item removed from playlist")
       } else {
-        toast.error("Failed to remove item from playlist")
+        toast.error("Failed to remove item")
       }
     } catch (error) {
-      console.error("Error removing item from playlist:", error)
-      toast.error("Failed to remove item from playlist")
+      console.error("Error removing item:", error)
+      toast.error("Failed to remove item")
     }
   }
 
-  const formatFileSize = (bytes: number) => {
-    if (bytes === 0) return "0 Bytes"
-    const k = 1024
-    const sizes = ["Bytes", "KB", "MB", "GB"]
-    const i = Math.floor(Math.log(bytes) / Math.log(k))
-    return Number.parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i]
-  }
-
-  const filteredMediaFiles = mediaFiles.filter((file) =>
-    file.original_filename.toLowerCase().includes(searchTerm.toLowerCase()),
-  )
+  const filteredMediaFiles = mediaFiles.filter((file) => {
+    const fileName = file.original_name || file.filename || ""
+    return fileName.toLowerCase().includes(searchQuery.toLowerCase())
+  })
 
   if (loading) {
     return (
       <DashboardLayout>
-        <div className="flex items-center justify-center min-h-[400px]">
+        <div className="flex items-center justify-center py-12">
           <Loader2 className="h-8 w-8 animate-spin" />
           <span className="ml-2">Loading playlist...</span>
         </div>
@@ -345,24 +380,11 @@ export default function PlaylistEditorPage() {
     )
   }
 
-  if (error) {
+  if (error || !playlist) {
     return (
       <DashboardLayout>
         <div className="text-center py-12">
-          <p className="text-red-600 mb-4">{error}</p>
-          <Button onClick={() => router.push("/dashboard/playlists")} variant="outline">
-            Back to Playlists
-          </Button>
-        </div>
-      </DashboardLayout>
-    )
-  }
-
-  if (!playlist) {
-    return (
-      <DashboardLayout>
-        <div className="text-center py-12">
-          <p className="text-gray-600 mb-4">Playlist not found</p>
+          <p className="text-red-600 mb-4">{error || "Playlist not found"}</p>
           <Button onClick={() => router.push("/dashboard/playlists")} variant="outline">
             Back to Playlists
           </Button>
@@ -387,28 +409,40 @@ export default function PlaylistEditorPage() {
             </div>
           </div>
           <div className="flex items-center space-x-2">
-            <Badge variant={playlist.status === "active" ? "default" : "secondary"}>{playlist.status}</Badge>
-            <Button variant="outline" size="sm">
-              <Play className="h-4 w-4 mr-2" />
-              Preview
-            </Button>
-            <Button variant="outline" size="sm" onClick={() => setShowOptions(true)}>
+            <Button variant="outline" onClick={() => setShowSettings(true)}>
               <Settings className="h-4 w-4 mr-2" />
               Settings
+            </Button>
+            <Button variant={isPlaying ? "secondary" : "default"} onClick={() => setIsPlaying(!isPlaying)}>
+              {isPlaying ? <Pause className="h-4 w-4 mr-2" /> : <Play className="h-4 w-4 mr-2" />}
+              {isPlaying ? "Pause" : "Preview"}
             </Button>
           </div>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Playlist Items */}
-          <div className="lg:col-span-2">
+          <div className="lg:col-span-2 space-y-4">
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center justify-between">
                   <span>Playlist Items ({playlistItems.length})</span>
-                  <Button variant="outline" size="sm" onClick={fetchPlaylistData}>
-                    <RefreshCw className="h-4 w-4" />
-                  </Button>
+                  <div className="flex items-center space-x-2">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setCurrentItemIndex(Math.max(0, currentItemIndex - 1))}
+                    >
+                      <SkipBack className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setCurrentItemIndex(Math.min(playlistItems.length - 1, currentItemIndex + 1))}
+                    >
+                      <SkipForward className="h-4 w-4" />
+                    </Button>
+                  </div>
                 </CardTitle>
               </CardHeader>
               <CardContent>
@@ -424,9 +458,11 @@ export default function PlaylistEditorPage() {
                       items={playlistItems.map((item) => item.id.toString())}
                       strategy={verticalListSortingStrategy}
                     >
-                      {playlistItems.map((item) => (
-                        <SortablePlaylistItem key={item.id} item={item} onRemove={removeFromPlaylist} />
-                      ))}
+                      <div className="space-y-2">
+                        {playlistItems.map((item) => (
+                          <SortablePlaylistItem key={item.id} item={item} onRemove={removeFromPlaylist} />
+                        ))}
+                      </div>
                     </SortableContext>
                   </DndContext>
                 )}
@@ -435,82 +471,89 @@ export default function PlaylistEditorPage() {
           </div>
 
           {/* Media Library */}
-          <div>
+          <div className="space-y-4">
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center justify-between">
                   <span>Media Library</span>
-                  <Button variant="outline" size="sm" onClick={fetchMediaFiles}>
+                  <Button variant="ghost" size="sm" onClick={fetchMediaFiles}>
                     <RefreshCw className="h-4 w-4" />
                   </Button>
                 </CardTitle>
-                <div className="relative">
-                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
-                  <Input
-                    placeholder="Search media..."
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    className="pl-10"
-                  />
-                </div>
               </CardHeader>
-              <CardContent className="max-h-[600px] overflow-y-auto">
-                {mediaLoading ? (
-                  <div className="flex items-center justify-center py-8">
-                    <Loader2 className="h-6 w-6 animate-spin" />
-                    <span className="ml-2">Loading media...</span>
-                  </div>
-                ) : mediaError ? (
-                  <div className="text-center py-8">
-                    <p className="text-red-600 mb-2">{mediaError}</p>
-                    <Button variant="outline" size="sm" onClick={fetchMediaFiles}>
-                      Try Again
-                    </Button>
-                  </div>
-                ) : filteredMediaFiles.length === 0 ? (
-                  <div className="text-center py-8">
-                    <FileText className="h-8 w-8 mx-auto text-gray-400 mb-2" />
-                    <p className="text-gray-500">
-                      {searchTerm ? "No media files match your search." : "No media files available."}
-                    </p>
-                  </div>
-                ) : (
-                  <div className="space-y-2">
-                    {filteredMediaFiles.map((file) => (
-                      <Card key={file.id} className="cursor-pointer hover:shadow-sm transition-shadow">
-                        <CardContent className="p-3" onClick={() => addMediaToPlaylist(file)}>
-                          <div className="flex items-center space-x-3">
-                            <MediaThumbnail file={file} size="sm" />
-                            <div className="flex-1 min-w-0">
-                              <h4 className="font-medium text-sm truncate">{file.original_filename}</h4>
-                              <div className="flex items-center space-x-2 mt-1">
-                                <Badge variant="secondary" className="text-xs">
-                                  {file.file_type}
-                                </Badge>
-                                <span className="text-xs text-gray-500">{formatFileSize(file.file_size)}</span>
+              <CardContent className="space-y-4">
+                <Input
+                  placeholder="Search media..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                />
+                <Separator />
+                <ScrollArea className="h-96">
+                  {mediaLoading ? (
+                    <div className="flex items-center justify-center py-8">
+                      <Loader2 className="h-6 w-6 animate-spin" />
+                      <span className="ml-2">Loading media...</span>
+                    </div>
+                  ) : mediaError ? (
+                    <div className="text-center py-8">
+                      <p className="text-red-600 mb-2">{mediaError}</p>
+                      <Button variant="outline" size="sm" onClick={fetchMediaFiles}>
+                        Try Again
+                      </Button>
+                    </div>
+                  ) : filteredMediaFiles.length === 0 ? (
+                    <div className="text-center py-8">
+                      <FileText className="h-8 w-8 mx-auto text-gray-400 mb-2" />
+                      <p className="text-gray-500 text-sm">
+                        {searchQuery ? "No media files match your search." : "No media files available."}
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      {filteredMediaFiles.map((file) => (
+                        <Card
+                          key={file.id}
+                          className="cursor-pointer hover:shadow-md transition-shadow"
+                          onClick={() => addMediaToPlaylist(file)}
+                        >
+                          <CardContent className="p-3">
+                            <div className="flex items-center space-x-3">
+                              <MediaThumbnail
+                                file={{
+                                  ...file,
+                                  original_filename: file.original_name || file.filename,
+                                }}
+                                size="sm"
+                              />
+                              <div className="flex-1 min-w-0">
+                                <h4 className="font-medium text-sm truncate">
+                                  {file.original_name || file.filename || "Untitled"}
+                                </h4>
+                                <p className="text-xs text-gray-500 capitalize">{file.file_type || "Unknown"}</p>
                               </div>
+                              <Plus className="h-4 w-4 text-gray-400" />
                             </div>
-                            <Plus className="h-4 w-4 text-gray-400" />
-                          </div>
-                        </CardContent>
-                      </Card>
-                    ))}
-                  </div>
-                )}
+                          </CardContent>
+                        </Card>
+                      ))}
+                    </div>
+                  )}
+                </ScrollArea>
               </CardContent>
             </Card>
           </div>
         </div>
 
-        {/* Playlist Options Dialog */}
-        {playlist && (
+        {/* Playlist Settings Dialog */}
+        {showSettings && (
           <PlaylistOptionsDialog
-            open={showOptions}
-            onOpenChange={setShowOptions}
             playlist={playlist}
-            onUpdate={(updatedPlaylist) => {
+            open={showSettings}
+            onOpenChange={setShowSettings}
+            onSave={(updatedPlaylist) => {
               setPlaylist(updatedPlaylist)
-              setShowOptions(false)
+              setShowSettings(false)
+              toast.success("Playlist settings updated")
             }}
           />
         )}

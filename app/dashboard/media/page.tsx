@@ -207,7 +207,11 @@ export default function MediaPage() {
     return new Date(dateString).toLocaleDateString()
   }
 
-  const filteredFiles = mediaFiles.filter((file) => file.original_name.toLowerCase().includes(searchTerm.toLowerCase()))
+  // FIXED: Safe filtering with null checks
+  const filteredFiles = mediaFiles.filter((file) => {
+    const fileName = file.original_name || file.filename || ""
+    return fileName.toLowerCase().includes(searchTerm.toLowerCase())
+  })
 
   return (
     <DashboardLayout>
@@ -340,8 +344,8 @@ export default function MediaPage() {
                       </div>
                     </div>
                     <div className="space-y-1">
-                      <h3 className="font-medium text-sm truncate" title={file.original_name}>
-                        {file.original_name}
+                      <h3 className="font-medium text-sm truncate" title={file.original_name || file.filename}>
+                        {file.original_name || file.filename || "Untitled"}
                       </h3>
                       <div className="text-xs text-gray-500 space-y-1">
                         <div className="flex justify-between">
@@ -389,7 +393,8 @@ export default function MediaPage() {
             <AlertDialogHeader>
               <AlertDialogTitle>Delete File</AlertDialogTitle>
               <AlertDialogDescription>
-                Are you sure you want to delete "{deleteFile?.original_name}"? This action cannot be undone.
+                Are you sure you want to delete "{deleteFile?.original_name || deleteFile?.filename || "this file"}"?
+                This action cannot be undone.
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>

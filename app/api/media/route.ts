@@ -26,11 +26,12 @@ export async function GET() {
     // Format files for the frontend - ensuring compatibility with playlist editor
     const formattedFiles = mediaFiles.map((file) => ({
       id: file.id,
-      filename: file.filename,
-      original_filename: file.original_name, // Map original_name to original_filename for playlist editor
-      file_type: file.file_type,
-      file_size: file.file_size,
-      mime_type: file.mime_type,
+      filename: file.filename || "",
+      original_name: file.original_name || file.filename || "Untitled",
+      original_filename: file.original_name || file.filename || "Untitled", // Map original_name to original_filename for playlist editor
+      file_type: file.file_type || "unknown",
+      file_size: file.file_size || 0,
+      mime_type: file.mime_type || "application/octet-stream",
       // Use url field first, then storage_url, then construct from filename
       url: file.url || file.storage_url || `https://blob.vercel-storage.com/${file.filename}`,
       thumbnail_url: file.thumbnail_url,
