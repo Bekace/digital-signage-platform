@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
+import { useRouter } from "next/navigation"
 import {
   Plus,
   Play,
@@ -59,6 +60,8 @@ export default function PlaylistsPage() {
   const [deletePlaylist, setDeletePlaylist] = useState<Playlist | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [needsSetup, setNeedsSetup] = useState(false)
+
+  const router = useRouter()
 
   useEffect(() => {
     fetchPlaylists()
@@ -408,7 +411,7 @@ export default function PlaylistsPage() {
                       </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end">
-                      <DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => router.push(`/dashboard/playlists/${playlist.id}`)}>
                         <Edit className="h-4 w-4 mr-2" />
                         Edit
                       </DropdownMenuItem>
@@ -466,7 +469,12 @@ export default function PlaylistsPage() {
                   )}
 
                   <div className="flex space-x-2">
-                    <Button variant="outline" size="sm" className="flex-1">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="flex-1"
+                      onClick={() => router.push(`/dashboard/playlists/${playlist.id}`)}
+                    >
                       Edit
                     </Button>
                     <Button size="sm" className="flex-1">
