@@ -1,66 +1,41 @@
-import { NextResponse } from "next/server"
+import { type NextRequest, NextResponse } from "next/server"
 import { getCurrentUser } from "@/lib/auth"
 import { getDb } from "@/lib/db"
 
-export const dynamic = "force-dynamic"
-
-// PUT - Reorder playlist items
-export async function PUT(request: Request, { params }: { params: { playlistId: string } }) {
-  console.log(`🎵 [PLAYLIST REORDER API] Reordering items for playlist: ${params.playlistId}`)
-
+export async function PUT(request: NextRequest, { params }: { params: { playlistId: string } }) {
   try {
     const user = await getCurrentUser()
     if (!user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const playlistId = Number.parseInt(params.playlistId)
-    if (isNaN(playlistId)) {
-      return NextResponse.json({ error: "Invalid playlist ID" }, { status: 400 })
-    }
-
-    const body = await request.json()
-    const { items } = body
-
-    if (!Array.isArray(items)) {
-      return NextResponse.json({ error: "Items array is required" }, { status: 400 })
-    }
-
+    const { items } = await request.json()
     const sql = getDb()
+    const playlistId = params.playlistId
 
     // Verify playlist ownership
-    const playlist = await sql`
+    const playlists = await sql`
       SELECT id FROM playlists 
       WHERE id = ${playlistId} AND user_id = ${user.id}
     `
 
-    if (playlist.length === 0) {
+    if (playlists.length === 0) {
       return NextResponse.json({ error: "Playlist not found" }, { status: 404 })
     }
 
-    // Update positions for each item
-    for (const item of items) {
+    // Update positions for all items
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i]
       await sql`
         UPDATE playlist_items 
-        SET position = ${item.position}
+        SET position = ${i + 1}
         WHERE id = ${item.id} AND playlist_id = ${playlistId}
       `
     }
 
-    console.log(`✅ [PLAYLIST REORDER API] Reordered ${items.length} items`)
-
-    return NextResponse.json({
-      success: true,
-      message: "Items reordered successfully",
-    })
+    return NextResponse.json({ success: true })
   } catch (error) {
-    console.error("❌ [PLAYLIST REORDER API] Error reordering items:", error)
-    return NextResponse.json(
-      {
-        error: "Failed to reorder playlist items",
-        details: error instanceof Error ? error.message : "Unknown error",
-      },
-      { status: 500 },
-    )
+    console.error("Error reordering playlist items:", error)
+    return NextResponse.json({ error: "Failed to reorder playlist items" }, { status: 500 })
   }
 }
