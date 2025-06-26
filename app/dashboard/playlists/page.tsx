@@ -85,7 +85,8 @@ export default function PlaylistsPage() {
           setNeedsSetup(true)
           setPlaylists([])
         } else if (data.success) {
-          setPlaylists(data.playlists || [])
+          // Ensure playlists is always an array
+          setPlaylists(Array.isArray(data.playlists) ? data.playlists : [])
         } else {
           throw new Error(data.error || "Failed to fetch playlists")
         }
@@ -95,6 +96,7 @@ export default function PlaylistsPage() {
     } catch (error) {
       console.error("🎵 [PLAYLISTS PAGE] Error fetching playlists:", error)
       setError(error instanceof Error ? error.message : "Failed to load playlists")
+      setPlaylists([]) // Ensure playlists is always an array
       toast.error("Failed to load playlists")
     } finally {
       setLoading(false)
@@ -193,6 +195,9 @@ export default function PlaylistsPage() {
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString()
   }
+
+  // Ensure playlists is always an array
+  const safePlaylistsArray = Array.isArray(playlists) ? playlists : []
 
   if (loading) {
     return (
@@ -342,7 +347,7 @@ export default function PlaylistsPage() {
               <Play className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{playlists.length}</div>
+              <div className="text-2xl font-bold">{safePlaylistsArray.length}</div>
             </CardContent>
           </Card>
           <Card>
@@ -352,7 +357,7 @@ export default function PlaylistsPage() {
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold text-green-600">
-                {playlists.filter((p) => p.status === "active").length}
+                {safePlaylistsArray.filter((p) => p.status === "active").length}
               </div>
             </CardContent>
           </Card>
@@ -363,7 +368,7 @@ export default function PlaylistsPage() {
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold text-blue-600">
-                {playlists.filter((p) => p.status === "scheduled").length}
+                {safePlaylistsArray.filter((p) => p.status === "scheduled").length}
               </div>
             </CardContent>
           </Card>
@@ -374,14 +379,14 @@ export default function PlaylistsPage() {
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold text-gray-600">
-                {playlists.filter((p) => p.status === "draft").length}
+                {safePlaylistsArray.filter((p) => p.status === "draft").length}
               </div>
             </CardContent>
           </Card>
         </div>
 
         {/* Playlists Grid */}
-        {playlists.length === 0 ? (
+        {safePlaylistsArray.length === 0 ? (
           <Card>
             <CardContent className="flex flex-col items-center justify-center py-12">
               <Play className="h-12 w-12 text-gray-400 mb-4" />
@@ -397,7 +402,7 @@ export default function PlaylistsPage() {
           </Card>
         ) : (
           <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-            {playlists.map((playlist) => (
+            {safePlaylistsArray.map((playlist) => (
               <Card key={playlist.id} className="hover:shadow-md transition-shadow">
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                   <div className="flex items-center space-x-2">
@@ -454,7 +459,7 @@ export default function PlaylistsPage() {
                     </div>
                   </div>
 
-                  {playlist.assigned_devices.length > 0 && (
+                  {Array.isArray(playlist.assigned_devices) && playlist.assigned_devices.length > 0 && (
                     <div className="space-y-2">
                       <div className="text-sm font-medium">Active on:</div>
                       <div className="flex flex-wrap gap-1">
@@ -472,7 +477,7 @@ export default function PlaylistsPage() {
                     <Button
                       variant="outline"
                       size="sm"
-                      className="flex-1"
+                      className="flex-1 bg-transparent"
                       onClick={() => router.push(`/dashboard/playlists/${playlist.id}`)}
                     >
                       Edit

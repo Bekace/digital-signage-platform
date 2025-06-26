@@ -4,8 +4,8 @@ import { getDb } from "@/lib/db"
 
 export const dynamic = "force-dynamic"
 
-export async function PUT(request: Request, { params }: { params: { playlistId: string } }) {
-  console.log("🔄 [PLAYLIST REORDER API] Starting PUT request for playlist:", params.playlistId)
+export async function POST(request: Request, { params }: { params: { playlistId: string } }) {
+  console.log("🔄 [PLAYLIST REORDER API] Starting POST request for playlist:", params.playlistId)
 
   try {
     const user = await getCurrentUser()
@@ -41,7 +41,9 @@ export async function PUT(request: Request, { params }: { params: { playlistId: 
       return NextResponse.json({ error: "Playlist not found" }, { status: 404 })
     }
 
-    // Update positions for each item
+    // Update positions for all items
+    console.log("🔄 [PLAYLIST REORDER API] Updating item positions...")
+
     for (let i = 0; i < items.length; i++) {
       const item = items[i]
       await sql`
@@ -51,7 +53,7 @@ export async function PUT(request: Request, { params }: { params: { playlistId: 
       `
     }
 
-    console.log(`✅ [PLAYLIST REORDER API] Reordered ${items.length} items`)
+    console.log(`✅ [PLAYLIST REORDER API] Updated positions for ${items.length} items`)
 
     return NextResponse.json({
       success: true,

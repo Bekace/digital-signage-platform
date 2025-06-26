@@ -16,13 +16,27 @@ export async function GET() {
 
     const sql = getDb()
 
-    // Get playlists with only existing columns
+    // Get playlists with all columns (now that they exist)
     const playlists = await sql`
       SELECT 
         p.id,
         p.name,
         p.description,
         p.status,
+        p.scale_image,
+        p.scale_video,
+        p.scale_document,
+        p.shuffle,
+        p.default_transition,
+        p.transition_speed,
+        p.auto_advance,
+        p.background_color,
+        p.text_overlay,
+        p.loop_enabled,
+        p.schedule_enabled,
+        p.start_time,
+        p.end_time,
+        p.selected_days,
         p.created_at,
         p.updated_at,
         COUNT(pi.id) as item_count,
@@ -30,7 +44,11 @@ export async function GET() {
       FROM playlists p
       LEFT JOIN playlist_items pi ON p.id = pi.playlist_id
       WHERE p.user_id = ${user.id}
-      GROUP BY p.id, p.name, p.description, p.status, p.created_at, p.updated_at
+      GROUP BY p.id, p.name, p.description, p.status, p.scale_image, p.scale_video, 
+               p.scale_document, p.shuffle, p.default_transition, p.transition_speed, 
+               p.auto_advance, p.background_color, p.text_overlay, p.loop_enabled, 
+               p.schedule_enabled, p.start_time, p.end_time, p.selected_days, 
+               p.created_at, p.updated_at
       ORDER BY p.updated_at DESC
     `
 
@@ -45,16 +63,23 @@ export async function GET() {
       total_duration: Number(playlist.total_duration),
       created_at: playlist.created_at,
       updated_at: playlist.updated_at,
-      // Default values for missing columns
-      scale_image: "fit",
-      scale_video: "fit",
-      scale_document: "fit",
-      shuffle: false,
-      default_transition: "fade",
-      transition_speed: "normal",
-      auto_advance: true,
-      background_color: "#000000",
-      text_overlay: false,
+      // Now using actual database values
+      scale_image: playlist.scale_image,
+      scale_video: playlist.scale_video,
+      scale_document: playlist.scale_document,
+      shuffle: playlist.shuffle,
+      default_transition: playlist.default_transition,
+      transition_speed: playlist.transition_speed,
+      auto_advance: playlist.auto_advance,
+      background_color: playlist.background_color,
+      text_overlay: playlist.text_overlay,
+      loop_enabled: playlist.loop_enabled,
+      schedule_enabled: playlist.schedule_enabled,
+      start_time: playlist.start_time,
+      end_time: playlist.end_time,
+      selected_days: playlist.selected_days ? JSON.parse(playlist.selected_days) : [],
+      device_count: 0, // TODO: Calculate from device assignments
+      assigned_devices: [], // TODO: Get from device assignments
     }))
 
     return NextResponse.json({
@@ -96,19 +121,43 @@ export async function POST(request: Request) {
 
     const sql = getDb()
 
-    // Create new playlist with only existing columns
+    // Create new playlist with all columns
     const newPlaylist = await sql`
       INSERT INTO playlists (
         user_id, 
         name, 
         description, 
-        status
+        status,
+        scale_image,
+        scale_video,
+        scale_document,
+        shuffle,
+        default_transition,
+        transition_speed,
+        auto_advance,
+        background_color,
+        text_overlay,
+        loop_enabled,
+        schedule_enabled,
+        selected_days
       )
       VALUES (
         ${user.id}, 
         ${name.trim()}, 
         ${description?.trim() || ""}, 
-        'draft'
+        'draft',
+        'fit',
+        'fit',
+        'fit',
+        false,
+        'fade',
+        'normal',
+        true,
+        '#000000',
+        false,
+        false,
+        false,
+        '[]'
       )
       RETURNING *
     `
@@ -124,16 +173,23 @@ export async function POST(request: Request) {
       total_duration: 0,
       created_at: newPlaylist[0].created_at,
       updated_at: newPlaylist[0].updated_at,
-      // Default values for missing columns
-      scale_image: "fit",
-      scale_video: "fit",
-      scale_document: "fit",
-      shuffle: false,
-      default_transition: "fade",
-      transition_speed: "normal",
-      auto_advance: true,
-      background_color: "#000000",
-      text_overlay: false,
+      // Using actual database values
+      scale_image: newPlaylist[0].scale_image,
+      scale_video: newPlaylist[0].scale_video,
+      scale_document: newPlaylist[0].scale_document,
+      shuffle: newPlaylist[0].shuffle,
+      default_transition: newPlaylist[0].default_transition,
+      transition_speed: newPlaylist[0].transition_speed,
+      auto_advance: newPlaylist[0].auto_advance,
+      background_color: newPlaylist[0].background_color,
+      text_overlay: newPlaylist[0].text_overlay,
+      loop_enabled: newPlaylist[0].loop_enabled,
+      schedule_enabled: newPlaylist[0].schedule_enabled,
+      start_time: newPlaylist[0].start_time,
+      end_time: newPlaylist[0].end_time,
+      selected_days: newPlaylist[0].selected_days ? JSON.parse(newPlaylist[0].selected_days) : [],
+      device_count: 0,
+      assigned_devices: [],
     }
 
     return NextResponse.json(

@@ -3,9 +3,6 @@
 import type React from "react"
 
 import { useState } from "react"
-import { Plus } from "lucide-react"
-import { toast } from "sonner"
-
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -14,21 +11,22 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
+import { toast } from "sonner"
 
 interface CreatePlaylistDialogProps {
-  onPlaylistCreated?: () => void
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  onPlaylistCreated: () => void
 }
 
-export function CreatePlaylistDialog({ onPlaylistCreated }: CreatePlaylistDialogProps) {
-  const [open, setOpen] = useState(false)
+export function CreatePlaylistDialog({ open, onOpenChange, onPlaylistCreated }: CreatePlaylistDialogProps) {
   const [name, setName] = useState("")
   const [description, setDescription] = useState("")
-  const [isLoading, setIsLoading] = useState(false)
+  const [loading, setLoading] = useState(false)
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -38,7 +36,7 @@ export function CreatePlaylistDialog({ onPlaylistCreated }: CreatePlaylistDialog
       return
     }
 
-    setIsLoading(true)
+    setLoading(true)
 
     try {
       const response = await fetch("/api/playlists", {
@@ -58,57 +56,50 @@ export function CreatePlaylistDialog({ onPlaylistCreated }: CreatePlaylistDialog
         throw new Error(data.error || "Failed to create playlist")
       }
 
-      toast.success("Playlist created successfully!")
-      setOpen(false)
-      setName("")
-      setDescription("")
-
-      if (onPlaylistCreated) {
+      if (data.success) {
+        toast.success("Playlist created successfully")
+        setName("")
+        setDescription("")
+        onOpenChange(false)
         onPlaylistCreated()
+      } else {
+        throw new Error(data.error || "Failed to create playlist")
       }
     } catch (error) {
       console.error("Error creating playlist:", error)
       toast.error(error instanceof Error ? error.message : "Failed to create playlist")
     } finally {
-      setIsLoading(false)
+      setLoading(false)
     }
   }
 
-  const handleOpenChange = (newOpen: boolean) => {
-    if (!isLoading) {
-      setOpen(newOpen)
-      if (!newOpen) {
-        setName("")
-        setDescription("")
-      }
+  const handleClose = () => {
+    if (!loading) {
+      setName("")
+      setDescription("")
+      onOpenChange(false)
     }
   }
 
   return (
-    <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogTrigger asChild>
-        <Button>
-          <Plus className="h-4 w-4 mr-2" />
-          Create Playlist
-        </Button>
-      </DialogTrigger>
+    <Dialog open={open} onOpenChange={handleClose}>
       <DialogContent className="sm:max-w-[425px]">
+        <DialogHeader>
+          <DialogTitle>Create New Playlist</DialogTitle>
+          <DialogDescription>
+            Create a new playlist to organize your media content for display on screens.
+          </DialogDescription>
+        </DialogHeader>
         <form onSubmit={handleSubmit}>
-          <DialogHeader>
-            <DialogTitle>Create New Playlist</DialogTitle>
-            <DialogDescription>
-              Create a new playlist to organize your media content for digital signage displays.
-            </DialogDescription>
-          </DialogHeader>
           <div className="grid gap-4 py-4">
             <div className="grid gap-2">
               <Label htmlFor="name">Name *</Label>
               <Input
                 id="name"
-                placeholder="Enter playlist name"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                disabled={isLoading}
+                placeholder="Enter playlist name"
+                disabled={loading}
                 required
               />
             </div>
@@ -116,20 +107,20 @@ export function CreatePlaylistDialog({ onPlaylistCreated }: CreatePlaylistDialog
               <Label htmlFor="description">Description</Label>
               <Textarea
                 id="description"
-                placeholder="Enter playlist description (optional)"
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
-                disabled={isLoading}
+                placeholder="Enter playlist description (optional)"
+                disabled={loading}
                 rows={3}
               />
             </div>
           </div>
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => handleOpenChange(false)} disabled={isLoading}>
+            <Button type="button" variant="outline" onClick={handleClose} disabled={loading}>
               Cancel
             </Button>
-            <Button type="submit" disabled={isLoading}>
-              {isLoading ? "Creating..." : "Create Playlist"}
+            <Button type="submit" disabled={loading}>
+              {loading ? "Creating..." : "Create Playlist"}
             </Button>
           </DialogFooter>
         </form>

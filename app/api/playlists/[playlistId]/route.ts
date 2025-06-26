@@ -22,13 +22,27 @@ export async function GET(request: Request, { params }: { params: { playlistId: 
 
     const sql = getDb()
 
-    // Get playlist with only existing columns
+    // Get playlist with all columns
     const playlists = await sql`
       SELECT 
         p.id,
         p.name,
         p.description,
         p.status,
+        p.scale_image,
+        p.scale_video,
+        p.scale_document,
+        p.shuffle,
+        p.default_transition,
+        p.transition_speed,
+        p.auto_advance,
+        p.background_color,
+        p.text_overlay,
+        p.loop_enabled,
+        p.schedule_enabled,
+        p.start_time,
+        p.end_time,
+        p.selected_days,
         p.created_at,
         p.updated_at,
         COUNT(pi.id) as item_count,
@@ -36,7 +50,11 @@ export async function GET(request: Request, { params }: { params: { playlistId: 
       FROM playlists p
       LEFT JOIN playlist_items pi ON p.id = pi.playlist_id
       WHERE p.id = ${playlistId} AND p.user_id = ${user.id}
-      GROUP BY p.id, p.name, p.description, p.status, p.created_at, p.updated_at
+      GROUP BY p.id, p.name, p.description, p.status, p.scale_image, p.scale_video, 
+               p.scale_document, p.shuffle, p.default_transition, p.transition_speed, 
+               p.auto_advance, p.background_color, p.text_overlay, p.loop_enabled, 
+               p.schedule_enabled, p.start_time, p.end_time, p.selected_days, 
+               p.created_at, p.updated_at
     `
 
     if (playlists.length === 0) {
@@ -57,16 +75,21 @@ export async function GET(request: Request, { params }: { params: { playlistId: 
       total_duration: Number(playlist.total_duration),
       created_at: playlist.created_at,
       updated_at: playlist.updated_at,
-      // Default values for missing columns
-      scale_image: "fit",
-      scale_video: "fit",
-      scale_document: "fit",
-      shuffle: false,
-      default_transition: "fade",
-      transition_speed: "normal",
-      auto_advance: true,
-      background_color: "#000000",
-      text_overlay: false,
+      // Using actual database values
+      scale_image: playlist.scale_image,
+      scale_video: playlist.scale_video,
+      scale_document: playlist.scale_document,
+      shuffle: playlist.shuffle,
+      default_transition: playlist.default_transition,
+      transition_speed: playlist.transition_speed,
+      auto_advance: playlist.auto_advance,
+      background_color: playlist.background_color,
+      text_overlay: playlist.text_overlay,
+      loop_enabled: playlist.loop_enabled,
+      schedule_enabled: playlist.schedule_enabled,
+      start_time: playlist.start_time,
+      end_time: playlist.end_time,
+      selected_days: playlist.selected_days ? JSON.parse(playlist.selected_days) : [],
     }
 
     return NextResponse.json({
@@ -113,13 +136,27 @@ export async function PUT(request: Request, { params }: { params: { playlistId: 
       return NextResponse.json({ error: "Playlist not found" }, { status: 404 })
     }
 
-    // Update playlist with only existing columns
+    // Update playlist with all possible columns
     const updatedPlaylist = await sql`
       UPDATE playlists 
       SET 
         name = COALESCE(${body.name}, name),
         description = COALESCE(${body.description}, description),
         status = COALESCE(${body.status}, status),
+        scale_image = COALESCE(${body.scale_image}, scale_image),
+        scale_video = COALESCE(${body.scale_video}, scale_video),
+        scale_document = COALESCE(${body.scale_document}, scale_document),
+        shuffle = COALESCE(${body.shuffle}, shuffle),
+        default_transition = COALESCE(${body.default_transition}, default_transition),
+        transition_speed = COALESCE(${body.transition_speed}, transition_speed),
+        auto_advance = COALESCE(${body.auto_advance}, auto_advance),
+        background_color = COALESCE(${body.background_color}, background_color),
+        text_overlay = COALESCE(${body.text_overlay}, text_overlay),
+        loop_enabled = COALESCE(${body.loop_enabled}, loop_enabled),
+        schedule_enabled = COALESCE(${body.schedule_enabled}, schedule_enabled),
+        start_time = CASE WHEN ${body.start_time} IS NOT NULL THEN ${body.start_time}::TIME ELSE start_time END,
+        end_time = CASE WHEN ${body.end_time} IS NOT NULL THEN ${body.end_time}::TIME ELSE end_time END,
+        selected_days = COALESCE(${JSON.stringify(body.selected_days || [])}, selected_days),
         updated_at = NOW()
       WHERE id = ${playlistId} AND user_id = ${user.id}
       RETURNING *
@@ -152,16 +189,21 @@ export async function PUT(request: Request, { params }: { params: { playlistId: 
         total_duration: Number(playlist.total_duration),
         created_at: playlist.created_at,
         updated_at: playlist.updated_at,
-        // Default values for missing columns
-        scale_image: "fit",
-        scale_video: "fit",
-        scale_document: "fit",
-        shuffle: false,
-        default_transition: "fade",
-        transition_speed: "normal",
-        auto_advance: true,
-        background_color: "#000000",
-        text_overlay: false,
+        // Using actual database values
+        scale_image: playlist.scale_image,
+        scale_video: playlist.scale_video,
+        scale_document: playlist.scale_document,
+        shuffle: playlist.shuffle,
+        default_transition: playlist.default_transition,
+        transition_speed: playlist.transition_speed,
+        auto_advance: playlist.auto_advance,
+        background_color: playlist.background_color,
+        text_overlay: playlist.text_overlay,
+        loop_enabled: playlist.loop_enabled,
+        schedule_enabled: playlist.schedule_enabled,
+        start_time: playlist.start_time,
+        end_time: playlist.end_time,
+        selected_days: playlist.selected_days ? JSON.parse(playlist.selected_days) : [],
       },
     })
   } catch (error) {
