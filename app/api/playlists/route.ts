@@ -9,6 +9,14 @@ export async function GET() {
   console.log("🎵 [PLAYLISTS API] Starting GET request")
 
   try {
+    // Test database connection first
+    const sql = getDb()
+    console.log("🎵 [PLAYLISTS API] Database connection established")
+
+    // Test basic query
+    const testQuery = await sql`SELECT 1 as test`
+    console.log("🎵 [PLAYLISTS API] Database test query successful:", testQuery)
+
     const user = await getCurrentUser()
     if (!user) {
       console.log("❌ [PLAYLISTS API] No user authenticated")
@@ -16,90 +24,168 @@ export async function GET() {
     }
 
     console.log(`🔍 [PLAYLISTS API] Fetching playlists for user: ${user.id}`)
-    const sql = getDb()
 
-    // First, let's check if the playlists table exists
-    const tableCheck = await sql`
-      SELECT EXISTS (
-        SELECT FROM information_schema.tables 
-        WHERE table_name = 'playlists'
-      );
-    `
+    // Check if the playlists table exists
+    let tableExists = false
+    try {
+      const tableCheck = await sql`
+        SELECT EXISTS (
+          SELECT FROM information_schema.tables 
+          WHERE table_name = 'playlists'
+        );
+      `
+      tableExists = tableCheck[0]?.exists || false
+      console.log("🎵 [PLAYLISTS API] Playlists table exists:", tableExists)
+    } catch (error) {
+      console.error("🎵 [PLAYLISTS API] Error checking table existence:", error)
+      return NextResponse.json(
+        {
+          error: "Database schema error. Please run database setup.",
+          details: error instanceof Error ? error.message : "Unknown error",
+          playlists: [],
+          total: 0,
+        },
+        { status: 500 },
+      )
+    }
 
-    if (!tableCheck[0].exists) {
+    if (!tableExists) {
       console.log("❌ [PLAYLISTS API] Playlists table does not exist")
       return NextResponse.json(
         {
-          error: "Playlists table not found. Please run database setup.",
+          success: true,
+          message: "Playlists table not found. Please run database setup.",
           playlists: [],
           total: 0,
+          needsSetup: true,
         },
         { status: 200 },
       )
     }
 
-    // Fetch playlists with comprehensive data
-    const playlists = await sql`
-      SELECT 
-        p.*,
-        COALESCE(item_stats.item_count, 0) as item_count,
-        COALESCE(device_stats.device_count, 0) as device_count,
-        COALESCE(item_stats.total_duration, 0) as total_duration,
-        COALESCE(device_stats.assigned_devices, '{}') as assigned_devices
-      FROM playlists p
-      LEFT JOIN (
+    // Try to fetch playlists with a simple query first
+    let playlists = []
+    try {
+      console.log("🎵 [PLAYLISTS API] Attempting simple playlist query...")
+      playlists = await sql`
         SELECT 
-          playlist_id,
-          COUNT(*) as item_count,
-          SUM(COALESCE(pi.duration, COALESCE(mf.duration, 30))) as total_duration
-        FROM playlist_items pi
-        LEFT JOIN media_files mf ON pi.media_file_id = mf.id
-        GROUP BY playlist_id
-      ) item_stats ON p.id = item_stats.playlist_id
-      LEFT JOIN (
-        SELECT 
-          playlist_id,
-          COUNT(*) as device_count,
-          ARRAY_AGG(d.name) as assigned_devices
-        FROM playlist_assignments pa
-        LEFT JOIN devices d ON pa.device_id = d.id
-        GROUP BY playlist_id
-      ) device_stats ON p.id = device_stats.playlist_id
-      WHERE p.user_id = ${user.id}
-      ORDER BY p.updated_at DESC
-    `
+          id, name, description, status, loop_enabled, schedule_enabled,
+          start_time, end_time, selected_days, created_at, updated_at
+        FROM playlists 
+        WHERE user_id = ${user.id}
+        ORDER BY updated_at DESC
+      `
+      console.log(`🎵 [PLAYLISTS API] Simple query successful, found ${playlists.length} playlists`)
+    } catch (error) {
+      console.error("🎵 [PLAYLISTS API] Error in simple playlist query:", error)
+      return NextResponse.json(
+        {
+          error: "Failed to fetch playlists",
+          details: error instanceof Error ? error.message : "Unknown error",
+          playlists: [],
+          total: 0,
+        },
+        { status: 500 },
+      )
+    }
 
-    console.log(`✅ [PLAYLISTS API] Found ${playlists.length} playlists`)
+    // If simple query works, try to get additional stats
+    const playlistsWithStats = []
+    for (const playlist of playlists) {
+      try {
+        // Get item count and duration
+        let itemStats = { item_count: 0, total_duration: 0 }
+        try {
+          const itemStatsQuery = await sql`
+            SELECT 
+              COUNT(*) as item_count,
+              COALESCE(SUM(COALESCE(pi.duration, 30)), 0) as total_duration
+            FROM playlist_items pi
+            WHERE pi.playlist_id = ${playlist.id}
+          `
+          if (itemStatsQuery.length > 0) {
+            itemStats = {
+              item_count: Number(itemStatsQuery[0].item_count) || 0,
+              total_duration: Number(itemStatsQuery[0].total_duration) || 0,
+            }
+          }
+        } catch (error) {
+          console.log("🎵 [PLAYLISTS API] playlist_items table might not exist, using defaults")
+        }
 
-    // Format the response
-    const formattedPlaylists = playlists.map((playlist) => ({
-      id: playlist.id,
-      name: playlist.name,
-      description: playlist.description,
-      status: playlist.status,
-      loop_enabled: playlist.loop_enabled,
-      schedule_enabled: playlist.schedule_enabled,
-      start_time: playlist.start_time,
-      end_time: playlist.end_time,
-      selected_days: playlist.selected_days || [],
-      item_count: Number(playlist.item_count) || 0,
-      device_count: Number(playlist.device_count) || 0,
-      total_duration: Number(playlist.total_duration) || 0,
-      assigned_devices: playlist.assigned_devices?.filter(Boolean) || [],
-      created_at: playlist.created_at,
-      updated_at: playlist.updated_at,
-    }))
+        // Get device assignments
+        let deviceStats = { device_count: 0, assigned_devices: [] }
+        try {
+          const deviceStatsQuery = await sql`
+            SELECT 
+              COUNT(*) as device_count,
+              ARRAY_AGG(d.name) as assigned_devices
+            FROM playlist_assignments pa
+            LEFT JOIN devices d ON pa.device_id = d.id
+            WHERE pa.playlist_id = ${playlist.id}
+          `
+          if (deviceStatsQuery.length > 0 && deviceStatsQuery[0].device_count > 0) {
+            deviceStats = {
+              device_count: Number(deviceStatsQuery[0].device_count) || 0,
+              assigned_devices: deviceStatsQuery[0].assigned_devices?.filter(Boolean) || [],
+            }
+          }
+        } catch (error) {
+          console.log("🎵 [PLAYLISTS API] playlist_assignments table might not exist, using defaults")
+        }
+
+        playlistsWithStats.push({
+          id: playlist.id,
+          name: playlist.name,
+          description: playlist.description,
+          status: playlist.status,
+          loop_enabled: playlist.loop_enabled,
+          schedule_enabled: playlist.schedule_enabled,
+          start_time: playlist.start_time,
+          end_time: playlist.end_time,
+          selected_days: playlist.selected_days || [],
+          item_count: itemStats.item_count,
+          device_count: deviceStats.device_count,
+          total_duration: itemStats.total_duration,
+          assigned_devices: deviceStats.assigned_devices,
+          created_at: playlist.created_at,
+          updated_at: playlist.updated_at,
+        })
+      } catch (error) {
+        console.error(`🎵 [PLAYLISTS API] Error processing playlist ${playlist.id}:`, error)
+        // Add playlist with default stats if there's an error
+        playlistsWithStats.push({
+          id: playlist.id,
+          name: playlist.name,
+          description: playlist.description,
+          status: playlist.status,
+          loop_enabled: playlist.loop_enabled,
+          schedule_enabled: playlist.schedule_enabled,
+          start_time: playlist.start_time,
+          end_time: playlist.end_time,
+          selected_days: playlist.selected_days || [],
+          item_count: 0,
+          device_count: 0,
+          total_duration: 0,
+          assigned_devices: [],
+          created_at: playlist.created_at,
+          updated_at: playlist.updated_at,
+        })
+      }
+    }
+
+    console.log(`✅ [PLAYLISTS API] Successfully processed ${playlistsWithStats.length} playlists`)
 
     return NextResponse.json({
       success: true,
-      playlists: formattedPlaylists,
-      total: playlists.length,
+      playlists: playlistsWithStats,
+      total: playlistsWithStats.length,
     })
   } catch (error) {
-    console.error("❌ [PLAYLISTS API] Error fetching playlists:", error)
+    console.error("❌ [PLAYLISTS API] Unexpected error:", error)
     return NextResponse.json(
       {
-        error: "Failed to fetch playlists",
+        error: "Internal server error",
         details: error instanceof Error ? error.message : "Unknown error",
         playlists: [],
         total: 0,
@@ -162,6 +248,24 @@ export async function POST(request: Request) {
     }
 
     const sql = getDb()
+
+    // Check if playlists table exists
+    const tableCheck = await sql`
+      SELECT EXISTS (
+        SELECT FROM information_schema.tables 
+        WHERE table_name = 'playlists'
+      );
+    `
+
+    if (!tableCheck[0].exists) {
+      console.log("❌ [PLAYLISTS API] Playlists table does not exist")
+      return NextResponse.json(
+        {
+          error: "Playlists table not found. Please run database setup first.",
+        },
+        { status: 400 },
+      )
+    }
 
     // Create the playlist
     console.log(`🔨 [PLAYLISTS API] Creating playlist for user: ${user.id}`)
