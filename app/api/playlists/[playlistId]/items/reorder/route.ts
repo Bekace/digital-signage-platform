@@ -10,11 +10,17 @@ export async function PUT(request: Request, { params }: { params: { playlistId: 
   try {
     const user = await getCurrentUser()
     if (!user) {
-      console.log("❌ [PLAYLIST REORDER API] No user authenticated")
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
+    const playlistId = Number.parseInt(params.playlistId)
+    if (isNaN(playlistId)) {
+      return NextResponse.json({ error: "Invalid playlist ID" }, { status: 400 })
+    }
+
     const body = await request.json()
+    console.log("📝 [PLAYLIST REORDER API] Request body:", body)
+
     const { items } = body
 
     if (!Array.isArray(items)) {
@@ -22,24 +28,22 @@ export async function PUT(request: Request, { params }: { params: { playlistId: 
     }
 
     const sql = getDb()
-    const playlistId = Number.parseInt(params.playlistId)
 
     // Verify playlist ownership
-    const playlists = await sql`
-      SELECT id FROM playlists 
-      WHERE id = ${playlistId} AND user_id = ${user.id}
+    const playlist = await sql`
+      SELECT id FROM playlists WHERE id = ${playlistId} AND user_id = ${user.id}
     `
 
-    if (playlists.length === 0) {
-      console.log("❌ [PLAYLIST REORDER API] Playlist not found or not owned by user")
+    if (playlist.length === 0) {
       return NextResponse.json({ error: "Playlist not found" }, { status: 404 })
     }
 
-    // Update positions for each item
-    for (const item of items) {
+    // Update positions for all items
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i]
       await sql`
         UPDATE playlist_items 
-        SET position = ${item.position}
+        SET position = ${i + 1}
         WHERE id = ${item.id} AND playlist_id = ${playlistId}
       `
     }

@@ -5,108 +5,108 @@ import { getDb } from "@/lib/db"
 export const dynamic = "force-dynamic"
 
 export async function GET() {
-  console.log("🔍 [DEBUG PLAYLISTS API] Starting debug request")
+  console.log("🔍 [DEBUG PLAYLISTS] Starting debug request")
 
   try {
     const user = await getCurrentUser()
-    if (!user) {
-      console.log("❌ [DEBUG PLAYLISTS API] No user authenticated")
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-    }
-
     const sql = getDb()
 
-    // Check if playlists table exists
-    const tableExists = await sql`
-      SELECT EXISTS (
-        SELECT FROM information_schema.tables 
-        WHERE table_name = 'playlists'
-      )
-    `
-
-    console.log("📋 [DEBUG PLAYLISTS API] Playlists table exists:", tableExists[0].exists)
-
-    if (!tableExists[0].exists) {
-      return NextResponse.json({
-        error: "Playlists table does not exist",
-        suggestion: "Run the playlist setup script",
-      })
+    const debugInfo: any = {
+      timestamp: new Date().toISOString(),
+      user: user ? { id: user.id, email: user.email } : null,
+      tables: {},
+      data: {},
+      errors: [],
     }
 
-    // Get table structure
-    const tableStructure = await sql`
-      SELECT column_name, data_type, is_nullable, column_default
-      FROM information_schema.columns
-      WHERE table_name = 'playlists'
-      ORDER BY ordinal_position
-    `
+    // Check table existence
+    const tables = ["playlists", "playlist_items", "media_files", "users"]
+    for (const table of tables) {
+      try {
+        const exists = await sql`
+          SELECT EXISTS (
+            SELECT FROM information_schema.tables 
+            WHERE table_name = ${table}
+          );
+        `
+        debugInfo.tables[table] = {
+          exists: exists[0]?.exists || false,
+          columns: [],
+        }
 
-    // Get all playlists for this user
-    const playlists = await sql`
-      SELECT * FROM playlists WHERE user_id = ${user.id}
-    `
-
-    // Get playlist items table structure
-    const itemsTableExists = await sql`
-      SELECT EXISTS (
-        SELECT FROM information_schema.tables 
-        WHERE table_name = 'playlist_items'
-      )
-    `
-
-    let itemsTableStructure = []
-    let playlistItems = []
-
-    if (itemsTableExists[0].exists) {
-      itemsTableStructure = await sql`
-        SELECT column_name, data_type, is_nullable, column_default
-        FROM information_schema.columns
-        WHERE table_name = 'playlist_items'
-        ORDER BY ordinal_position
-      `
-
-      playlistItems = await sql`
-        SELECT pi.*, p.name as playlist_name
-        FROM playlist_items pi
-        JOIN playlists p ON pi.playlist_id = p.id
-        WHERE p.user_id = ${user.id}
-      `
+        if (exists[0]?.exists) {
+          const columns = await sql`
+            SELECT column_name, data_type, is_nullable
+            FROM information_schema.columns
+            WHERE table_name = ${table}
+            ORDER BY ordinal_position;
+          `
+          debugInfo.tables[table].columns = columns
+        }
+      } catch (error) {
+        debugInfo.errors.push(`Error checking table ${table}: ${error}`)
+      }
     }
 
-    console.log(`✅ [DEBUG PLAYLISTS API] Found ${playlists.length} playlists and ${playlistItems.length} items`)
+    // Get data counts if user is authenticated
+    if (user) {
+      try {
+        if (debugInfo.tables.playlists?.exists) {
+          const playlistCount = await sql`
+            SELECT COUNT(*) as count FROM playlists WHERE user_id = ${user.id}
+          `
+          debugInfo.data.playlists = {
+            count: Number(playlistCount[0]?.count || 0),
+          }
 
-    return NextResponse.json({
-      success: true,
-      debug: {
-        user: {
-          id: user.id,
-          email: user.email,
-        },
-        tables: {
-          playlists_exists: tableExists[0].exists,
-          playlist_items_exists: itemsTableExists[0].exists,
-        },
-        structure: {
-          playlists: tableStructure,
-          playlist_items: itemsTableStructure,
-        },
-        data: {
-          playlists: playlists,
-          playlist_items: playlistItems,
-        },
-        counts: {
-          playlists: playlists.length,
-          playlist_items: playlistItems.length,
-        },
+          // Get sample playlists
+          const samplePlaylists = await sql`
+            SELECT id, name, status, created_at FROM playlists 
+            WHERE user_id = ${user.id} 
+            ORDER BY created_at DESC 
+            LIMIT 5
+          `
+          debugInfo.data.playlists.samples = samplePlaylists
+        }
+
+        if (debugInfo.tables.playlist_items?.exists) {
+          const itemCount = await sql`
+            SELECT COUNT(*) as count FROM playlist_items pi
+            JOIN playlists p ON pi.playlist_id = p.id
+            WHERE p.user_id = ${user.id}
+          `
+          debugInfo.data.playlist_items = {
+            count: Number(itemCount[0]?.count || 0),
+          }
+        }
+
+        if (debugInfo.tables.media_files?.exists) {
+          const mediaCount = await sql`
+            SELECT COUNT(*) as count FROM media_files WHERE user_id = ${user.id}
+          `
+          debugInfo.data.media_files = {
+            count: Number(mediaCount[0]?.count || 0),
+          }
+        }
+      } catch (error) {
+        debugInfo.errors.push(`Error getting data counts: ${error}`)
+      }
+    }
+
+    console.log("✅ [DEBUG PLAYLISTS] Debug info collected")
+
+    return NextResponse.json(debugInfo, {
+      headers: {
+        "Content-Type": "application/json",
       },
     })
   } catch (error) {
-    console.error("❌ [DEBUG PLAYLISTS API] Error:", error)
+    console.error("❌ [DEBUG PLAYLISTS] Error:", error)
     return NextResponse.json(
       {
         error: "Debug failed",
         details: error instanceof Error ? error.message : "Unknown error",
-        stack: error instanceof Error ? error.stack : undefined,
+        timestamp: new Date().toISOString(),
       },
       { status: 500 },
     )
