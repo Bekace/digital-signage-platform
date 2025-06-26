@@ -5,22 +5,16 @@ import { getDb } from "@/lib/db"
 export const dynamic = "force-dynamic"
 
 export async function PUT(request: Request, { params }: { params: { playlistId: string } }) {
-  console.log("🔄 [REORDER API] Starting reorder request for playlist:", params.playlistId)
+  console.log("🔄 [PLAYLIST REORDER API] Starting PUT request for playlist:", params.playlistId)
 
   try {
     const user = await getCurrentUser()
     if (!user) {
-      console.log("❌ [REORDER API] No user authenticated")
+      console.log("❌ [PLAYLIST REORDER API] No user authenticated")
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
     const body = await request.json()
-    const { items } = body
-
-    if (!items || !Array.isArray(items)) {
-      return NextResponse.json({ error: "Items array is required" }, { status: 400 })
-    }
-
     const sql = getDb()
     const playlistId = Number.parseInt(params.playlistId)
 
@@ -31,12 +25,12 @@ export async function PUT(request: Request, { params }: { params: { playlistId: 
     `
 
     if (playlists.length === 0) {
-      console.log("❌ [REORDER API] Playlist not found or not owned by user")
+      console.log("❌ [PLAYLIST REORDER API] Playlist not found or not owned by user")
       return NextResponse.json({ error: "Playlist not found" }, { status: 404 })
     }
 
-    // Update positions for each item
-    for (const item of items) {
+    // Update positions for all items
+    for (const item of body.items) {
       await sql`
         UPDATE playlist_items 
         SET position = ${item.position}
@@ -44,14 +38,14 @@ export async function PUT(request: Request, { params }: { params: { playlistId: 
       `
     }
 
-    console.log(`✅ [REORDER API] Reordered ${items.length} items`)
+    console.log(`✅ [PLAYLIST REORDER API] Reordered ${body.items.length} items`)
 
     return NextResponse.json({
       success: true,
       message: "Items reordered successfully",
     })
   } catch (error) {
-    console.error("❌ [REORDER API] Error:", error)
+    console.error("❌ [PLAYLIST REORDER API] Error:", error)
     return NextResponse.json(
       {
         error: "Failed to reorder items",

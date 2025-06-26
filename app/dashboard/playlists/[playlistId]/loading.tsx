@@ -1,4 +1,5 @@
 import { Skeleton } from "@/components/ui/skeleton"
+import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { DashboardLayout } from "@/components/dashboard-layout"
 
 export default function PlaylistEditorLoading() {
@@ -23,13 +24,15 @@ export default function PlaylistEditorLoading() {
         {/* Stats */}
         <div className="grid grid-cols-4 gap-4">
           {Array.from({ length: 4 }).map((_, i) => (
-            <div key={i} className="p-6 bg-white border rounded-lg">
-              <div className="flex items-center justify-between mb-2">
+            <Card key={i}>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                 <Skeleton className="h-4 w-20" />
                 <Skeleton className="h-4 w-4" />
-              </div>
-              <Skeleton className="h-8 w-16" />
-            </div>
+              </CardHeader>
+              <CardContent>
+                <Skeleton className="h-8 w-16" />
+              </CardContent>
+            </Card>
           ))}
         </div>
 
@@ -37,52 +40,52 @@ export default function PlaylistEditorLoading() {
         <div className="grid grid-cols-12 gap-6">
           {/* Playlist Editor */}
           <div className="col-span-8">
-            <div className="bg-white border rounded-lg">
-              <div className="p-6 border-b">
+            <Card>
+              <CardHeader>
                 <Skeleton className="h-6 w-32" />
-              </div>
-              <div className="p-6">
+              </CardHeader>
+              <CardContent>
                 <div className="space-y-3">
-                  {Array.from({ length: 3 }).map((_, i) => (
+                  {Array.from({ length: 5 }).map((_, i) => (
                     <div key={i} className="flex items-center space-x-3 p-3 border rounded-lg">
                       <Skeleton className="h-4 w-4" />
                       <Skeleton className="h-12 w-12 rounded" />
                       <div className="flex-1">
                         <Skeleton className="h-4 w-48" />
-                        <Skeleton className="h-3 w-32 mt-1" />
+                        <Skeleton className="h-3 w-32 mt-2" />
                       </div>
                       <Skeleton className="h-8 w-8" />
                     </div>
                   ))}
                 </div>
-              </div>
-            </div>
+              </CardContent>
+            </Card>
           </div>
 
           {/* Media Library */}
           <div className="col-span-4">
-            <div className="bg-white border rounded-lg">
-              <div className="p-6 border-b">
-                <div className="flex items-center justify-between mb-4">
-                  <Skeleton className="h-6 w-32" />
+            <Card>
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <Skeleton className="h-6 w-24" />
                   <Skeleton className="h-8 w-16" />
                 </div>
                 <Skeleton className="h-10 w-full" />
-              </div>
-              <div className="p-6">
+              </CardHeader>
+              <CardContent>
                 <div className="space-y-3">
-                  {Array.from({ length: 5 }).map((_, i) => (
+                  {Array.from({ length: 6 }).map((_, i) => (
                     <div key={i} className="flex items-center space-x-3 p-3 border rounded-lg">
                       <Skeleton className="h-12 w-12 rounded" />
                       <div className="flex-1">
                         <Skeleton className="h-4 w-32" />
-                        <Skeleton className="h-3 w-20 mt-1" />
+                        <Skeleton className="h-3 w-24 mt-2" />
                       </div>
                     </div>
                   ))}
                 </div>
-              </div>
-            </div>
+              </CardContent>
+            </Card>
           </div>
         </div>
       </div>

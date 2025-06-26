@@ -5,12 +5,12 @@ import { getDb } from "@/lib/db"
 export const dynamic = "force-dynamic"
 
 export async function DELETE(request: Request, { params }: { params: { playlistId: string; itemId: string } }) {
-  console.log("🗑️ [DELETE ITEM API] Starting delete request for item:", params.itemId)
+  console.log("🗑️ [PLAYLIST ITEM DELETE API] Starting DELETE request:", params.playlistId, params.itemId)
 
   try {
     const user = await getCurrentUser()
     if (!user) {
-      console.log("❌ [DELETE ITEM API] No user authenticated")
+      console.log("❌ [PLAYLIST ITEM DELETE API] No user authenticated")
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
@@ -25,7 +25,7 @@ export async function DELETE(request: Request, { params }: { params: { playlistI
     `
 
     if (playlists.length === 0) {
-      console.log("❌ [DELETE ITEM API] Playlist not found or not owned by user")
+      console.log("❌ [PLAYLIST ITEM DELETE API] Playlist not found or not owned by user")
       return NextResponse.json({ error: "Playlist not found" }, { status: 404 })
     }
 
@@ -37,18 +37,18 @@ export async function DELETE(request: Request, { params }: { params: { playlistI
     `
 
     if (deletedItems.length === 0) {
-      console.log("❌ [DELETE ITEM API] Item not found")
+      console.log("❌ [PLAYLIST ITEM DELETE API] Item not found")
       return NextResponse.json({ error: "Item not found" }, { status: 404 })
     }
 
-    console.log(`✅ [DELETE ITEM API] Deleted item with ID: ${itemId}`)
+    console.log(`✅ [PLAYLIST ITEM DELETE API] Deleted item: ${itemId}`)
 
     return NextResponse.json({
       success: true,
       message: "Item deleted successfully",
     })
   } catch (error) {
-    console.error("❌ [DELETE ITEM API] Error:", error)
+    console.error("❌ [PLAYLIST ITEM DELETE API] Error:", error)
     return NextResponse.json(
       {
         error: "Failed to delete item",
