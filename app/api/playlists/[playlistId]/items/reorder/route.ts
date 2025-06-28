@@ -1,133 +1,80 @@
-import { NextResponse } from "next/server"
-import { getCurrentUser } from "@/lib/auth"
-import { getDb } from "@/lib/db"
+import { type NextRequest, NextResponse } from "next/server"
+import { neon } from "@neondatabase/serverless"
+import jwt from "jsonwebtoken"
 
-export async function PUT(request: Request, { params }: { params: { playlistId: string } }) {
+const sql = neon(process.env.DATABASE_URL!)
+
+export async function POST(request: NextRequest, { params }: { params: { playlistId: string } }) {
   try {
-    const user = await getCurrentUser()
-    if (!user) {
-      console.log("🔄 [REORDER API] Unauthorized - no user")
+    console.log(`🎯 [REORDER API] Starting reorder for playlist: ${params.playlistId}`)
+
+    // Get user from token
+    const token = request.headers.get("authorization")?.replace("Bearer ", "")
+    if (!token) {
+      console.log("🎯 [REORDER API] No token provided")
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const playlistId = params.playlistId
-    const { items } = await request.json()
-
-    console.log("🔄 [REORDER API] Starting reorder for playlist:", playlistId)
-    console.log("🔄 [REORDER API] User ID:", user.id)
-    console.log("🔄 [REORDER API] Items to reorder:", items)
-
-    if (!Array.isArray(items)) {
-      console.log("🔄 [REORDER API] Invalid items array")
-      return NextResponse.json({ error: "Items array is required" }, { status: 400 })
-    }
-
-    const sql = getDb()
+    const decoded = jwt.verify(token, process.env.JWT_SECRET!) as any
+    const userId = decoded.userId
+    console.log(`🎯 [REORDER API] User ID: ${userId}`)
 
     // Verify playlist ownership
-    console.log("🔄 [REORDER API] Verifying playlist ownership...")
-    const playlist = await sql`
-      SELECT id FROM playlists 
-      WHERE id = ${playlistId} AND user_id = ${user.id}
+    const playlistCheck = await sql`
+      SELECT id, user_id FROM playlists 
+      WHERE id = ${params.playlistId} AND user_id = ${userId}
     `
 
-    if (playlist.length === 0) {
-      console.log("🔄 [REORDER API] Playlist not found or unauthorized")
+    if (playlistCheck.length === 0) {
+      console.log(`🎯 [REORDER API] Playlist not found or not owned by user`)
       return NextResponse.json({ error: "Playlist not found" }, { status: 404 })
     }
 
-    console.log("🔄 [REORDER API] Playlist verified, updating positions...")
+    const { items } = await request.json()
+    console.log(`🎯 [REORDER API] Received ${items.length} items to reorder`)
 
-    // Update positions one by one (avoiding transaction for now)
-    for (let i = 0; i < items.length; i++) {
-      const item = items[i]
-      const newPosition = i + 1
-
-      console.log(`🔄 [REORDER API] Updating item ${item.id} to position ${newPosition}`)
+    // Update each item's position
+    const updatePromises = items.map(async (item: any, index: number) => {
+      const newPosition = index + 1
+      console.log(`🎯 [REORDER API] Updating item ${item.id} to position ${newPosition}`)
 
       try {
-        await sql`
+        const result = await sql`
           UPDATE playlist_items 
           SET position = ${newPosition}
-          WHERE id = ${item.id} AND playlist_id = ${playlistId}
+          WHERE id = ${item.id} AND playlist_id = ${params.playlistId}
         `
-        console.log(`🔄 [REORDER API] Successfully updated item ${item.id}`)
-      } catch (updateError) {
-        console.error(`🔄 [REORDER API] Failed to update item ${item.id}:`, updateError)
-        throw updateError
+        console.log(`🎯 [REORDER API] Updated item ${item.id} successfully`)
+        return { success: true, itemId: item.id, newPosition }
+      } catch (error) {
+        console.error(`🎯 [REORDER API] Failed to update item ${item.id}:`, error)
+        return { success: false, itemId: item.id, error: error.message }
       }
+    })
+
+    const results = await Promise.all(updatePromises)
+    const failures = results.filter((r) => !r.success)
+
+    if (failures.length > 0) {
+      console.error(`🎯 [REORDER API] ${failures.length} items failed to update:`, failures)
+      return NextResponse.json(
+        {
+          error: "Some items failed to reorder",
+          failures,
+          success: false,
+        },
+        { status: 500 },
+      )
     }
 
-    console.log("🔄 [REORDER API] All positions updated successfully")
-
-    // Return the updated items with their new positions
-    console.log("🔄 [REORDER API] Fetching updated items...")
-    const updatedItems = await sql`
-      SELECT 
-        pi.id,
-        pi.playlist_id,
-        pi.media_file_id as media_id,
-        pi.position,
-        pi.duration,
-        pi.transition_type,
-        pi.created_at,
-        mf.id as media_file_id,
-        mf.filename,
-        mf.original_name,
-        mf.file_type,
-        mf.file_size,
-        mf.url,
-        mf.thumbnail_url,
-        mf.mime_type,
-        mf.dimensions,
-        mf.duration as media_duration,
-        mf.media_source,
-        mf.external_url,
-        mf.embed_settings
-      FROM playlist_items pi
-      LEFT JOIN media_files mf ON pi.media_file_id = mf.id
-      WHERE pi.playlist_id = ${playlistId}
-      ORDER BY pi.position ASC
-    `
-
-    const transformedItems = updatedItems.map((item: any) => ({
-      id: item.id,
-      playlist_id: item.playlist_id,
-      media_id: item.media_id,
-      position: item.position,
-      duration: item.duration,
-      transition_type: item.transition_type,
-      created_at: item.created_at,
-      media_file: {
-        id: item.media_file_id,
-        filename: item.filename,
-        original_name: item.original_name,
-        file_type: item.file_type,
-        file_size: item.file_size,
-        url: item.url,
-        thumbnail_url: item.thumbnail_url,
-        mime_type: item.mime_type,
-        dimensions: item.dimensions,
-        duration: item.media_duration,
-        media_source: item.media_source,
-        external_url: item.external_url,
-        embed_settings: item.embed_settings,
-      },
-    }))
-
-    console.log("🔄 [REORDER API] Returning updated items:", transformedItems.length)
-
-    return NextResponse.json({
-      success: true,
-      message: "Playlist items reordered successfully",
-      items: transformedItems,
-    })
+    console.log(`🎯 [REORDER API] All ${items.length} items reordered successfully`)
+    return NextResponse.json({ success: true, message: "Items reordered successfully" })
   } catch (error) {
-    console.error("🔄 [REORDER API] Error reordering playlist items:", error)
+    console.error("🎯 [REORDER API] Reorder failed:", error)
     return NextResponse.json(
       {
-        error: "Failed to reorder playlist items",
-        details: error instanceof Error ? error.message : "Unknown error",
+        error: "Failed to reorder items",
+        details: error.message,
       },
       { status: 500 },
     )

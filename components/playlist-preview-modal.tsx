@@ -98,7 +98,7 @@ export function PlaylistPreviewModal({ open, onOpenChange, playlist, items }: Pl
   useEffect(() => {
     if (open) {
       setCurrentIndex(0)
-      setIsPlaying(false)
+      setIsPlaying(true) // Auto-start playing when modal opens
       setProgress(0)
       setMediaError(false)
       setMediaLoading(true)
@@ -117,7 +117,22 @@ export function PlaylistPreviewModal({ open, onOpenChange, playlist, items }: Pl
     setMediaError(false)
     setMediaLoading(true)
     setTimeRemaining(itemDuration)
-  }, [currentIndex, itemDuration])
+
+    // Auto-play when item changes (if we were already playing)
+    if (open && isPlaying) {
+      // Small delay to let media load
+      setTimeout(() => {
+        if (videoRef.current) {
+          videoRef.current.currentTime = 0
+          videoRef.current.play().catch(console.error)
+        }
+        if (audioRef.current) {
+          audioRef.current.currentTime = 0
+          audioRef.current.play().catch(console.error)
+        }
+      }, 100)
+    }
+  }, [currentIndex, itemDuration, open])
 
   // Handle fullscreen changes
   useEffect(() => {
@@ -170,22 +185,23 @@ export function PlaylistPreviewModal({ open, onOpenChange, playlist, items }: Pl
   const handlePlayPause = () => {
     if (mediaError) return
 
-    setIsPlaying(!isPlaying)
+    const newPlayingState = !isPlaying
+    setIsPlaying(newPlayingState)
 
     // Handle video/audio elements
     if (videoRef.current) {
-      if (isPlaying) {
-        videoRef.current.pause()
+      if (newPlayingState) {
+        videoRef.current.play().catch(console.error)
       } else {
-        videoRef.current.play()
+        videoRef.current.pause()
       }
     }
 
     if (audioRef.current) {
-      if (isPlaying) {
-        audioRef.current.pause()
+      if (newPlayingState) {
+        audioRef.current.play().catch(console.error)
       } else {
-        audioRef.current.play()
+        audioRef.current.pause()
       }
     }
   }
@@ -209,11 +225,29 @@ export function PlaylistPreviewModal({ open, onOpenChange, playlist, items }: Pl
   const handleMediaLoad = () => {
     setMediaLoading(false)
     setMediaError(false)
+
+    // Auto-play video/audio when loaded if we're in playing state
+    if (isPlaying) {
+      if (videoRef.current) {
+        videoRef.current.play().catch(console.error)
+      }
+      if (audioRef.current) {
+        audioRef.current.play().catch(console.error)
+      }
+    }
   }
 
   const handleMediaError = () => {
     setMediaLoading(false)
     setMediaError(true)
+    setIsPlaying(false)
+  }
+
+  const handleVideoPlay = () => {
+    setIsPlaying(true)
+  }
+
+  const handleVideoPause = () => {
     setIsPlaying(false)
   }
 
@@ -397,10 +431,16 @@ export function PlaylistPreviewModal({ open, onOpenChange, playlist, items }: Pl
                   src={currentMedia.url}
                   className={cn("w-full h-full", getScaleClass(currentMedia.mime_type))}
                   muted={isMuted}
+                  autoPlay={isPlaying}
+                  loop={false}
                   onLoadedData={handleMediaLoad}
                   onError={handleMediaError}
-                  onPlay={() => setIsPlaying(true)}
-                  onPause={() => setIsPlaying(false)}
+                  onPlay={handleVideoPlay}
+                  onPause={handleVideoPause}
+                  onEnded={() => {
+                    // Video ended naturally, advance to next
+                    handleNext()
+                  }}
                 />
               )}
 
@@ -419,10 +459,16 @@ export function PlaylistPreviewModal({ open, onOpenChange, playlist, items }: Pl
                   <audio
                     ref={audioRef}
                     src={currentMedia.url}
+                    autoPlay={isPlaying}
+                    muted={isMuted}
                     onLoadedData={handleMediaLoad}
                     onError={handleMediaError}
-                    onPlay={() => setIsPlaying(true)}
-                    onPause={() => setIsPlaying(false)}
+                    onPlay={handleVideoPlay}
+                    onPause={handleVideoPause}
+                    onEnded={() => {
+                      // Audio ended naturally, advance to next
+                      handleNext()
+                    }}
                   />
                 </div>
               )}
