@@ -94,6 +94,49 @@ export function PlaylistPreviewModal({ open, onOpenChange, playlist, items }: Pl
   const currentMedia = currentItem?.media || currentItem?.media_file
   const itemDuration = (currentItem?.duration || 30) * 1000 // Convert to milliseconds
 
+  // Function to modify Google Slides URL to hide menu bar
+  const getCleanPresentationUrl = (url: string) => {
+    if (!url) return url
+
+    // Check if it's a Google Slides URL
+    if (url.includes("docs.google.com/presentation")) {
+      try {
+        const urlObj = new URL(url)
+
+        // If it's already an embed URL, return as is
+        if (url.includes("/embed")) {
+          return url
+        }
+
+        // Convert regular Google Slides URL to embed URL
+        if (url.includes("/d/")) {
+          const presentationId = url.match(/\/d\/([a-zA-Z0-9-_]+)/)?.[1]
+          if (presentationId) {
+            return `https://docs.google.com/presentation/d/${presentationId}/embed?start=false&loop=false&delayms=3000&rm=minimal`
+          }
+        }
+
+        // If it's a sharing URL, try to extract the ID
+        if (url.includes("presentation/d/")) {
+          const presentationId = url.match(/presentation\/d\/([a-zA-Z0-9-_]+)/)?.[1]
+          if (presentationId) {
+            return `https://docs.google.com/presentation/d/${presentationId}/embed?start=false&loop=false&delayms=3000&rm=minimal`
+          }
+        }
+
+        // Add minimal UI parameters to existing URL
+        urlObj.searchParams.set("rm", "minimal")
+        urlObj.searchParams.set("embedded", "true")
+        return urlObj.toString()
+      } catch (error) {
+        console.error("Error processing Google Slides URL:", error)
+        return url
+      }
+    }
+
+    return url
+  }
+
   // Reset when modal opens/closes or item changes
   useEffect(() => {
     if (open) {
@@ -487,11 +530,12 @@ export function PlaylistPreviewModal({ open, onOpenChange, playlist, items }: Pl
               {/* Presentation Display */}
               {isPresentation && !mediaError && (
                 <iframe
-                  src={currentMedia.url}
+                  src={getCleanPresentationUrl(currentMedia.url)}
                   className="w-full h-full border-0"
                   onLoad={handleMediaLoad}
                   onError={handleMediaError}
                   title={currentMedia.original_name || currentMedia.filename}
+                  allow="autoplay"
                 />
               )}
 
