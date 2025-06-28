@@ -40,35 +40,38 @@ export function UploadMediaDialog({ open, onOpenChange, onUploadComplete }: Uplo
     setUploadComplete(false)
     setUploadProgress(0)
 
-    // Set conservative file size limits that work with server constraints
+    // Set file size limits based on Vercel's 4.5MB body limit
+    // Account for FormData overhead by setting file limits slightly lower
     let maxSize: number
     let maxSizeMB: string
 
     if (file.type.startsWith("video/")) {
-      maxSize = 50 * 1024 * 1024 // 50MB for videos
-      maxSizeMB = "50MB"
+      maxSize = 4 * 1024 * 1024 // 4MB for videos
+      maxSizeMB = "4MB"
     } else if (file.type.startsWith("image/")) {
-      maxSize = 25 * 1024 * 1024 // 25MB for images
-      maxSizeMB = "25MB"
+      maxSize = 3 * 1024 * 1024 // 3MB for images
+      maxSizeMB = "3MB"
     } else if (file.type.startsWith("audio/")) {
-      maxSize = 25 * 1024 * 1024 // 25MB for audio
-      maxSizeMB = "25MB"
+      maxSize = 4 * 1024 * 1024 // 4MB for audio
+      maxSizeMB = "4MB"
     } else if (file.type === "application/pdf") {
-      maxSize = 25 * 1024 * 1024 // 25MB for PDFs
-      maxSizeMB = "25MB"
+      maxSize = 3 * 1024 * 1024 // 3MB for PDFs
+      maxSizeMB = "3MB"
     } else if (file.type.includes("presentation") || file.type.includes("powerpoint")) {
-      maxSize = 50 * 1024 * 1024 // 50MB for presentations
-      maxSizeMB = "50MB"
+      maxSize = 3 * 1024 * 1024 // 3MB for presentations
+      maxSizeMB = "3MB"
     } else {
-      maxSize = 25 * 1024 * 1024 // 25MB for other documents
-      maxSizeMB = "25MB"
+      maxSize = 3 * 1024 * 1024 // 3MB for other documents
+      maxSizeMB = "3MB"
     }
 
     console.log(`File type: ${file.type}, Max size: ${maxSizeMB} (${maxSize} bytes), File size: ${file.size} bytes`)
 
     if (file.size > maxSize) {
       const fileSizeMB = Math.round((file.size / 1024 / 1024) * 100) / 100
-      setError(`File size must be less than ${maxSizeMB}. Your file is ${fileSizeMB}MB.`)
+      setError(
+        `File size must be less than ${maxSizeMB}. Your file is ${fileSizeMB}MB. This limit is due to Vercel's serverless function constraints.`,
+      )
       return
     }
 
@@ -140,7 +143,7 @@ export function UploadMediaDialog({ open, onOpenChange, onUploadComplete }: Uplo
         let errorMessage = data.error || "Upload failed"
 
         if (response.status === 413) {
-          errorMessage = "File is too large for the server. The server has a lower limit than expected."
+          errorMessage = "File is too large for Vercel's serverless functions (4.5MB limit). Try a smaller file."
         } else if (response.status === 401) {
           errorMessage = "You are not authorized to upload files. Please log in again."
         } else if (response.status === 400) {
@@ -207,7 +210,9 @@ export function UploadMediaDialog({ open, onOpenChange, onUploadComplete }: Uplo
           <AlertDialogDescription>
             Select a file to upload to your media library.
             <br />
-            <strong>Limits:</strong> Videos/Presentations (50MB), Images/Audio/PDFs/Documents (25MB)
+            <strong>Limits:</strong> Videos/Audio (4MB), Images/PDFs/Documents (3MB)
+            <br />
+            <small className="text-gray-500">Limited by Vercel's serverless function constraints</small>
           </AlertDialogDescription>
         </AlertDialogHeader>
 

@@ -9,6 +9,10 @@ export const maxDuration = 60 // 60 seconds for large file uploads
 
 export async function POST(request: NextRequest) {
   console.log("=== UPLOAD API CALLED ===")
+  console.log("Request headers:", {
+    contentLength: request.headers.get("content-length"),
+    contentType: request.headers.get("content-type"),
+  })
 
   try {
     const user = await getCurrentUser()
@@ -18,10 +22,6 @@ export async function POST(request: NextRequest) {
       console.log("ERROR: Unauthorized - no user found")
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
-
-    // Get content length from headers to check server limits
-    const contentLength = request.headers.get("content-length")
-    console.log("Request content-length:", contentLength)
 
     const formData = await request.formData()
     const file = formData.get("file") as File
@@ -39,28 +39,29 @@ export async function POST(request: NextRequest) {
       lastModified: file.lastModified,
     })
 
-    // Conservative file size limits that work with Vercel's constraints
+    // Set realistic file size limits based on Vercel's 4.5MB body limit
+    // We need to account for FormData overhead, so actual file should be smaller
     let maxSize: number
     let maxSizeMB: string
 
     if (file.type.startsWith("video/")) {
-      maxSize = 50 * 1024 * 1024 // 50MB for videos (conservative for server limits)
-      maxSizeMB = "50MB"
+      maxSize = 4 * 1024 * 1024 // 4MB for videos (safe for Vercel)
+      maxSizeMB = "4MB"
     } else if (file.type.startsWith("image/")) {
-      maxSize = 25 * 1024 * 1024 // 25MB for images
-      maxSizeMB = "25MB"
+      maxSize = 3 * 1024 * 1024 // 3MB for images
+      maxSizeMB = "3MB"
     } else if (file.type.startsWith("audio/")) {
-      maxSize = 25 * 1024 * 1024 // 25MB for audio
-      maxSizeMB = "25MB"
+      maxSize = 4 * 1024 * 1024 // 4MB for audio
+      maxSizeMB = "4MB"
     } else if (file.type === "application/pdf") {
-      maxSize = 25 * 1024 * 1024 // 25MB for PDFs
-      maxSizeMB = "25MB"
+      maxSize = 3 * 1024 * 1024 // 3MB for PDFs
+      maxSizeMB = "3MB"
     } else if (file.type.includes("presentation") || file.type.includes("powerpoint")) {
-      maxSize = 50 * 1024 * 1024 // 50MB for presentations
-      maxSizeMB = "50MB"
+      maxSize = 3 * 1024 * 1024 // 3MB for presentations
+      maxSizeMB = "3MB"
     } else {
-      maxSize = 25 * 1024 * 1024 // 25MB for other documents
-      maxSizeMB = "25MB"
+      maxSize = 3 * 1024 * 1024 // 3MB for other documents
+      maxSizeMB = "3MB"
     }
 
     console.log(`File type: ${file.type}, Max size: ${maxSizeMB} (${maxSize} bytes), File size: ${file.size} bytes`)
@@ -71,7 +72,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         {
           success: false,
-          error: `File size must be less than ${maxSizeMB}. Your file is ${fileSizeMB}MB.`,
+          error: `File size must be less than ${maxSizeMB}. Your file is ${fileSizeMB}MB. This limit is due to Vercel's serverless function constraints.`,
         },
         { status: 400 },
       )
@@ -198,8 +199,8 @@ export async function POST(request: NextRequest) {
       console.error("Error message:", error.message)
 
       if (error.message.includes("size") || error.message.includes("large")) {
-        errorMessage = "File is too large"
-        statusCode = 400
+        errorMessage = "File is too large for Vercel's serverless function limits"
+        statusCode = 413
       } else if (error.message.includes("type") || error.message.includes("format")) {
         errorMessage = "File type not supported"
         statusCode = 400

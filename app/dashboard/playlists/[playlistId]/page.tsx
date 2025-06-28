@@ -161,7 +161,12 @@ function SortablePlaylistItem({
               <Button
                 variant="ghost"
                 size="sm"
-                onClick={() => onRemove(item.id)}
+                onClick={(e) => {
+                  e.preventDefault()
+                  e.stopPropagation()
+                  console.log("🗑️ [PLAYLIST ITEM] Delete button clicked for item:", item.id)
+                  onRemove(item.id)
+                }}
                 className="text-red-500 hover:text-red-700"
               >
                 <Trash2 className="h-4 w-4" />
@@ -178,7 +183,14 @@ function SortablePlaylistItem({
       <Card className="group hover:shadow-md transition-shadow">
         <CardContent className="p-4">
           <div className="flex items-center space-x-4">
-            <div {...attributes} {...listeners} className="cursor-grab active:cursor-grabbing">
+            <div
+              {...attributes}
+              {...listeners}
+              className="cursor-grab active:cursor-grabbing p-1 hover:bg-gray-100 rounded"
+              onMouseDown={(e) => {
+                console.log("🎯 [PLAYLIST ITEM] Drag handle clicked for item:", item.id)
+              }}
+            >
               <GripVertical className="h-4 w-4 text-gray-400" />
             </div>
 
@@ -220,7 +232,12 @@ function SortablePlaylistItem({
               <Button
                 variant="ghost"
                 size="sm"
-                onClick={() => onEditDuration(item)}
+                onClick={(e) => {
+                  e.preventDefault()
+                  e.stopPropagation()
+                  console.log("⏱️ [PLAYLIST ITEM] Duration edit button clicked for item:", item.id)
+                  onEditDuration(item)
+                }}
                 className="text-blue-500 hover:text-blue-700"
               >
                 <Timer className="h-4 w-4" />
@@ -228,7 +245,12 @@ function SortablePlaylistItem({
               <Button
                 variant="ghost"
                 size="sm"
-                onClick={() => onRemove(item.id)}
+                onClick={(e) => {
+                  e.preventDefault()
+                  e.stopPropagation()
+                  console.log("🗑️ [PLAYLIST ITEM] Delete button clicked for item:", item.id)
+                  onRemove(item.id)
+                }}
                 className="text-red-500 hover:text-red-700"
               >
                 <Trash2 className="h-4 w-4" />
@@ -261,7 +283,11 @@ export default function PlaylistEditorPage() {
   const [currentItemIndex, setCurrentItemIndex] = useState(0)
 
   const sensors = useSensors(
-    useSensor(PointerSensor),
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 8,
+      },
+    }),
     useSensor(KeyboardSensor, {
       coordinateGetter: sortableKeyboardCoordinates,
     }),
@@ -349,19 +375,27 @@ export default function PlaylistEditorPage() {
   const handleDragEnd = async (event: any) => {
     const { active, over } = event
 
+    console.log("🎯 [PLAYLIST EDITOR] Drag end event:", { active: active?.id, over: over?.id })
+
     if (!over || active.id === over.id) {
+      console.log("🎯 [PLAYLIST EDITOR] No drag change needed")
       return
     }
 
     const oldIndex = playlistItems.findIndex((item) => item.id.toString() === active.id)
     const newIndex = playlistItems.findIndex((item) => item.id.toString() === over.id)
 
+    console.log("🎯 [PLAYLIST EDITOR] Drag indices:", { oldIndex, newIndex })
+
     if (oldIndex === -1 || newIndex === -1) {
+      console.log("🎯 [PLAYLIST EDITOR] Invalid drag indices")
       return
     }
 
     const newItems = arrayMove(playlistItems, oldIndex, newIndex)
     setPlaylistItems(newItems)
+
+    console.log("🎯 [PLAYLIST EDITOR] Items reordered locally, updating server...")
 
     // Update positions on server
     try {
@@ -379,13 +413,16 @@ export default function PlaylistEditorPage() {
       })
 
       if (!response.ok) {
+        console.error("🎯 [PLAYLIST EDITOR] Server reorder failed, reverting...")
         // Revert on error
         await fetchPlaylistItems()
         toast.error("Failed to reorder items")
       } else {
+        console.log("🎯 [PLAYLIST EDITOR] Server reorder successful")
         toast.success("Playlist order updated")
       }
     } catch (error) {
+      console.error("🎯 [PLAYLIST EDITOR] Reorder error:", error)
       // Revert on error
       await fetchPlaylistItems()
       toast.error("Failed to reorder items")
@@ -424,25 +461,34 @@ export default function PlaylistEditorPage() {
 
   const removeFromPlaylist = async (itemId: number) => {
     try {
+      console.log("🗑️ [PLAYLIST EDITOR] Removing item from playlist:", itemId)
+
       const response = await fetch(`/api/playlists/${playlistId}/items/${itemId}`, {
         method: "DELETE",
       })
 
+      console.log("🗑️ [PLAYLIST EDITOR] Delete response status:", response.status)
+
       if (response.ok) {
+        console.log("🗑️ [PLAYLIST EDITOR] Item deleted successfully, updating local state")
         setPlaylistItems((prev) => prev.filter((item) => item.id !== itemId))
         toast.success("Item removed from playlist")
         setRemoveItem(null)
       } else {
-        toast.error("Failed to remove item")
+        const errorData = await response.json()
+        console.error("🗑️ [PLAYLIST EDITOR] Delete failed:", errorData)
+        toast.error(errorData.error || "Failed to remove item")
       }
     } catch (error) {
-      console.error("Error removing item:", error)
+      console.error("🗑️ [PLAYLIST EDITOR] Error removing item:", error)
       toast.error("Failed to remove item")
     }
   }
 
   const updateItemDuration = async (itemId: number, duration: number, transition: string) => {
     try {
+      console.log("⏱️ [PLAYLIST EDITOR] Updating item duration:", { itemId, duration, transition })
+
       const response = await fetch(`/api/playlists/${playlistId}/items/${itemId}`, {
         method: "PUT",
         headers: {
@@ -455,16 +501,19 @@ export default function PlaylistEditorPage() {
       })
 
       if (response.ok) {
+        console.log("⏱️ [PLAYLIST EDITOR] Duration updated successfully")
         // Update local state
         setPlaylistItems((prev) =>
           prev.map((item) => (item.id === itemId ? { ...item, duration, transition_type: transition } : item)),
         )
         toast.success("Playback settings updated")
       } else {
-        toast.error("Failed to update settings")
+        const errorData = await response.json()
+        console.error("⏱️ [PLAYLIST EDITOR] Duration update failed:", errorData)
+        toast.error(errorData.error || "Failed to update settings")
       }
     } catch (error) {
-      console.error("Error updating item duration:", error)
+      console.error("⏱️ [PLAYLIST EDITOR] Error updating item duration:", error)
       toast.error("Failed to update settings")
     }
   }
@@ -633,7 +682,14 @@ export default function PlaylistEditorPage() {
                     <p className="text-gray-500">Add some media files from the library to get started.</p>
                   </div>
                 ) : (
-                  <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+                  <DndContext
+                    sensors={sensors}
+                    collisionDetection={closestCenter}
+                    onDragEnd={handleDragEnd}
+                    onDragStart={(event) => {
+                      console.log("🎯 [PLAYLIST EDITOR] Drag started:", event.active.id)
+                    }}
+                  >
                     <SortableContext
                       items={playlistItems.map((item) => item.id.toString())}
                       strategy={verticalListSortingStrategy}
@@ -644,10 +700,17 @@ export default function PlaylistEditorPage() {
                             key={item.id}
                             item={item}
                             onRemove={(id) => {
+                              console.log("🗑️ [PLAYLIST EDITOR] Remove requested for item:", id)
                               const itemToRemove = playlistItems.find((i) => i.id === id)
-                              if (itemToRemove) setRemoveItem(itemToRemove)
+                              if (itemToRemove) {
+                                console.log("🗑️ [PLAYLIST EDITOR] Setting remove item:", itemToRemove)
+                                setRemoveItem(itemToRemove)
+                              }
                             }}
-                            onEditDuration={(item) => setEditDurationItem(item)}
+                            onEditDuration={(item) => {
+                              console.log("⏱️ [PLAYLIST EDITOR] Duration edit requested for item:", item)
+                              setEditDurationItem(item)
+                            }}
                           />
                         ))}
                       </div>
@@ -838,7 +901,12 @@ export default function PlaylistEditorPage() {
             <AlertDialogFooter>
               <AlertDialogCancel>Cancel</AlertDialogCancel>
               <AlertDialogAction
-                onClick={() => removeItem && removeFromPlaylist(removeItem.id)}
+                onClick={() => {
+                  if (removeItem) {
+                    console.log("🗑️ [PLAYLIST EDITOR] Confirming removal of item:", removeItem.id)
+                    removeFromPlaylist(removeItem.id)
+                  }
+                }}
                 className="bg-red-600 hover:bg-red-700"
               >
                 Remove
