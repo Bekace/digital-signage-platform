@@ -4,6 +4,9 @@ import sharp from "sharp"
 import { getCurrentUser } from "@/lib/auth"
 import { getDb } from "@/lib/db"
 
+// Increase the maximum duration for this API route
+export const maxDuration = 60 // 60 seconds for large file uploads
+
 export async function POST(request: NextRequest) {
   console.log("=== UPLOAD API CALLED ===")
 
@@ -15,6 +18,10 @@ export async function POST(request: NextRequest) {
       console.log("ERROR: Unauthorized - no user found")
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
+
+    // Get content length from headers to check server limits
+    const contentLength = request.headers.get("content-length")
+    console.log("Request content-length:", contentLength)
 
     const formData = await request.formData()
     const file = formData.get("file") as File
@@ -32,28 +39,28 @@ export async function POST(request: NextRequest) {
       lastModified: file.lastModified,
     })
 
-    // Set realistic file size limits for digital signage system
+    // Conservative file size limits that work with Vercel's constraints
     let maxSize: number
     let maxSizeMB: string
 
     if (file.type.startsWith("video/")) {
-      maxSize = 500 * 1024 * 1024 // 500MB for videos (4K videos can be large)
-      maxSizeMB = "500MB"
+      maxSize = 50 * 1024 * 1024 // 50MB for videos (conservative for server limits)
+      maxSizeMB = "50MB"
     } else if (file.type.startsWith("image/")) {
-      maxSize = 50 * 1024 * 1024 // 50MB for images (high-res images)
-      maxSizeMB = "50MB"
+      maxSize = 25 * 1024 * 1024 // 25MB for images
+      maxSizeMB = "25MB"
     } else if (file.type.startsWith("audio/")) {
-      maxSize = 100 * 1024 * 1024 // 100MB for audio (long audio files)
-      maxSizeMB = "100MB"
+      maxSize = 25 * 1024 * 1024 // 25MB for audio
+      maxSizeMB = "25MB"
     } else if (file.type === "application/pdf") {
-      maxSize = 100 * 1024 * 1024 // 100MB for PDFs (large documents with images)
-      maxSizeMB = "100MB"
+      maxSize = 25 * 1024 * 1024 // 25MB for PDFs
+      maxSizeMB = "25MB"
     } else if (file.type.includes("presentation") || file.type.includes("powerpoint")) {
-      maxSize = 200 * 1024 * 1024 // 200MB for presentations (can have many images/videos)
-      maxSizeMB = "200MB"
-    } else {
-      maxSize = 50 * 1024 * 1024 // 50MB for other documents
+      maxSize = 50 * 1024 * 1024 // 50MB for presentations
       maxSizeMB = "50MB"
+    } else {
+      maxSize = 25 * 1024 * 1024 // 25MB for other documents
+      maxSizeMB = "25MB"
     }
 
     console.log(`File type: ${file.type}, Max size: ${maxSizeMB} (${maxSize} bytes), File size: ${file.size} bytes`)

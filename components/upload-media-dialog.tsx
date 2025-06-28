@@ -40,25 +40,28 @@ export function UploadMediaDialog({ open, onOpenChange, onUploadComplete }: Uplo
     setUploadComplete(false)
     setUploadProgress(0)
 
-    // Set realistic file size limits for digital signage
+    // Set conservative file size limits that work with server constraints
     let maxSize: number
     let maxSizeMB: string
 
     if (file.type.startsWith("video/")) {
-      maxSize = 500 * 1024 * 1024 // 500MB for videos
-      maxSizeMB = "500MB"
+      maxSize = 50 * 1024 * 1024 // 50MB for videos
+      maxSizeMB = "50MB"
     } else if (file.type.startsWith("image/")) {
-      maxSize = 50 * 1024 * 1024 // 50MB for images
-      maxSizeMB = "50MB"
+      maxSize = 25 * 1024 * 1024 // 25MB for images
+      maxSizeMB = "25MB"
     } else if (file.type.startsWith("audio/")) {
-      maxSize = 100 * 1024 * 1024 // 100MB for audio
-      maxSizeMB = "100MB"
+      maxSize = 25 * 1024 * 1024 // 25MB for audio
+      maxSizeMB = "25MB"
     } else if (file.type === "application/pdf") {
-      maxSize = 100 * 1024 * 1024 // 100MB for PDFs
-      maxSizeMB = "100MB"
-    } else {
-      maxSize = 50 * 1024 * 1024 // 50MB for other documents
+      maxSize = 25 * 1024 * 1024 // 25MB for PDFs
+      maxSizeMB = "25MB"
+    } else if (file.type.includes("presentation") || file.type.includes("powerpoint")) {
+      maxSize = 50 * 1024 * 1024 // 50MB for presentations
       maxSizeMB = "50MB"
+    } else {
+      maxSize = 25 * 1024 * 1024 // 25MB for other documents
+      maxSizeMB = "25MB"
     }
 
     console.log(`File type: ${file.type}, Max size: ${maxSizeMB} (${maxSize} bytes), File size: ${file.size} bytes`)
@@ -204,7 +207,7 @@ export function UploadMediaDialog({ open, onOpenChange, onUploadComplete }: Uplo
           <AlertDialogDescription>
             Select a file to upload to your media library.
             <br />
-            <strong>Limits:</strong> Videos (500MB), Audio/PDFs (100MB), Images/Documents (50MB)
+            <strong>Limits:</strong> Videos/Presentations (50MB), Images/Audio/PDFs/Documents (25MB)
           </AlertDialogDescription>
         </AlertDialogHeader>
 
