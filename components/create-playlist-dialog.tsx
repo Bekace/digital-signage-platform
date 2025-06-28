@@ -4,7 +4,6 @@ import type React from "react"
 
 import { useState } from "react"
 import { toast } from "sonner"
-import { Plus } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import {
@@ -14,18 +13,18 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 
 interface CreatePlaylistDialogProps {
+  open: boolean
+  onOpenChange: (open: boolean) => void
   onPlaylistCreated?: () => void
 }
 
-export function CreatePlaylistDialog({ onPlaylistCreated }: CreatePlaylistDialogProps) {
-  const [open, setOpen] = useState(false)
+export function CreatePlaylistDialog({ open, onOpenChange, onPlaylistCreated }: CreatePlaylistDialogProps) {
   const [loading, setLoading] = useState(false)
   const [formData, setFormData] = useState({
     name: "",
@@ -61,7 +60,7 @@ export function CreatePlaylistDialog({ onPlaylistCreated }: CreatePlaylistDialog
       }
 
       toast.success("Playlist created successfully!")
-      setOpen(false)
+      onOpenChange(false)
       setFormData({ name: "", description: "" })
 
       // Notify parent component to refresh
@@ -78,7 +77,7 @@ export function CreatePlaylistDialog({ onPlaylistCreated }: CreatePlaylistDialog
 
   const handleOpenChange = (newOpen: boolean) => {
     if (!loading) {
-      setOpen(newOpen)
+      onOpenChange(newOpen)
       if (!newOpen) {
         // Reset form when closing
         setFormData({ name: "", description: "" })
@@ -88,12 +87,6 @@ export function CreatePlaylistDialog({ onPlaylistCreated }: CreatePlaylistDialog
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogTrigger asChild>
-        <Button>
-          <Plus className="h-4 w-4 mr-2" />
-          Create Playlist
-        </Button>
-      </DialogTrigger>
       <DialogContent className="sm:max-w-[425px]">
         <form onSubmit={handleSubmit}>
           <DialogHeader>
