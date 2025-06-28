@@ -393,6 +393,8 @@ export default function PlaylistEditorPage() {
     }
 
     const newItems = arrayMove(playlistItems, oldIndex, newIndex)
+
+    // Update local state immediately for better UX
     setPlaylistItems(newItems)
 
     console.log("🎯 [PLAYLIST EDITOR] Items reordered locally, updating server...")
@@ -412,19 +414,26 @@ export default function PlaylistEditorPage() {
         }),
       })
 
+      const data = await response.json()
+      console.log("🎯 [PLAYLIST EDITOR] Server reorder response:", data)
+
       if (!response.ok) {
         console.error("🎯 [PLAYLIST EDITOR] Server reorder failed, reverting...")
         // Revert on error
-        await fetchPlaylistItems()
-        toast.error("Failed to reorder items")
+        setPlaylistItems(playlistItems) // Revert to original order
+        toast.error(data.error || "Failed to reorder items")
       } else {
         console.log("🎯 [PLAYLIST EDITOR] Server reorder successful")
+        // Update with server response to ensure consistency
+        if (data.items) {
+          setPlaylistItems(data.items)
+        }
         toast.success("Playlist order updated")
       }
     } catch (error) {
       console.error("🎯 [PLAYLIST EDITOR] Reorder error:", error)
       // Revert on error
-      await fetchPlaylistItems()
+      setPlaylistItems(playlistItems) // Revert to original order
       toast.error("Failed to reorder items")
     }
   }
