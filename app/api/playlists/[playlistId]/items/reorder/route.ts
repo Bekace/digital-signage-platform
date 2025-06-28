@@ -9,38 +9,20 @@ export async function PUT(request: NextRequest, { params }: { params: { playlist
     const body = await request.json()
     const { items } = body
 
-    console.log("🔄 [API] Reordering playlist items:", { playlistId, itemCount: items?.length })
+    console.log("🔄 [PLAYLIST REORDER API] Reordering items for playlist:", playlistId)
+    console.log("🔄 [PLAYLIST REORDER API] New order:", items)
 
-    if (!items || !Array.isArray(items)) {
+    // Validate input
+    if (!Array.isArray(items) || items.length === 0) {
       return NextResponse.json({ error: "Items array is required" }, { status: 400 })
     }
 
-    // Validate that all items belong to this playlist
-    const playlistItems = await sql`
-      SELECT id FROM playlist_items WHERE playlist_id = ${playlistId}
-    `
-
-    const validItemIds = new Set(playlistItems.map((item) => item.id))
-    const requestedItemIds = items.map((item) => item.id)
-
-    for (const itemId of requestedItemIds) {
-      if (!validItemIds.has(itemId)) {
-        return NextResponse.json({ error: `Item ${itemId} does not belong to this playlist` }, { status: 400 })
-      }
-    }
-
     // Update positions in a transaction-like manner
-    // First, set all positions to negative values to avoid conflicts
     for (const item of items) {
-      await sql`
-        UPDATE playlist_items 
-        SET position = ${-item.position}
-        WHERE id = ${item.id} AND playlist_id = ${playlistId}
-      `
-    }
+      if (!item.id || !item.position) {
+        continue
+      }
 
-    // Then set the correct positive positions
-    for (const item of items) {
       await sql`
         UPDATE playlist_items 
         SET position = ${item.position}
@@ -48,14 +30,14 @@ export async function PUT(request: NextRequest, { params }: { params: { playlist
       `
     }
 
-    console.log("🔄 [API] Successfully reordered playlist items")
+    console.log("🔄 [PLAYLIST REORDER API] Successfully reordered items")
 
     return NextResponse.json({
       success: true,
-      message: "Playlist items reordered successfully",
+      message: "Items reordered successfully",
     })
   } catch (error) {
     console.error("Error reordering playlist items:", error)
-    return NextResponse.json({ error: "Failed to reorder playlist items" }, { status: 500 })
+    return NextResponse.json({ error: "Failed to reorder items" }, { status: 500 })
   }
 }

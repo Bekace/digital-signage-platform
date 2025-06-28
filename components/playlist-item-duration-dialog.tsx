@@ -6,7 +6,6 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
 import { Clock, Timer, Zap } from "lucide-react"
 
@@ -31,12 +30,12 @@ export function PlaylistItemDurationDialog({
   const [transition, setTransition] = useState(currentTransition)
 
   const handleSave = () => {
-    if (duration >= 1 && duration <= 3600) {
-      onSave(duration, transition)
-    }
+    onSave(duration, transition)
   }
 
-  const presetDurations = [5, 10, 15, 30, 45, 60, 90, 120]
+  const handlePresetDuration = (seconds: number) => {
+    setDuration(seconds)
+  }
 
   const formatDuration = (seconds: number) => {
     if (seconds < 60) {
@@ -47,10 +46,21 @@ export function PlaylistItemDurationDialog({
       return remainingSeconds > 0 ? `${minutes}m ${remainingSeconds}s` : `${minutes}m`
     } else {
       const hours = Math.floor(seconds / 3600)
-      const remainingMinutes = Math.floor((seconds % 3600) / 60)
-      return remainingMinutes > 0 ? `${hours}h ${remainingMinutes}m` : `${hours}h`
+      const minutes = Math.floor((seconds % 3600) / 60)
+      return minutes > 0 ? `${hours}h ${minutes}m` : `${hours}h`
     }
   }
+
+  const presetDurations = [
+    { label: "5 sec", value: 5 },
+    { label: "10 sec", value: 10 },
+    { label: "15 sec", value: 15 },
+    { label: "30 sec", value: 30 },
+    { label: "45 sec", value: 45 },
+    { label: "1 min", value: 60 },
+    { label: "1.5 min", value: 90 },
+    { label: "2 min", value: 120 },
+  ]
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -65,8 +75,10 @@ export function PlaylistItemDurationDialog({
         <div className="space-y-6">
           {/* Media Info */}
           <div className="p-3 bg-gray-50 rounded-lg">
-            <h4 className="font-medium text-sm truncate">{mediaName}</h4>
-            <p className="text-xs text-gray-600 mt-1">Configure how long this item displays</p>
+            <h4 className="font-medium text-sm text-gray-900 truncate">{mediaName}</h4>
+            <p className="text-xs text-gray-600 mt-1">
+              Current: {formatDuration(currentDuration)} • {currentTransition}
+            </p>
           </div>
 
           {/* Duration Settings */}
@@ -77,41 +89,35 @@ export function PlaylistItemDurationDialog({
                 <span>Display Duration</span>
               </Label>
 
-              {/* Quick Presets */}
+              {/* Preset Buttons */}
               <div className="grid grid-cols-4 gap-2">
                 {presetDurations.map((preset) => (
                   <Button
-                    key={preset}
-                    variant={duration === preset ? "default" : "outline"}
+                    key={preset.value}
+                    variant={duration === preset.value ? "default" : "outline"}
                     size="sm"
-                    onClick={() => setDuration(preset)}
+                    onClick={() => handlePresetDuration(preset.value)}
                     className="text-xs"
                   >
-                    {formatDuration(preset)}
+                    {preset.label}
                   </Button>
                 ))}
               </div>
 
               {/* Custom Duration Input */}
-              <div className="flex space-x-2">
+              <div className="flex items-center space-x-2">
                 <Input
                   type="number"
                   min="1"
                   max="3600"
                   value={duration}
-                  onChange={(e) => setDuration(Number(e.target.value))}
-                  placeholder="Duration in seconds"
+                  onChange={(e) => setDuration(Math.max(1, Math.min(3600, Number.parseInt(e.target.value) || 1)))}
                   className="flex-1"
                 />
-                <div className="flex items-center px-3 bg-gray-100 rounded text-sm text-gray-600">seconds</div>
+                <span className="text-sm text-gray-500 min-w-0">seconds</span>
               </div>
 
-              {/* Duration Preview */}
-              <div className="text-center p-2 bg-blue-50 rounded">
-                <Badge variant="outline" className="text-blue-700">
-                  {formatDuration(duration)}
-                </Badge>
-              </div>
+              <div className="text-xs text-gray-500">Range: 1 second to 1 hour (3600 seconds)</div>
             </div>
 
             <Separator />
@@ -127,28 +133,22 @@ export function PlaylistItemDurationDialog({
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="fade">Fade - Smooth opacity transition</SelectItem>
-                  <SelectItem value="slide">Slide - Horizontal movement</SelectItem>
-                  <SelectItem value="zoom">Zoom - Scale in/out effect</SelectItem>
-                  <SelectItem value="flip">Flip - 3D rotation effect</SelectItem>
-                  <SelectItem value="none">None - Instant change</SelectItem>
+                  <SelectItem value="fade">Fade</SelectItem>
+                  <SelectItem value="slide">Slide</SelectItem>
+                  <SelectItem value="zoom">Zoom</SelectItem>
+                  <SelectItem value="flip">Flip</SelectItem>
+                  <SelectItem value="none">None (instant)</SelectItem>
                 </SelectContent>
               </Select>
             </div>
 
-            {/* Settings Summary */}
-            <div className="p-3 bg-gray-50 rounded-lg">
-              <h4 className="font-medium text-sm mb-2">Preview Settings</h4>
-              <div className="space-y-1 text-xs text-gray-600">
-                <div className="flex justify-between">
-                  <span>Duration:</span>
-                  <span className="font-medium">{formatDuration(duration)}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span>Transition:</span>
-                  <span className="font-medium capitalize">{transition}</span>
-                </div>
-              </div>
+            {/* Preview */}
+            <div className="p-3 bg-blue-50 rounded-lg">
+              <h4 className="font-medium text-sm text-blue-900 mb-1">Preview</h4>
+              <p className="text-sm text-blue-700">
+                This item will display for <strong>{formatDuration(duration)}</strong> and transition using{" "}
+                <strong>{transition}</strong> effect.
+              </p>
             </div>
           </div>
         </div>
@@ -157,9 +157,7 @@ export function PlaylistItemDurationDialog({
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
-          <Button onClick={handleSave} disabled={duration < 1 || duration > 3600}>
-            Save Settings
-          </Button>
+          <Button onClick={handleSave}>Save Changes</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

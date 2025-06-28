@@ -5,19 +5,7 @@ import { Dialog, DialogContent } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
-import {
-  Play,
-  Pause,
-  SkipForward,
-  SkipBack,
-  Volume2,
-  VolumeX,
-  X,
-  Clock,
-  Loader2,
-  AlertCircle,
-  Monitor,
-} from "lucide-react"
+import { Play, Pause, SkipForward, SkipBack, Volume2, VolumeX, X, Clock, Loader2, AlertCircle, Tv } from "lucide-react"
 import { cn } from "@/lib/utils"
 
 interface MediaFile {
@@ -229,22 +217,29 @@ export function PlaylistPreviewModal({ open, onOpenChange, playlist, items }: Pl
   if (!currentMedia) {
     return (
       <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className="max-w-6xl max-h-[95vh] p-0">
-          <div className="flex flex-col h-full">
-            <div className="flex items-center justify-between p-4 border-b">
+        <DialogContent className="max-w-7xl p-0 bg-gray-900">
+          <div className="flex flex-col">
+            <div className="flex items-center justify-between p-4 border-b border-gray-700 bg-gray-800">
               <div className="flex items-center space-x-4">
-                <h2 className="text-lg font-semibold">Preview - {playlist.name}</h2>
-                <Badge variant="outline">No items</Badge>
+                <h2 className="text-lg font-semibold text-white">Preview - {playlist.name}</h2>
+                <Badge variant="outline" className="text-gray-300 border-gray-600">
+                  No items
+                </Badge>
               </div>
-              <Button variant="ghost" size="sm" onClick={() => onOpenChange(false)}>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => onOpenChange(false)}
+                className="text-gray-300 hover:text-white"
+              >
                 <X className="h-4 w-4" />
               </Button>
             </div>
             <div className="flex items-center justify-center py-12">
               <div className="text-center">
                 <AlertCircle className="h-12 w-12 mx-auto text-gray-400 mb-4" />
-                <h3 className="text-lg font-medium text-gray-900 mb-2">No items to preview</h3>
-                <p className="text-gray-500">Add some media files to your playlist first.</p>
+                <h3 className="text-lg font-medium text-white mb-2">No items to preview</h3>
+                <p className="text-gray-400">Add some media files to your playlist first.</p>
               </div>
             </div>
           </div>
@@ -261,36 +256,43 @@ export function PlaylistPreviewModal({ open, onOpenChange, playlist, items }: Pl
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-7xl max-h-[95vh] p-0">
-        <div className="flex flex-col h-full">
+      <DialogContent className="max-w-none p-0 bg-gray-900 border-gray-700" style={{ width: "fit-content" }}>
+        <div className="flex flex-col">
           {/* Header */}
-          <div className="flex items-center justify-between p-4 border-b bg-white">
+          <div className="flex items-center justify-between p-4 border-b border-gray-700 bg-gray-800">
             <div className="flex items-center space-x-4">
-              <h2 className="text-lg font-semibold">Preview - {playlist.name}</h2>
-              <Badge variant="outline">
+              <h2 className="text-lg font-semibold text-white">Digital Signage Preview</h2>
+              <Badge variant="outline" className="text-gray-300 border-gray-600">
                 {currentIndex + 1} of {items.length}
               </Badge>
-              <Badge variant="secondary" className="flex items-center space-x-1">
-                <Monitor className="h-3 w-3" />
+              <Badge variant="secondary" className="flex items-center space-x-1 bg-blue-600 text-white">
+                <Tv className="h-3 w-3" />
                 <span>1920×1080</span>
               </Badge>
             </div>
-            <Button variant="ghost" size="sm" onClick={() => onOpenChange(false)}>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => onOpenChange(false)}
+              className="text-gray-300 hover:text-white"
+            >
               <X className="h-4 w-4" />
             </Button>
           </div>
 
-          {/* Fixed 16:9 Aspect Ratio Preview Container */}
-          <div className="flex-1 flex items-center justify-center p-6 bg-gray-100">
+          {/* Fixed 1920x1080 TV Screen Simulation */}
+          <div className="p-6 bg-gray-900">
             <div
-              className="relative bg-black shadow-2xl"
+              className="relative border-4 border-gray-700 shadow-2xl"
               style={{
-                width: "100%",
-                maxWidth: "1024px",
-                aspectRatio: "16/9",
+                width: "960px", // Fixed width (1920px scaled down by 50%)
+                height: "540px", // Fixed height (1080px scaled down by 50%)
                 backgroundColor: playlist.background_color || "#000000",
               }}
             >
+              {/* Screen bezel effect */}
+              <div className="absolute -inset-2 bg-gradient-to-br from-gray-800 to-gray-900 rounded-lg -z-10"></div>
+
               {mediaLoading && (
                 <div className="absolute inset-0 flex items-center justify-center bg-black/50 z-10">
                   <Loader2 className="h-8 w-8 animate-spin text-white" />
@@ -391,14 +393,14 @@ export function PlaylistPreviewModal({ open, onOpenChange, playlist, items }: Pl
           </div>
 
           {/* Controls */}
-          <div className="p-4 border-t bg-white">
+          <div className="p-4 border-t border-gray-700 bg-gray-800">
             {/* Progress Bar */}
             <div className="mb-4">
-              <div className="flex items-center justify-between text-sm text-gray-600 mb-2">
+              <div className="flex items-center justify-between text-sm text-gray-300 mb-2">
                 <span className="truncate max-w-md">{currentMedia.original_name || currentMedia.filename}</span>
                 <span>{formatTime(timeRemaining)} remaining</span>
               </div>
-              <Progress value={progress} className="h-2" />
+              <Progress value={progress} className="h-2 bg-gray-700" />
             </div>
 
             {/* Control Buttons */}
@@ -409,6 +411,7 @@ export function PlaylistPreviewModal({ open, onOpenChange, playlist, items }: Pl
                   size="sm"
                   onClick={handlePrevious}
                   disabled={currentIndex === 0 && !playlist.loop_enabled}
+                  className="border-gray-600 text-gray-300 hover:text-white hover:bg-gray-700 bg-transparent"
                 >
                   <SkipBack className="h-4 w-4" />
                 </Button>
@@ -418,6 +421,7 @@ export function PlaylistPreviewModal({ open, onOpenChange, playlist, items }: Pl
                   size="sm"
                   onClick={handlePlayPause}
                   disabled={mediaError}
+                  className={isPlaying ? "bg-gray-600 text-white" : "bg-blue-600 hover:bg-blue-700 text-white"}
                 >
                   {isPlaying ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
                 </Button>
@@ -427,29 +431,35 @@ export function PlaylistPreviewModal({ open, onOpenChange, playlist, items }: Pl
                   size="sm"
                   onClick={handleNext}
                   disabled={currentIndex === items.length - 1 && !playlist.loop_enabled}
+                  className="border-gray-600 text-gray-300 hover:text-white hover:bg-gray-700 bg-transparent"
                 >
                   <SkipForward className="h-4 w-4" />
                 </Button>
 
                 {(isVideo || isAudio) && (
-                  <Button variant="ghost" size="sm" onClick={() => setIsMuted(!isMuted)}>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setIsMuted(!isMuted)}
+                    className="text-gray-300 hover:text-white hover:bg-gray-700"
+                  >
                     {isMuted ? <VolumeX className="h-4 w-4" /> : <Volume2 className="h-4 w-4" />}
                   </Button>
                 )}
               </div>
 
-              <div className="flex items-center space-x-4 text-sm text-gray-600">
+              <div className="flex items-center space-x-4 text-sm text-gray-300">
                 <div className="flex items-center space-x-1">
                   <Clock className="h-4 w-4" />
                   <span>{currentItem?.duration || 30}s per item</span>
                 </div>
                 {playlist.loop_enabled && (
-                  <Badge variant="outline" className="text-xs">
+                  <Badge variant="outline" className="text-xs border-gray-600 text-gray-300">
                     Loop Enabled
                   </Badge>
                 )}
                 {playlist.shuffle && (
-                  <Badge variant="outline" className="text-xs">
+                  <Badge variant="outline" className="text-xs border-gray-600 text-gray-300">
                     Shuffle
                   </Badge>
                 )}

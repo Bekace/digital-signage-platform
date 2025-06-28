@@ -1,28 +1,13 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { neon } from "@neondatabase/serverless"
-import { getCurrentUser } from "@/lib/auth"
 
 const sql = neon(process.env.DATABASE_URL!)
 
-export const dynamic = "force-dynamic"
-
 export async function GET(request: NextRequest, { params }: { params: { playlistId: string } }) {
-  console.log("🎵 [PLAYLIST ITEMS API] Starting GET request for playlist:", params.playlistId)
-
   try {
-    const user = await getCurrentUser()
-    if (!user) {
-      console.log("❌ [PLAYLIST ITEMS API] No user authenticated")
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-    }
+    const playlistId = params.playlistId
 
-    const playlistId = Number.parseInt(params.playlistId)
-    if (isNaN(playlistId)) {
-      console.log("❌ [PLAYLIST ITEMS API] Invalid playlist ID:", params.playlistId)
-      return NextResponse.json({ error: "Invalid playlist ID" }, { status: 400 })
-    }
-
-    console.log("📋 [API] Fetching playlist items for playlist:", playlistId)
+    console.log("📋 [PLAYLIST ITEMS API] Fetching items for playlist:", playlistId)
 
     // Get playlist items with media file details
     const items = await sql`
@@ -43,15 +28,14 @@ export async function GET(request: NextRequest, { params }: { params: { playlist
         mf.thumbnail_url,
         mf.mime_type,
         mf.dimensions,
-        mf.duration as media_duration,
         mf.created_at as media_created_at
       FROM playlist_items pi
       LEFT JOIN media_files mf ON pi.media_file_id = mf.id
       WHERE pi.playlist_id = ${playlistId}
-      ORDER BY pi.position ASC, pi.created_at ASC
+      ORDER BY pi.position ASC
     `
 
-    console.log("📋 [API] Found playlist items:", items.length)
+    console.log("📋 [PLAYLIST ITEMS API] Found items:", items.length)
 
     // Transform the data to include media file info
     const transformedItems = items.map((item) => ({
@@ -73,7 +57,6 @@ export async function GET(request: NextRequest, { params }: { params: { playlist
             thumbnail_url: item.thumbnail_url,
             mime_type: item.mime_type,
             dimensions: item.dimensions,
-            duration: item.media_duration,
             created_at: item.media_created_at,
           }
         : null,
@@ -90,25 +73,12 @@ export async function GET(request: NextRequest, { params }: { params: { playlist
 }
 
 export async function POST(request: NextRequest, { params }: { params: { playlistId: string } }) {
-  console.log("➕ [PLAYLIST ITEMS API] Starting POST request for playlist:", params.playlistId)
-
   try {
-    const user = await getCurrentUser()
-    if (!user) {
-      console.log("❌ [PLAYLIST ITEMS API] No user authenticated")
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-    }
-
-    const playlistId = Number.parseInt(params.playlistId)
-    if (isNaN(playlistId)) {
-      console.log("❌ [PLAYLIST ITEMS API] Invalid playlist ID:", params.playlistId)
-      return NextResponse.json({ error: "Invalid playlist ID" }, { status: 400 })
-    }
-
+    const playlistId = params.playlistId
     const body = await request.json()
     const { media_id, duration = 30, transition_type = "fade" } = body
 
-    console.log("➕ [API] Adding item to playlist:", { playlistId, media_id, duration, transition_type })
+    console.log("➕ [PLAYLIST ITEMS API] Adding item:", { playlistId, media_id, duration, transition_type })
 
     // Validate required fields
     if (!media_id) {
@@ -127,10 +97,10 @@ export async function POST(request: NextRequest, { params }: { params: { playlis
     // Get the next position
     const positionResult = await sql`
       SELECT COALESCE(MAX(position), 0) + 1 as next_position
-      FROM playlist_items
+      FROM playlist_items 
       WHERE playlist_id = ${playlistId}
     `
-    const nextPosition = positionResult[0]?.next_position || 1
+    const nextPosition = positionResult[0].next_position
 
     // Insert the new playlist item
     const newItem = await sql`
@@ -145,14 +115,14 @@ export async function POST(request: NextRequest, { params }: { params: { playlis
       RETURNING *
     `
 
-    console.log("➕ [API] Created playlist item:", newItem[0])
+    console.log("➕ [PLAYLIST ITEMS API] Created item:", newItem[0])
 
     return NextResponse.json({
       success: true,
       item: newItem[0],
     })
   } catch (error) {
-    console.error("Error adding item to playlist:", error)
+    console.error("Error adding playlist item:", error)
     return NextResponse.json({ error: "Failed to add item to playlist" }, { status: 500 })
   }
 }
