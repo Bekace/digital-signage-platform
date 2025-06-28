@@ -5,53 +5,74 @@ const sql = neon(process.env.DATABASE_URL!)
 
 export async function PUT(request: NextRequest, { params }: { params: { playlistId: string; itemId: string } }) {
   try {
-    const { playlistId, itemId } = params
-    const body = await request.json()
-    const { duration, transition_type } = body
+    const playlistId = Number.parseInt(params.playlistId)
+    const itemId = Number.parseInt(params.itemId)
+    const { duration, transition_type } = await request.json()
 
-    console.log("✏️ [PLAYLIST ITEM API] Updating item:", { playlistId, itemId, duration, transition_type })
-
-    // Validate input
-    if (duration !== undefined && (duration < 1 || duration > 3600)) {
-      return NextResponse.json({ error: "Duration must be between 1 and 3600 seconds" }, { status: 400 })
+    if (isNaN(playlistId) || isNaN(itemId)) {
+      return NextResponse.json({ error: "Invalid playlist or item ID" }, { status: 400 })
     }
 
-    // Build update query dynamically
-    const updates = []
-    const values = []
-
-    if (duration !== undefined) {
-      updates.push(`duration = $${updates.length + 1}`)
-      values.push(duration)
-    }
-
-    if (transition_type !== undefined) {
-      updates.push(`transition_type = $${updates.length + 1}`)
-      values.push(transition_type)
-    }
-
-    if (updates.length === 0) {
-      return NextResponse.json({ error: "No valid fields to update" }, { status: 400 })
-    }
-
-    // Update the item
-    const result = await sql`
+    // Update the playlist item
+    const updatedItem = await sql`
       UPDATE playlist_items 
-      SET ${sql.unsafe(updates.join(", "))}
+      SET 
+        duration = ${duration || 30},
+        transition_type = ${transition_type || "fade"}
       WHERE id = ${itemId} AND playlist_id = ${playlistId}
       RETURNING *
     `
 
-    if (result.length === 0) {
+    if (updatedItem.length === 0) {
       return NextResponse.json({ error: "Playlist item not found" }, { status: 404 })
     }
 
-    console.log("✏️ [PLAYLIST ITEM API] Updated item:", result[0])
+    // Get the full item with media details
+    const fullItem = await sql`
+      SELECT 
+        pi.id,
+        pi.playlist_id,
+        pi.media_file_id,
+        pi.position,
+        pi.duration,
+        pi.transition_type,
+        mf.id as media_id,
+        mf.filename,
+        mf.original_name,
+        mf.file_type,
+        mf.file_size,
+        mf.url,
+        mf.thumbnail_url,
+        mf.mime_type,
+        mf.dimensions,
+        mf.duration as media_duration
+      FROM playlist_items pi
+      LEFT JOIN media_files mf ON pi.media_file_id = mf.id
+      WHERE pi.id = ${itemId}
+    `
 
-    return NextResponse.json({
-      success: true,
-      item: result[0],
-    })
+    const transformedItem = {
+      id: fullItem[0].id,
+      playlist_id: fullItem[0].playlist_id,
+      media_id: fullItem[0].media_file_id,
+      position: fullItem[0].position,
+      duration: fullItem[0].duration,
+      transition_type: fullItem[0].transition_type,
+      media_file: {
+        id: fullItem[0].media_id,
+        filename: fullItem[0].filename,
+        original_name: fullItem[0].original_name,
+        file_type: fullItem[0].file_type,
+        file_size: fullItem[0].file_size,
+        url: fullItem[0].url,
+        thumbnail_url: fullItem[0].thumbnail_url,
+        mime_type: fullItem[0].mime_type,
+        dimensions: fullItem[0].dimensions,
+        duration: fullItem[0].media_duration,
+      },
+    }
+
+    return NextResponse.json(transformedItem)
   } catch (error) {
     console.error("Error updating playlist item:", error)
     return NextResponse.json({ error: "Failed to update playlist item" }, { status: 500 })
@@ -60,11 +81,14 @@ export async function PUT(request: NextRequest, { params }: { params: { playlist
 
 export async function DELETE(request: NextRequest, { params }: { params: { playlistId: string; itemId: string } }) {
   try {
-    const { playlistId, itemId } = params
+    const playlistId = Number.parseInt(params.playlistId)
+    const itemId = Number.parseInt(params.itemId)
 
-    console.log("🗑️ [PLAYLIST ITEM API] Deleting item:", { playlistId, itemId })
+    if (isNaN(playlistId) || isNaN(itemId)) {
+      return NextResponse.json({ error: "Invalid playlist or item ID" }, { status: 400 })
+    }
 
-    // Get the item's position before deleting
+    // Get the item position before deleting
     const itemToDelete = await sql`
       SELECT position FROM playlist_items 
       WHERE id = ${itemId} AND playlist_id = ${playlistId}
@@ -82,19 +106,14 @@ export async function DELETE(request: NextRequest, { params }: { params: { playl
       WHERE id = ${itemId} AND playlist_id = ${playlistId}
     `
 
-    // Reorder remaining items to fill the gap
+    // Reorder remaining items
     await sql`
       UPDATE playlist_items 
       SET position = position - 1
       WHERE playlist_id = ${playlistId} AND position > ${deletedPosition}
     `
 
-    console.log("🗑️ [PLAYLIST ITEM API] Deleted item and reordered remaining items")
-
-    return NextResponse.json({
-      success: true,
-      message: "Item deleted successfully",
-    })
+    return NextResponse.json({ success: true })
   } catch (error) {
     console.error("Error deleting playlist item:", error)
     return NextResponse.json({ error: "Failed to delete playlist item" }, { status: 500 })

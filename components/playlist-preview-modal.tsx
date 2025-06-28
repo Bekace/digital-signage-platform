@@ -5,7 +5,21 @@ import { Dialog, DialogContent } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
-import { Play, Pause, SkipForward, SkipBack, Volume2, VolumeX, X, Clock, Loader2, AlertCircle, Tv } from "lucide-react"
+import {
+  Play,
+  Pause,
+  SkipForward,
+  SkipBack,
+  Volume2,
+  VolumeX,
+  X,
+  Clock,
+  Loader2,
+  AlertCircle,
+  Tv,
+  Maximize,
+  Minimize,
+} from "lucide-react"
 import { cn } from "@/lib/utils"
 
 interface MediaFile {
@@ -69,10 +83,12 @@ export function PlaylistPreviewModal({ open, onOpenChange, playlist, items }: Pl
   const [timeRemaining, setTimeRemaining] = useState(0)
   const [mediaError, setMediaError] = useState(false)
   const [mediaLoading, setMediaLoading] = useState(true)
+  const [isFullscreen, setIsFullscreen] = useState(false)
 
   const intervalRef = useRef<NodeJS.Timeout | null>(null)
   const videoRef = useRef<HTMLVideoElement>(null)
   const audioRef = useRef<HTMLAudioElement>(null)
+  const fullscreenRef = useRef<HTMLDivElement>(null)
 
   const currentItem = items[currentIndex]
   const currentMedia = currentItem?.media || currentItem?.media_file
@@ -86,8 +102,10 @@ export function PlaylistPreviewModal({ open, onOpenChange, playlist, items }: Pl
       setProgress(0)
       setMediaError(false)
       setMediaLoading(true)
+      setIsFullscreen(false)
     } else {
       setIsPlaying(false)
+      setIsFullscreen(false)
       if (intervalRef.current) {
         clearInterval(intervalRef.current)
       }
@@ -100,6 +118,16 @@ export function PlaylistPreviewModal({ open, onOpenChange, playlist, items }: Pl
     setMediaLoading(true)
     setTimeRemaining(itemDuration)
   }, [currentIndex, itemDuration])
+
+  // Handle fullscreen changes
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      setIsFullscreen(!!document.fullscreenElement)
+    }
+
+    document.addEventListener("fullscreenchange", handleFullscreenChange)
+    return () => document.removeEventListener("fullscreenchange", handleFullscreenChange)
+  }, [])
 
   // Handle auto-advance and progress
   useEffect(() => {
@@ -189,6 +217,20 @@ export function PlaylistPreviewModal({ open, onOpenChange, playlist, items }: Pl
     setIsPlaying(false)
   }
 
+  const toggleFullscreen = async () => {
+    if (!fullscreenRef.current) return
+
+    try {
+      if (!document.fullscreenElement) {
+        await fullscreenRef.current.requestFullscreen()
+      } else {
+        await document.exitFullscreen()
+      }
+    } catch (error) {
+      console.error("Error toggling fullscreen:", error)
+    }
+  }
+
   const formatTime = (ms: number) => {
     const seconds = Math.floor(ms / 1000)
     const minutes = Math.floor(seconds / 60)
@@ -256,10 +298,18 @@ export function PlaylistPreviewModal({ open, onOpenChange, playlist, items }: Pl
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-none p-0 bg-gray-900 border-gray-700" style={{ width: "fit-content" }}>
-        <div className="flex flex-col">
+      <DialogContent
+        className={cn("p-0 bg-gray-900 border-gray-700", isFullscreen ? "max-w-none w-screen h-screen" : "max-w-none")}
+        style={isFullscreen ? {} : { width: "fit-content" }}
+      >
+        <div ref={fullscreenRef} className="flex flex-col h-full">
           {/* Header */}
-          <div className="flex items-center justify-between p-4 border-b border-gray-700 bg-gray-800">
+          <div
+            className={cn(
+              "flex items-center justify-between p-4 border-b border-gray-700 bg-gray-800",
+              isFullscreen && "absolute top-0 left-0 right-0 z-50 bg-gray-800/90 backdrop-blur-sm",
+            )}
+          >
             <div className="flex items-center space-x-4">
               <h2 className="text-lg font-semibold text-white">Digital Signage Preview</h2>
               <Badge variant="outline" className="text-gray-300 border-gray-600">
@@ -269,26 +319,45 @@ export function PlaylistPreviewModal({ open, onOpenChange, playlist, items }: Pl
                 <Tv className="h-3 w-3" />
                 <span>1920×1080</span>
               </Badge>
+              {isFullscreen && (
+                <Badge variant="secondary" className="bg-green-600 text-white">
+                  Fullscreen Mode
+                </Badge>
+              )}
             </div>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => onOpenChange(false)}
-              className="text-gray-300 hover:text-white"
-            >
-              <X className="h-4 w-4" />
-            </Button>
+            <div className="flex items-center space-x-2">
+              <Button variant="ghost" size="sm" onClick={toggleFullscreen} className="text-gray-300 hover:text-white">
+                {isFullscreen ? <Minimize className="h-4 w-4" /> : <Maximize className="h-4 w-4" />}
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => onOpenChange(false)}
+                className="text-gray-300 hover:text-white"
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
           </div>
 
           {/* Fixed 1920x1080 TV Screen Simulation */}
-          <div className="p-6 bg-gray-900">
+          <div className={cn("flex items-center justify-center bg-gray-900", isFullscreen ? "flex-1 pt-16" : "p-6")}>
             <div
               className="relative border-4 border-gray-700 shadow-2xl"
-              style={{
-                width: "960px", // Fixed width (1920px scaled down by 50%)
-                height: "540px", // Fixed height (1080px scaled down by 50%)
-                backgroundColor: playlist.background_color || "#000000",
-              }}
+              style={
+                isFullscreen
+                  ? {
+                      width: "100vw",
+                      height: "calc(100vh - 8rem)",
+                      maxWidth: "calc((100vh - 8rem) * 16 / 9)",
+                      backgroundColor: playlist.background_color || "#000000",
+                    }
+                  : {
+                      width: "960px", // Fixed width (1920px scaled down by 50%)
+                      height: "540px", // Fixed height (1080px scaled down by 50%)
+                      backgroundColor: playlist.background_color || "#000000",
+                    }
+              }
             >
               {/* Screen bezel effect */}
               <div className="absolute -inset-2 bg-gradient-to-br from-gray-800 to-gray-900 rounded-lg -z-10"></div>
@@ -393,7 +462,12 @@ export function PlaylistPreviewModal({ open, onOpenChange, playlist, items }: Pl
           </div>
 
           {/* Controls */}
-          <div className="p-4 border-t border-gray-700 bg-gray-800">
+          <div
+            className={cn(
+              "p-4 border-t border-gray-700 bg-gray-800",
+              isFullscreen && "absolute bottom-0 left-0 right-0 bg-gray-800/90 backdrop-blur-sm",
+            )}
+          >
             {/* Progress Bar */}
             <div className="mb-4">
               <div className="flex items-center justify-between text-sm text-gray-300 mb-2">
@@ -446,6 +520,15 @@ export function PlaylistPreviewModal({ open, onOpenChange, playlist, items }: Pl
                     {isMuted ? <VolumeX className="h-4 w-4" /> : <Volume2 className="h-4 w-4" />}
                   </Button>
                 )}
+
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={toggleFullscreen}
+                  className="text-gray-300 hover:text-white hover:bg-gray-700"
+                >
+                  {isFullscreen ? <Minimize className="h-4 w-4" /> : <Maximize className="h-4 w-4" />}
+                </Button>
               </div>
 
               <div className="flex items-center space-x-4 text-sm text-gray-300">
