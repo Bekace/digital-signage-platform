@@ -40,12 +40,32 @@ export function UploadMediaDialog({ open, onOpenChange, onUploadComplete }: Uplo
     setUploadComplete(false)
     setUploadProgress(0)
 
-    // Check file size (100MB for videos due to server limits, 50MB for others)
-    const maxSize = file.type.startsWith("video/") ? 100 * 1024 * 1024 : 50 * 1024 * 1024
-    const maxSizeMB = file.type.startsWith("video/") ? "100MB" : "50MB"
+    // Set realistic file size limits for digital signage
+    let maxSize: number
+    let maxSizeMB: string
+
+    if (file.type.startsWith("video/")) {
+      maxSize = 500 * 1024 * 1024 // 500MB for videos
+      maxSizeMB = "500MB"
+    } else if (file.type.startsWith("image/")) {
+      maxSize = 50 * 1024 * 1024 // 50MB for images
+      maxSizeMB = "50MB"
+    } else if (file.type.startsWith("audio/")) {
+      maxSize = 100 * 1024 * 1024 // 100MB for audio
+      maxSizeMB = "100MB"
+    } else if (file.type === "application/pdf") {
+      maxSize = 100 * 1024 * 1024 // 100MB for PDFs
+      maxSizeMB = "100MB"
+    } else {
+      maxSize = 50 * 1024 * 1024 // 50MB for other documents
+      maxSizeMB = "50MB"
+    }
+
+    console.log(`File type: ${file.type}, Max size: ${maxSizeMB} (${maxSize} bytes), File size: ${file.size} bytes`)
 
     if (file.size > maxSize) {
-      setError(`File size must be less than ${maxSizeMB}. Your file is ${Math.round(file.size / 1024 / 1024)}MB.`)
+      const fileSizeMB = Math.round((file.size / 1024 / 1024) * 100) / 100
+      setError(`File size must be less than ${maxSizeMB}. Your file is ${fileSizeMB}MB.`)
       return
     }
 
@@ -117,7 +137,7 @@ export function UploadMediaDialog({ open, onOpenChange, onUploadComplete }: Uplo
         let errorMessage = data.error || "Upload failed"
 
         if (response.status === 413) {
-          errorMessage = "File is too large for the server. Try a smaller file or compress your video."
+          errorMessage = "File is too large for the server. The server has a lower limit than expected."
         } else if (response.status === 401) {
           errorMessage = "You are not authorized to upload files. Please log in again."
         } else if (response.status === 400) {
@@ -182,7 +202,9 @@ export function UploadMediaDialog({ open, onOpenChange, onUploadComplete }: Uplo
             Upload Media
           </AlertDialogTitle>
           <AlertDialogDescription>
-            Select a file to upload to your media library. Max size: 100MB for videos, 50MB for other files.
+            Select a file to upload to your media library.
+            <br />
+            <strong>Limits:</strong> Videos (500MB), Audio/PDFs (100MB), Images/Documents (50MB)
           </AlertDialogDescription>
         </AlertDialogHeader>
 

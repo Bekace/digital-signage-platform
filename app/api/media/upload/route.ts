@@ -32,16 +32,39 @@ export async function POST(request: NextRequest) {
       lastModified: file.lastModified,
     })
 
-    // Check file size (100MB limit for videos, 50MB for others due to server constraints)
-    const maxSize = file.type.startsWith("video/") ? 100 * 1024 * 1024 : 50 * 1024 * 1024
-    const maxSizeMB = file.type.startsWith("video/") ? "100MB" : "50MB"
-    console.log("Max size allowed:", maxSize, "File size:", file.size)
+    // Set realistic file size limits for digital signage system
+    let maxSize: number
+    let maxSizeMB: string
+
+    if (file.type.startsWith("video/")) {
+      maxSize = 500 * 1024 * 1024 // 500MB for videos (4K videos can be large)
+      maxSizeMB = "500MB"
+    } else if (file.type.startsWith("image/")) {
+      maxSize = 50 * 1024 * 1024 // 50MB for images (high-res images)
+      maxSizeMB = "50MB"
+    } else if (file.type.startsWith("audio/")) {
+      maxSize = 100 * 1024 * 1024 // 100MB for audio (long audio files)
+      maxSizeMB = "100MB"
+    } else if (file.type === "application/pdf") {
+      maxSize = 100 * 1024 * 1024 // 100MB for PDFs (large documents with images)
+      maxSizeMB = "100MB"
+    } else if (file.type.includes("presentation") || file.type.includes("powerpoint")) {
+      maxSize = 200 * 1024 * 1024 // 200MB for presentations (can have many images/videos)
+      maxSizeMB = "200MB"
+    } else {
+      maxSize = 50 * 1024 * 1024 // 50MB for other documents
+      maxSizeMB = "50MB"
+    }
+
+    console.log(`File type: ${file.type}, Max size: ${maxSizeMB} (${maxSize} bytes), File size: ${file.size} bytes`)
 
     if (file.size > maxSize) {
+      const fileSizeMB = Math.round((file.size / 1024 / 1024) * 100) / 100
       console.log("ERROR: File too large")
       return NextResponse.json(
         {
-          error: `File size must be less than ${maxSizeMB}. Your file is ${Math.round(file.size / 1024 / 1024)}MB.`,
+          success: false,
+          error: `File size must be less than ${maxSizeMB}. Your file is ${fileSizeMB}MB.`,
         },
         { status: 400 },
       )
