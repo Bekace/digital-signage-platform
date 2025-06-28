@@ -19,6 +19,7 @@ import {
   HardDrive,
   Hash,
   Eye,
+  Timer,
 } from "lucide-react"
 import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors } from "@dnd-kit/core"
 import { arrayMove, SortableContext, sortableKeyboardCoordinates, verticalListSortingStrategy } from "@dnd-kit/sortable"
@@ -35,6 +36,7 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 import { DashboardLayout } from "@/components/dashboard-layout"
 import { PlaylistOptionsDialog } from "@/components/playlist-options-dialog"
 import { PlaylistPreviewModal } from "@/components/playlist-preview-modal"
+import { PlaylistItemDurationDialog } from "@/components/playlist-item-duration-dialog"
 import { MediaThumbnail } from "@/components/media-thumbnail"
 import {
   AlertDialog,
@@ -97,7 +99,15 @@ interface Playlist {
   updated_at: string
 }
 
-function SortablePlaylistItem({ item, onRemove }: { item: PlaylistItem; onRemove: (id: number) => void }) {
+function SortablePlaylistItem({
+  item,
+  onRemove,
+  onEditDuration,
+}: {
+  item: PlaylistItem
+  onRemove: (id: number) => void
+  onEditDuration: (item: PlaylistItem) => void
+}) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: item.id.toString(),
   })
@@ -187,26 +197,34 @@ function SortablePlaylistItem({ item, onRemove }: { item: PlaylistItem; onRemove
                   {getFileTypeLabel(mediaFile.file_type)}
                 </Badge>
                 <span>{formatFileSize(mediaFile.file_size)}</span>
-                {item.duration && (
-                  <div className="flex items-center space-x-1">
-                    <Clock className="h-3 w-3" />
-                    <span>{item.duration}s</span>
-                  </div>
-                )}
+                <div className="flex items-center space-x-1">
+                  <Clock className="h-3 w-3" />
+                  <span>{item.duration || 30}s</span>
+                </div>
                 <Badge variant="outline" className="text-xs">
                   {item.transition_type}
                 </Badge>
               </div>
             </div>
 
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => onRemove(item.id)}
-              className="opacity-0 group-hover:opacity-100 transition-opacity text-red-500 hover:text-red-700"
-            >
-              <Trash2 className="h-4 w-4" />
-            </Button>
+            <div className="flex items-center space-x-1 opacity-0 group-hover:opacity-100 transition-opacity">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => onEditDuration(item)}
+                className="text-blue-500 hover:text-blue-700"
+              >
+                <Timer className="h-4 w-4" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => onRemove(item.id)}
+                className="text-red-500 hover:text-red-700"
+              >
+                <Trash2 className="h-4 w-4" />
+              </Button>
+            </div>
           </div>
         </CardContent>
       </Card>
@@ -230,6 +248,7 @@ export default function PlaylistEditorPage() {
   const [showSettings, setShowSettings] = useState(false)
   const [showPreview, setShowPreview] = useState(false)
   const [removeItem, setRemoveItem] = useState<PlaylistItem | null>(null)
+  const [editDurationItem, setEditDurationItem] = useState<PlaylistItem | null>(null)
   const [currentItemIndex, setCurrentItemIndex] = useState(0)
 
   const sensors = useSensors(
@@ -413,6 +432,34 @@ export default function PlaylistEditorPage() {
     }
   }
 
+  const updateItemDuration = async (itemId: number, duration: number, transition: string) => {
+    try {
+      const response = await fetch(`/api/playlists/${playlistId}/items/${itemId}`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          duration,
+          transition_type: transition,
+        }),
+      })
+
+      if (response.ok) {
+        // Update local state
+        setPlaylistItems((prev) =>
+          prev.map((item) => (item.id === itemId ? { ...item, duration, transition_type: transition } : item)),
+        )
+        toast.success("Playback settings updated")
+      } else {
+        toast.error("Failed to update settings")
+      }
+    } catch (error) {
+      console.error("Error updating item duration:", error)
+      toast.error("Failed to update settings")
+    }
+  }
+
   const formatFileSize = (bytes: number) => {
     if (bytes === 0) return "0 Bytes"
     const k = 1024
@@ -429,7 +476,7 @@ export default function PlaylistEditorPage() {
   }
 
   const getTotalDuration = () => {
-    return playlistItems.reduce((total, item) => total + (item.duration || 0), 0)
+    return playlistItems.reduce((total, item) => total + (item.duration || 30), 0)
   }
 
   const filteredMediaFiles = mediaFiles.filter((file) => {
@@ -581,6 +628,7 @@ export default function PlaylistEditorPage() {
                               const itemToRemove = playlistItems.find((i) => i.id === id)
                               if (itemToRemove) setRemoveItem(itemToRemove)
                             }}
+                            onEditDuration={(item) => setEditDurationItem(item)}
                           />
                         ))}
                       </div>
@@ -723,6 +771,26 @@ export default function PlaylistEditorPage() {
             onOpenChange={setShowPreview}
             playlist={playlist}
             items={playlistItems}
+          />
+        )}
+
+        {/* Duration Edit Dialog */}
+        {editDurationItem && (
+          <PlaylistItemDurationDialog
+            open={!!editDurationItem}
+            onOpenChange={(open) => !open && setEditDurationItem(null)}
+            currentDuration={editDurationItem.duration || 30}
+            currentTransition={editDurationItem.transition_type || "fade"}
+            mediaName={
+              (editDurationItem.media || editDurationItem.media_file)?.original_name ||
+              (editDurationItem.media || editDurationItem.media_file)?.original_filename ||
+              (editDurationItem.media || editDurationItem.media_file)?.filename ||
+              "Unknown Media"
+            }
+            onSave={(duration, transition) => {
+              updateItemDuration(editDurationItem.id, duration, transition)
+              setEditDurationItem(null)
+            }}
           />
         )}
 
