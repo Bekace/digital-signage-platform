@@ -18,17 +18,21 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "No file provided" }, { status: 400 })
     }
 
+    console.log("Uploading file:", file.name, "Size:", file.size, "Type:", file.type)
+
     // Generate unique filename
     const timestamp = Date.now()
     const randomString = Math.random().toString(36).substring(2, 15)
-    const fileExtension = file.name.split(".").pop()
+    const fileExtension = file.name.split(".").pop()?.toLowerCase() || "bin"
     const filename = `${timestamp}-${randomString}.${fileExtension}`
 
-    // Upload original file
+    // Upload original file to Vercel Blob
     const fileBuffer = Buffer.from(await file.arrayBuffer())
     const blob = await put(filename, fileBuffer, {
       access: "public",
     })
+
+    console.log("File uploaded to blob:", blob.url)
 
     // Generate thumbnail for images
     let thumbnailUrl = null
@@ -44,6 +48,7 @@ export async function POST(request: NextRequest) {
           access: "public",
         })
         thumbnailUrl = thumbnailBlob.url
+        console.log("Thumbnail generated:", thumbnailUrl)
       } catch (error) {
         console.error("Error generating thumbnail:", error)
         // Continue without thumbnail
@@ -56,25 +61,35 @@ export async function POST(request: NextRequest) {
       try {
         const metadata = await sharp(fileBuffer).metadata()
         dimensions = `${metadata.width}x${metadata.height}`
+        console.log("Image dimensions:", dimensions)
       } catch (error) {
         console.error("Error getting image dimensions:", error)
       }
     }
+
+    // Determine file type category
+    let fileType = "document"
+    if (file.type.startsWith("image/")) fileType = "image"
+    else if (file.type.startsWith("video/")) fileType = "video"
+    else if (file.type.startsWith("audio/")) fileType = "audio"
+    else if (file.type === "application/pdf") fileType = "pdf"
+    else if (file.type.includes("presentation") || file.type.includes("powerpoint")) fileType = "presentation"
 
     // Save to database
     const sql = getDb()
     const result = await sql`
       INSERT INTO media_files (
         user_id, filename, original_name, file_type, file_size, 
-        mime_type, url, thumbnail_url, dimensions
+        mime_type, url, storage_url, thumbnail_url, dimensions
       ) VALUES (
-        ${user.id}, ${filename}, ${file.name || filename}, ${file.type}, ${file.size},
-        ${file.type}, ${blob.url}, ${thumbnailUrl}, ${dimensions}
+        ${user.id}, ${filename}, ${file.name}, ${fileType}, ${file.size},
+        ${file.type}, ${blob.url}, ${blob.url}, ${thumbnailUrl}, ${dimensions}
       )
       RETURNING *
     `
 
     const mediaFile = result[0]
+    console.log("Media file saved to database:", mediaFile.id)
 
     return NextResponse.json({
       success: true,
@@ -86,6 +101,7 @@ export async function POST(request: NextRequest) {
         file_size: mediaFile.file_size,
         mime_type: mediaFile.mime_type,
         url: mediaFile.url,
+        storage_url: mediaFile.storage_url,
         thumbnail_url: mediaFile.thumbnail_url,
         dimensions: mediaFile.dimensions,
         created_at: mediaFile.created_at,
@@ -93,6 +109,12 @@ export async function POST(request: NextRequest) {
     })
   } catch (error) {
     console.error("Error uploading file:", error)
-    return NextResponse.json({ error: "Failed to upload file" }, { status: 500 })
+    return NextResponse.json(
+      {
+        error: "Failed to upload file",
+        details: error instanceof Error ? error.message : "Unknown error",
+      },
+      { status: 500 },
+    )
   }
 }

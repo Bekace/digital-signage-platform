@@ -95,9 +95,9 @@ export default function MediaPage() {
   }
 
   const handleUploadComplete = () => {
-    loadMediaFiles()
+    loadMediaFiles() // Reload the media files
     setShowUploadDialog(false)
-    triggerRefresh() // This should trigger usage dashboard refresh
+    triggerRefresh() // Trigger usage dashboard refresh
   }
 
   const handleGoogleSlidesAdded = () => {
