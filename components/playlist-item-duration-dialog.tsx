@@ -10,40 +10,40 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 interface PlaylistItemDurationDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
-  item: {
-    id: number
-    duration: number
-    transition_type: string
-    media: {
-      original_filename: string
-    }
-  }
-  onSave: (duration: number, transitionType: string) => void
+  currentDuration: number
+  currentTransition: string
+  mediaName: string
+  onSave: (duration: number, transition: string) => void
 }
 
-export function PlaylistItemDurationDialog({ open, onOpenChange, item, onSave }: PlaylistItemDurationDialogProps) {
-  const [duration, setDuration] = useState(item.duration.toString())
-  const [transitionType, setTransitionType] = useState(item.transition_type)
+export function PlaylistItemDurationDialog({
+  open,
+  onOpenChange,
+  currentDuration,
+  currentTransition,
+  mediaName,
+  onSave,
+}: PlaylistItemDurationDialogProps) {
+  const [duration, setDuration] = useState(currentDuration)
+  const [transition, setTransition] = useState(currentTransition)
 
   const handleSave = () => {
-    const durationNum = Number.parseInt(duration)
-    if (durationNum > 0) {
-      onSave(durationNum, transitionType)
-      onOpenChange(false)
-    }
+    onSave(duration, transition)
+    onOpenChange(false)
   }
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Edit Item Duration</DialogTitle>
+          <DialogTitle>Edit Playback Settings</DialogTitle>
         </DialogHeader>
         <div className="space-y-4">
           <div>
-            <Label className="text-sm font-medium text-gray-700">File: {item.media.original_filename}</Label>
+            <Label className="text-sm font-medium text-gray-700">Media File</Label>
+            <p className="text-sm text-gray-600 truncate">{mediaName}</p>
           </div>
-          <div>
+          <div className="space-y-2">
             <Label htmlFor="duration">Duration (seconds)</Label>
             <Input
               id="duration"
@@ -51,21 +51,21 @@ export function PlaylistItemDurationDialog({ open, onOpenChange, item, onSave }:
               min="1"
               max="3600"
               value={duration}
-              onChange={(e) => setDuration(e.target.value)}
-              className="mt-1"
+              onChange={(e) => setDuration(Number.parseInt(e.target.value) || 30)}
+              placeholder="30"
             />
           </div>
-          <div>
-            <Label htmlFor="transition">Transition Type</Label>
-            <Select value={transitionType} onValueChange={setTransitionType}>
-              <SelectTrigger className="mt-1">
-                <SelectValue />
+          <div className="space-y-2">
+            <Label htmlFor="transition">Transition Effect</Label>
+            <Select value={transition} onValueChange={setTransition}>
+              <SelectTrigger>
+                <SelectValue placeholder="Select transition" />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="fade">Fade</SelectItem>
                 <SelectItem value="slide">Slide</SelectItem>
-                <SelectItem value="cut">Cut</SelectItem>
-                <SelectItem value="dissolve">Dissolve</SelectItem>
+                <SelectItem value="zoom">Zoom</SelectItem>
+                <SelectItem value="none">None</SelectItem>
               </SelectContent>
             </Select>
           </div>

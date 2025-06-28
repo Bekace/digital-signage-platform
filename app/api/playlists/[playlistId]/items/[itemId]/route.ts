@@ -1,99 +1,133 @@
 import { type NextRequest, NextResponse } from "next/server"
-import { neon } from "@neondatabase/serverless"
-import jwt from "jsonwebtoken"
+import { getCurrentUser } from "@/lib/auth"
+import { getDb } from "@/lib/db"
 
-const sql = neon(process.env.DATABASE_URL!)
+export const dynamic = "force-dynamic"
 
 export async function PUT(request: NextRequest, { params }: { params: { playlistId: string; itemId: string } }) {
+  console.log("✏️ [PLAYLIST ITEM API] Starting PUT request for item:", params.itemId)
+
   try {
-    const token = request.cookies.get("auth-token")?.value
-    if (!token) {
+    const user = await getCurrentUser()
+    if (!user) {
+      console.log("❌ [PLAYLIST ITEM API] No user authenticated")
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const decoded = jwt.verify(token, process.env.JWT_SECRET!) as { userId: number }
     const playlistId = Number.parseInt(params.playlistId)
     const itemId = Number.parseInt(params.itemId)
-    const { duration, transition_type } = await request.json()
+
+    if (isNaN(playlistId) || isNaN(itemId)) {
+      console.log("❌ [PLAYLIST ITEM API] Invalid IDs:", params)
+      return NextResponse.json({ error: "Invalid playlist or item ID" }, { status: 400 })
+    }
+
+    const body = await request.json()
+    console.log("📝 [PLAYLIST ITEM API] Request body:", body)
+
+    const { duration, transition_type } = body
+
+    const sql = getDb()
 
     // Verify playlist ownership
     const playlist = await sql`
-      SELECT id FROM playlists 
-      WHERE id = ${playlistId} AND user_id = ${decoded.userId}
+      SELECT id FROM playlists WHERE id = ${playlistId} AND user_id = ${user.id}
     `
 
     if (playlist.length === 0) {
+      console.log("❌ [PLAYLIST ITEM API] Playlist not found or not owned by user")
       return NextResponse.json({ error: "Playlist not found" }, { status: 404 })
     }
 
     // Update the item
     const updatedItem = await sql`
       UPDATE playlist_items 
-      SET duration = ${duration}, transition_type = ${transition_type}
+      SET 
+        duration = COALESCE(${duration}, duration),
+        transition_type = COALESCE(${transition_type}, transition_type)
       WHERE id = ${itemId} AND playlist_id = ${playlistId}
       RETURNING *
     `
 
     if (updatedItem.length === 0) {
+      console.log("❌ [PLAYLIST ITEM API] Item not found")
       return NextResponse.json({ error: "Item not found" }, { status: 404 })
     }
 
-    return NextResponse.json(updatedItem[0])
+    console.log(`✅ [PLAYLIST ITEM API] Updated item ${itemId}`)
+
+    return NextResponse.json({
+      success: true,
+      item: updatedItem[0],
+    })
   } catch (error) {
-    console.error("Error updating playlist item:", error)
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 })
+    console.error("❌ [PLAYLIST ITEM API] Error:", error)
+    return NextResponse.json(
+      {
+        error: "Failed to update playlist item",
+        details: error instanceof Error ? error.message : "Unknown error",
+      },
+      { status: 500 },
+    )
   }
 }
 
 export async function DELETE(request: NextRequest, { params }: { params: { playlistId: string; itemId: string } }) {
+  console.log("🗑️ [PLAYLIST ITEM API] Starting DELETE request for item:", params.itemId)
+
   try {
-    const token = request.cookies.get("auth-token")?.value
-    if (!token) {
+    const user = await getCurrentUser()
+    if (!user) {
+      console.log("❌ [PLAYLIST ITEM API] No user authenticated")
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const decoded = jwt.verify(token, process.env.JWT_SECRET!) as { userId: number }
     const playlistId = Number.parseInt(params.playlistId)
     const itemId = Number.parseInt(params.itemId)
 
+    if (isNaN(playlistId) || isNaN(itemId)) {
+      console.log("❌ [PLAYLIST ITEM API] Invalid IDs:", params)
+      return NextResponse.json({ error: "Invalid playlist or item ID" }, { status: 400 })
+    }
+
+    const sql = getDb()
+
     // Verify playlist ownership
     const playlist = await sql`
-      SELECT id FROM playlists 
-      WHERE id = ${playlistId} AND user_id = ${decoded.userId}
+      SELECT id FROM playlists WHERE id = ${playlistId} AND user_id = ${user.id}
     `
 
     if (playlist.length === 0) {
+      console.log("❌ [PLAYLIST ITEM API] Playlist not found or not owned by user")
       return NextResponse.json({ error: "Playlist not found" }, { status: 404 })
     }
 
-    // Get the item position before deletion
-    const item = await sql`
-      SELECT position FROM playlist_items 
+    // Delete the item
+    const deletedItem = await sql`
+      DELETE FROM playlist_items 
       WHERE id = ${itemId} AND playlist_id = ${playlistId}
+      RETURNING *
     `
 
-    if (item.length === 0) {
+    if (deletedItem.length === 0) {
+      console.log("❌ [PLAYLIST ITEM API] Item not found")
       return NextResponse.json({ error: "Item not found" }, { status: 404 })
     }
 
-    const deletedPosition = item[0].position
+    console.log(`✅ [PLAYLIST ITEM API] Deleted item ${itemId}`)
 
-    // Delete the item
-    await sql`
-      DELETE FROM playlist_items 
-      WHERE id = ${itemId} AND playlist_id = ${playlistId}
-    `
-
-    // Reorder remaining items
-    await sql`
-      UPDATE playlist_items 
-      SET position = position - 1
-      WHERE playlist_id = ${playlistId} AND position > ${deletedPosition}
-    `
-
-    return NextResponse.json({ success: true })
+    return NextResponse.json({
+      success: true,
+      message: "Item deleted successfully",
+    })
   } catch (error) {
-    console.error("Error deleting playlist item:", error)
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 })
+    console.error("❌ [PLAYLIST ITEM API] Error:", error)
+    return NextResponse.json(
+      {
+        error: "Failed to delete playlist item",
+        details: error instanceof Error ? error.message : "Unknown error",
+      },
+      { status: 500 },
+    )
   }
 }
