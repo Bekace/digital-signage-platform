@@ -15,10 +15,13 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Google Slides URL is required" }, { status: 400 })
     }
 
-    // Validate Google Slides URL
+    console.log("📊 [GOOGLE SLIDES API] Processing URL:", url)
+
+    // Validate and convert Google Slides URL
     const isValidGoogleSlidesUrl = (url: string) => {
       const patterns = [
         /^https:\/\/docs\.google\.com\/presentation\/d\/[a-zA-Z0-9-_]+/,
+        /^https:\/\/docs\.google\.com\/presentation\/d\/e\/[a-zA-Z0-9-_]+\/pub/,
         /^https:\/\/drive\.google\.com\/file\/d\/[a-zA-Z0-9-_]+/,
       ]
       return patterns.some((pattern) => pattern.test(url))
@@ -27,33 +30,51 @@ export async function POST(request: Request) {
     if (!isValidGoogleSlidesUrl(url)) {
       return NextResponse.json(
         {
-          error: "Invalid Google Slides URL. Please use a valid Google Slides or Google Drive presentation link.",
+          error: "Invalid Google Slides URL. Please use a valid Google Slides presentation link.",
         },
         { status: 400 },
       )
     }
 
-    // Convert to embed URL if needed
+    // Convert to proper embed URL
     const getEmbedUrl = (url: string) => {
-      // Extract presentation ID from various Google URLs
-      let presentationId = ""
+      console.log("🔗 [GOOGLE SLIDES API] Converting URL:", url)
 
-      // From docs.google.com/presentation/d/ID
+      // Handle published presentation URLs (e/2PACX format)
+      const publishedMatch = url.match(/\/presentation\/d\/e\/([a-zA-Z0-9-_]+)\/pub/)
+      if (publishedMatch) {
+        const presentationId = publishedMatch[1]
+        // Extract parameters from the original URL
+        const urlObj = new URL(url)
+        const start = urlObj.searchParams.get("start") || "false"
+        const loop = urlObj.searchParams.get("loop") || "false"
+        const delayms = urlObj.searchParams.get("delayms") || (duration * 1000).toString()
+
+        const embedUrl = `https://docs.google.com/presentation/d/e/${presentationId}/embed?start=${start}&loop=${loop}&delayms=${delayms}`
+        console.log("📊 [GOOGLE SLIDES API] Created embed URL:", embedUrl)
+        return embedUrl
+      }
+
+      // Handle regular presentation URLs
       const docsMatch = url.match(/\/presentation\/d\/([a-zA-Z0-9-_]+)/)
       if (docsMatch) {
-        presentationId = docsMatch[1]
+        const presentationId = docsMatch[1]
+        const embedUrl = `https://docs.google.com/presentation/d/${presentationId}/embed?start=true&loop=true&delayms=${duration * 1000}`
+        console.log("📊 [GOOGLE SLIDES API] Created embed URL:", embedUrl)
+        return embedUrl
       }
 
-      // From drive.google.com/file/d/ID
+      // Handle drive URLs
       const driveMatch = url.match(/\/file\/d\/([a-zA-Z0-9-_]+)/)
       if (driveMatch) {
-        presentationId = driveMatch[1]
+        const presentationId = driveMatch[1]
+        const embedUrl = `https://docs.google.com/presentation/d/${presentationId}/embed?start=true&loop=true&delayms=${duration * 1000}`
+        console.log("📊 [GOOGLE SLIDES API] Created embed URL:", embedUrl)
+        return embedUrl
       }
 
-      if (presentationId) {
-        return `https://docs.google.com/presentation/d/${presentationId}/embed?start=true&loop=true&delayms=${duration * 1000}`
-      }
-
+      // If we can't parse it, return the original URL
+      console.log("⚠️ [GOOGLE SLIDES API] Could not parse URL, using original")
       return url
     }
 
@@ -64,6 +85,12 @@ export async function POST(request: Request) {
     const timestamp = Date.now()
     const sanitizedTitle = (title || "Google Slides Presentation").replace(/[^a-zA-Z0-9.-]/g, "_")
     const uniqueFilename = `${user.id}/slides/${timestamp}-${sanitizedTitle}`
+
+    console.log("💾 [GOOGLE SLIDES API] Saving to database:", {
+      filename: uniqueFilename,
+      embedUrl,
+      originalUrl: url,
+    })
 
     // Insert into media_files table
     const mediaResult = await sql`
@@ -78,6 +105,7 @@ export async function POST(request: Request) {
         media_source,
         mime_type,
         embed_settings,
+        thumbnail_url,
         created_at
       ) VALUES (
         ${user.id}, 
@@ -95,7 +123,9 @@ export async function POST(request: Request) {
           loop: true,
           original_url: url,
           embed_url: embedUrl,
+          auto_advance: true,
         })},
+        '/thumbnails/slides.png',
         NOW()
       )
       RETURNING *
@@ -107,6 +137,8 @@ export async function POST(request: Request) {
       SET media_files_count = COALESCE(media_files_count, 0) + 1
       WHERE id = ${user.id}
     `
+
+    console.log("✅ [GOOGLE SLIDES API] Successfully added presentation:", mediaResult[0].id)
 
     return NextResponse.json({
       success: true,

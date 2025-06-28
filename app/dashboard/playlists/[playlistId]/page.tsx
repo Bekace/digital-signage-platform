@@ -61,6 +61,9 @@ interface MediaFile {
   mime_type?: string
   dimensions?: string
   duration?: number
+  media_source?: string
+  external_url?: string
+  embed_settings?: string
   created_at: string
 }
 
@@ -126,7 +129,8 @@ function SortablePlaylistItem({
     return Number.parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i]
   }
 
-  const getFileTypeLabel = (fileType: string) => {
+  const getFileTypeLabel = (fileType: string, mediaSource?: string) => {
+    if (mediaSource === "google_slides") return "Google Slides"
     if (fileType.startsWith("image/")) return "Image"
     if (fileType.startsWith("video/")) return "Video"
     if (fileType.includes("pdf")) return "PDF"
@@ -194,7 +198,7 @@ function SortablePlaylistItem({
               </h4>
               <div className="flex items-center space-x-4 text-xs text-gray-500 mt-1">
                 <Badge variant="secondary" className="text-xs">
-                  {getFileTypeLabel(mediaFile.file_type)}
+                  {getFileTypeLabel(mediaFile.file_type, mediaFile.media_source)}
                 </Badge>
                 <span>{formatFileSize(mediaFile.file_size)}</span>
                 <div className="flex items-center space-x-1">
@@ -204,6 +208,11 @@ function SortablePlaylistItem({
                 <Badge variant="outline" className="text-xs">
                   {item.transition_type}
                 </Badge>
+                {mediaFile.media_source === "google_slides" && (
+                  <Badge variant="outline" className="text-xs bg-blue-50 text-blue-700 border-blue-200">
+                    Auto-advance
+                  </Badge>
+                )}
               </div>
             </div>
 
@@ -479,6 +488,16 @@ export default function PlaylistEditorPage() {
     return playlistItems.reduce((total, item) => total + (item.duration || 30), 0)
   }
 
+  const getFileTypeLabel = (fileType: string, mediaSource?: string) => {
+    if (mediaSource === "google_slides") return "Google Slides"
+    if (fileType.startsWith("image/")) return "Image"
+    if (fileType.startsWith("video/")) return "Video"
+    if (fileType.includes("pdf")) return "PDF"
+    if (fileType.startsWith("audio/")) return "Audio"
+    if (fileType.includes("presentation")) return "Slides"
+    return "File"
+  }
+
   const filteredMediaFiles = mediaFiles.filter((file) => {
     const fileName = file.original_name || file.original_filename || file.filename || ""
     return fileName.toLowerCase().includes(searchQuery.toLowerCase())
@@ -704,9 +723,17 @@ export default function PlaylistEditorPage() {
                                 </h4>
                                 <div className="flex items-center space-x-2 mt-1">
                                   <Badge variant="secondary" className="text-xs">
-                                    {file.file_type}
+                                    {getFileTypeLabel(file.file_type, file.media_source)}
                                   </Badge>
                                   <span className="text-xs text-gray-500">{formatFileSize(file.file_size)}</span>
+                                  {file.media_source === "google_slides" && (
+                                    <Badge
+                                      variant="outline"
+                                      className="text-xs bg-blue-50 text-blue-700 border-blue-200"
+                                    >
+                                      Auto-advance
+                                    </Badge>
+                                  )}
                                 </div>
                               </div>
                               <Plus className="h-4 w-4 text-gray-400 group-hover:text-gray-600" />
