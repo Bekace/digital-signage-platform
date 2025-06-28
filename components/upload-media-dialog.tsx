@@ -118,7 +118,9 @@ export function UploadMediaDialog({ open, onOpenChange, onUploadComplete }: Uplo
           {error && <p className="text-red-500 text-sm">{error}</p>}
         </div>
         <AlertDialogFooter>
-          <AlertDialogCancel disabled={uploading}>Cancel</AlertDialogCancel>
+          <AlertDialogCancel disabled={uploading} onClick={handleClose}>
+            Cancel
+          </AlertDialogCancel>
           <AlertDialogAction onClick={handleUpload} disabled={!selectedFile || uploading}>
             {uploading ? (
               <>

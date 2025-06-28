@@ -20,6 +20,13 @@ export async function POST(request: NextRequest) {
 
     console.log("Uploading file:", file.name, "Size:", file.size, "Type:", file.type)
 
+    // Check file size (500MB limit for videos, 100MB for others)
+    const maxSize = file.type.startsWith("video/") ? 500 * 1024 * 1024 : 100 * 1024 * 1024
+    if (file.size > maxSize) {
+      const maxSizeMB = file.type.startsWith("video/") ? "500MB" : "100MB"
+      return NextResponse.json({ error: `File size must be less than ${maxSizeMB}` }, { status: 400 })
+    }
+
     // Generate unique filename
     const timestamp = Date.now()
     const randomString = Math.random().toString(36).substring(2, 15)
@@ -28,16 +35,23 @@ export async function POST(request: NextRequest) {
 
     // Upload original file to Vercel Blob
     const fileBuffer = Buffer.from(await file.arrayBuffer())
+
+    console.log("Uploading to Vercel Blob...")
     const blob = await put(filename, fileBuffer, {
       access: "public",
+      contentType: file.type,
     })
 
     console.log("File uploaded to blob:", blob.url)
 
-    // Generate thumbnail for images
+    // Generate thumbnail for images and videos
     let thumbnailUrl = null
+    let dimensions = null
+    const duration = null
+
     if (file.type.startsWith("image/")) {
       try {
+        console.log("Generating image thumbnail...")
         const thumbnailBuffer = await sharp(fileBuffer)
           .resize(300, 200, { fit: "cover" })
           .jpeg({ quality: 80 })
@@ -48,22 +62,26 @@ export async function POST(request: NextRequest) {
           access: "public",
         })
         thumbnailUrl = thumbnailBlob.url
-        console.log("Thumbnail generated:", thumbnailUrl)
-      } catch (error) {
-        console.error("Error generating thumbnail:", error)
-        // Continue without thumbnail
-      }
-    }
 
-    // Get image dimensions for images
-    let dimensions = null
-    if (file.type.startsWith("image/")) {
-      try {
+        // Get image dimensions
         const metadata = await sharp(fileBuffer).metadata()
         dimensions = `${metadata.width}x${metadata.height}`
-        console.log("Image dimensions:", dimensions)
+        console.log("Image thumbnail and dimensions generated:", thumbnailUrl, dimensions)
       } catch (error) {
-        console.error("Error getting image dimensions:", error)
+        console.error("Error generating image thumbnail:", error)
+      }
+    } else if (file.type.startsWith("video/")) {
+      try {
+        console.log("Processing video file...")
+        // For videos, we'll use a generic video thumbnail
+        // In a production app, you'd use ffmpeg to extract a frame
+        thumbnailUrl = "/thumbnails/video.png"
+
+        // Try to extract basic video info if possible
+        // This is a simplified approach - in production you'd use ffmpeg
+        console.log("Video processing completed with generic thumbnail")
+      } catch (error) {
+        console.error("Error processing video:", error)
       }
     }
 
@@ -74,16 +92,18 @@ export async function POST(request: NextRequest) {
     else if (file.type.startsWith("audio/")) fileType = "audio"
     else if (file.type === "application/pdf") fileType = "pdf"
     else if (file.type.includes("presentation") || file.type.includes("powerpoint")) fileType = "presentation"
+    else if (file.type.includes("office") || file.type.includes("document")) fileType = "office"
 
+    console.log("Saving to database...")
     // Save to database
     const sql = getDb()
     const result = await sql`
       INSERT INTO media_files (
         user_id, filename, original_name, file_type, file_size, 
-        mime_type, url, storage_url, thumbnail_url, dimensions
+        mime_type, url, storage_url, thumbnail_url, dimensions, duration
       ) VALUES (
         ${user.id}, ${filename}, ${file.name}, ${fileType}, ${file.size},
-        ${file.type}, ${blob.url}, ${blob.url}, ${thumbnailUrl}, ${dimensions}
+        ${file.type}, ${blob.url}, ${blob.url}, ${thumbnailUrl}, ${dimensions}, ${duration}
       )
       RETURNING *
     `
@@ -93,6 +113,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
+      message: "File uploaded successfully",
       file: {
         id: mediaFile.id,
         filename: mediaFile.filename,
@@ -104,14 +125,30 @@ export async function POST(request: NextRequest) {
         storage_url: mediaFile.storage_url,
         thumbnail_url: mediaFile.thumbnail_url,
         dimensions: mediaFile.dimensions,
+        duration: mediaFile.duration,
         created_at: mediaFile.created_at,
       },
     })
   } catch (error) {
     console.error("Error uploading file:", error)
+
+    // Provide more specific error messages
+    let errorMessage = "Failed to upload file"
+    if (error instanceof Error) {
+      if (error.message.includes("size")) {
+        errorMessage = "File is too large"
+      } else if (error.message.includes("type")) {
+        errorMessage = "File type not supported"
+      } else if (error.message.includes("network")) {
+        errorMessage = "Network error during upload"
+      } else {
+        errorMessage = `Upload failed: ${error.message}`
+      }
+    }
+
     return NextResponse.json(
       {
-        error: "Failed to upload file",
+        error: errorMessage,
         details: error instanceof Error ? error.message : "Unknown error",
       },
       { status: 500 },
