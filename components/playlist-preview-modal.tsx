@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect, useRef } from "react"
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { Dialog, DialogContent } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
@@ -12,11 +12,11 @@ import {
   SkipBack,
   Volume2,
   VolumeX,
-  Maximize,
   X,
   Clock,
   Loader2,
   AlertCircle,
+  Monitor,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 
@@ -81,7 +81,6 @@ export function PlaylistPreviewModal({ open, onOpenChange, playlist, items }: Pl
   const [timeRemaining, setTimeRemaining] = useState(0)
   const [mediaError, setMediaError] = useState(false)
   const [mediaLoading, setMediaLoading] = useState(true)
-  const [isFullscreen, setIsFullscreen] = useState(false)
 
   const intervalRef = useRef<NodeJS.Timeout | null>(null)
   const videoRef = useRef<HTMLVideoElement>(null)
@@ -230,15 +229,23 @@ export function PlaylistPreviewModal({ open, onOpenChange, playlist, items }: Pl
   if (!currentMedia) {
     return (
       <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className="max-w-4xl max-h-[90vh]">
-          <DialogHeader>
-            <DialogTitle>Preview - {playlist.name}</DialogTitle>
-          </DialogHeader>
-          <div className="flex items-center justify-center py-12">
-            <div className="text-center">
-              <AlertCircle className="h-12 w-12 mx-auto text-gray-400 mb-4" />
-              <h3 className="text-lg font-medium text-gray-900 mb-2">No items to preview</h3>
-              <p className="text-gray-500">Add some media files to your playlist first.</p>
+        <DialogContent className="max-w-6xl max-h-[95vh] p-0">
+          <div className="flex flex-col h-full">
+            <div className="flex items-center justify-between p-4 border-b">
+              <div className="flex items-center space-x-4">
+                <h2 className="text-lg font-semibold">Preview - {playlist.name}</h2>
+                <Badge variant="outline">No items</Badge>
+              </div>
+              <Button variant="ghost" size="sm" onClick={() => onOpenChange(false)}>
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+            <div className="flex items-center justify-center py-12">
+              <div className="text-center">
+                <AlertCircle className="h-12 w-12 mx-auto text-gray-400 mb-4" />
+                <h3 className="text-lg font-medium text-gray-900 mb-2">No items to preview</h3>
+                <p className="text-gray-500">Add some media files to your playlist first.</p>
+              </div>
             </div>
           </div>
         </DialogContent>
@@ -254,93 +261,103 @@ export function PlaylistPreviewModal({ open, onOpenChange, playlist, items }: Pl
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className={cn("max-w-6xl max-h-[95vh] p-0", isFullscreen && "max-w-full max-h-full")}>
+      <DialogContent className="max-w-7xl max-h-[95vh] p-0">
         <div className="flex flex-col h-full">
           {/* Header */}
-          <div className="flex items-center justify-between p-4 border-b">
+          <div className="flex items-center justify-between p-4 border-b bg-white">
             <div className="flex items-center space-x-4">
-              <DialogTitle className="text-lg font-semibold">Preview - {playlist.name}</DialogTitle>
+              <h2 className="text-lg font-semibold">Preview - {playlist.name}</h2>
               <Badge variant="outline">
                 {currentIndex + 1} of {items.length}
               </Badge>
+              <Badge variant="secondary" className="flex items-center space-x-1">
+                <Monitor className="h-3 w-3" />
+                <span>1920×1080</span>
+              </Badge>
             </div>
-            <div className="flex items-center space-x-2">
-              <Button variant="ghost" size="sm" onClick={() => setIsFullscreen(!isFullscreen)}>
-                <Maximize className="h-4 w-4" />
-              </Button>
-              <Button variant="ghost" size="sm" onClick={() => onOpenChange(false)}>
-                <X className="h-4 w-4" />
-              </Button>
-            </div>
+            <Button variant="ghost" size="sm" onClick={() => onOpenChange(false)}>
+              <X className="h-4 w-4" />
+            </Button>
           </div>
 
-          {/* Media Display */}
-          <div
-            className="flex-1 flex items-center justify-center relative"
-            style={{ backgroundColor: playlist.background_color || "#000000" }}
-          >
-            {mediaLoading && (
-              <div className="absolute inset-0 flex items-center justify-center bg-black/50">
-                <Loader2 className="h-8 w-8 animate-spin text-white" />
-              </div>
-            )}
-
-            {mediaError && (
-              <div className="text-center text-white">
-                <AlertCircle className="h-16 w-16 mx-auto mb-4" />
-                <h3 className="text-xl font-medium mb-2">Media Error</h3>
-                <p className="text-gray-300">Unable to load this media file</p>
-                <p className="text-sm text-gray-400 mt-2">{currentMedia.original_name || currentMedia.filename}</p>
-              </div>
-            )}
-
-            {/* Image Display */}
-            {isImage && !mediaError && (
-              <img
-                src={currentMedia.url || "/placeholder.svg"}
-                alt={currentMedia.original_name || currentMedia.filename}
-                className={cn("max-w-full max-h-full", getScaleClass(currentMedia.mime_type))}
-                onLoad={handleMediaLoad}
-                onError={handleMediaError}
-              />
-            )}
-
-            {/* Video Display */}
-            {isVideo && !mediaError && (
-              <video
-                ref={videoRef}
-                src={currentMedia.url}
-                className={cn("max-w-full max-h-full", getScaleClass(currentMedia.mime_type))}
-                muted={isMuted}
-                onLoadedData={handleMediaLoad}
-                onError={handleMediaError}
-                onPlay={() => setIsPlaying(true)}
-                onPause={() => setIsPlaying(false)}
-              />
-            )}
-
-            {/* Audio Display */}
-            {isAudio && !mediaError && (
-              <div className="text-center text-white">
-                <div className="bg-white/10 rounded-lg p-8 backdrop-blur-sm">
-                  <Volume2 className="h-16 w-16 mx-auto mb-4" />
-                  <h3 className="text-xl font-medium mb-2">{currentMedia.original_name || currentMedia.filename}</h3>
-                  <p className="text-gray-300">Audio File</p>
+          {/* Fixed 16:9 Aspect Ratio Preview Container */}
+          <div className="flex-1 flex items-center justify-center p-6 bg-gray-100">
+            <div
+              className="relative bg-black shadow-2xl"
+              style={{
+                width: "100%",
+                maxWidth: "1024px",
+                aspectRatio: "16/9",
+                backgroundColor: playlist.background_color || "#000000",
+              }}
+            >
+              {mediaLoading && (
+                <div className="absolute inset-0 flex items-center justify-center bg-black/50 z-10">
+                  <Loader2 className="h-8 w-8 animate-spin text-white" />
                 </div>
-                <audio
-                  ref={audioRef}
+              )}
+
+              {mediaError && (
+                <div className="absolute inset-0 flex items-center justify-center text-white z-10">
+                  <div className="text-center">
+                    <AlertCircle className="h-16 w-16 mx-auto mb-4" />
+                    <h3 className="text-xl font-medium mb-2">Media Error</h3>
+                    <p className="text-gray-300">Unable to load this media file</p>
+                    <p className="text-sm text-gray-400 mt-2">{currentMedia.original_name || currentMedia.filename}</p>
+                  </div>
+                </div>
+              )}
+
+              {/* Image Display */}
+              {isImage && !mediaError && (
+                <img
+                  src={currentMedia.url || "/placeholder.svg"}
+                  alt={currentMedia.original_name || currentMedia.filename}
+                  className={cn("w-full h-full", getScaleClass(currentMedia.mime_type))}
+                  onLoad={handleMediaLoad}
+                  onError={handleMediaError}
+                />
+              )}
+
+              {/* Video Display */}
+              {isVideo && !mediaError && (
+                <video
+                  ref={videoRef}
                   src={currentMedia.url}
+                  className={cn("w-full h-full", getScaleClass(currentMedia.mime_type))}
+                  muted={isMuted}
                   onLoadedData={handleMediaLoad}
                   onError={handleMediaError}
                   onPlay={() => setIsPlaying(true)}
                   onPause={() => setIsPlaying(false)}
                 />
-              </div>
-            )}
+              )}
 
-            {/* PDF Display */}
-            {isPDF && !mediaError && (
-              <div className="w-full h-full">
+              {/* Audio Display */}
+              {isAudio && !mediaError && (
+                <div className="absolute inset-0 flex items-center justify-center text-white">
+                  <div className="text-center">
+                    <div className="bg-white/10 rounded-lg p-8 backdrop-blur-sm">
+                      <Volume2 className="h-16 w-16 mx-auto mb-4" />
+                      <h3 className="text-xl font-medium mb-2">
+                        {currentMedia.original_name || currentMedia.filename}
+                      </h3>
+                      <p className="text-gray-300">Audio File</p>
+                    </div>
+                  </div>
+                  <audio
+                    ref={audioRef}
+                    src={currentMedia.url}
+                    onLoadedData={handleMediaLoad}
+                    onError={handleMediaError}
+                    onPlay={() => setIsPlaying(true)}
+                    onPause={() => setIsPlaying(false)}
+                  />
+                </div>
+              )}
+
+              {/* PDF Display */}
+              {isPDF && !mediaError && (
                 <iframe
                   src={currentMedia.url}
                   className="w-full h-full border-0"
@@ -348,12 +365,10 @@ export function PlaylistPreviewModal({ open, onOpenChange, playlist, items }: Pl
                   onError={handleMediaError}
                   title={currentMedia.original_name || currentMedia.filename}
                 />
-              </div>
-            )}
+              )}
 
-            {/* Presentation Display */}
-            {isPresentation && !mediaError && (
-              <div className="w-full h-full">
+              {/* Presentation Display */}
+              {isPresentation && !mediaError && (
                 <iframe
                   src={currentMedia.url}
                   className="w-full h-full border-0"
@@ -361,18 +376,18 @@ export function PlaylistPreviewModal({ open, onOpenChange, playlist, items }: Pl
                   onError={handleMediaError}
                   title={currentMedia.original_name || currentMedia.filename}
                 />
-              </div>
-            )}
+              )}
 
-            {/* Text Overlay */}
-            {playlist.text_overlay && (
-              <div className="absolute bottom-4 left-4 bg-black/50 text-white p-3 rounded-lg backdrop-blur-sm">
-                <h4 className="font-medium">{currentMedia.original_name || currentMedia.filename}</h4>
-                <p className="text-sm text-gray-300">
-                  {currentMedia.file_type} • {formatTime(timeRemaining)} remaining
-                </p>
-              </div>
-            )}
+              {/* Text Overlay */}
+              {playlist.text_overlay && !mediaError && (
+                <div className="absolute bottom-4 left-4 bg-black/70 text-white p-3 rounded-lg backdrop-blur-sm">
+                  <h4 className="font-medium">{currentMedia.original_name || currentMedia.filename}</h4>
+                  <p className="text-sm text-gray-300">
+                    {currentMedia.file_type} • {formatTime(timeRemaining)} remaining
+                  </p>
+                </div>
+              )}
+            </div>
           </div>
 
           {/* Controls */}
@@ -380,7 +395,7 @@ export function PlaylistPreviewModal({ open, onOpenChange, playlist, items }: Pl
             {/* Progress Bar */}
             <div className="mb-4">
               <div className="flex items-center justify-between text-sm text-gray-600 mb-2">
-                <span>{currentMedia.original_name || currentMedia.filename}</span>
+                <span className="truncate max-w-md">{currentMedia.original_name || currentMedia.filename}</span>
                 <span>{formatTime(timeRemaining)} remaining</span>
               </div>
               <Progress value={progress} className="h-2" />

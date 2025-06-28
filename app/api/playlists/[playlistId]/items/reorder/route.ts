@@ -1,47 +1,45 @@
-import { NextResponse } from "next/server"
-import { getCurrentUser } from "@/lib/auth"
-import { getDb } from "@/lib/db"
+import { type NextRequest, NextResponse } from "next/server"
+import { neon } from "@neondatabase/serverless"
 
-export const dynamic = "force-dynamic"
+const sql = neon(process.env.DATABASE_URL!)
 
-export async function PUT(request: Request, { params }: { params: { playlistId: string } }) {
-  console.log("🔄 [PLAYLIST REORDER API] Starting PUT request for playlist:", params.playlistId)
-
+export async function PUT(request: NextRequest, { params }: { params: { playlistId: string } }) {
   try {
-    const user = await getCurrentUser()
-    if (!user) {
-      console.log("❌ [PLAYLIST REORDER API] No user authenticated")
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-    }
-
-    const playlistId = Number.parseInt(params.playlistId)
-    if (isNaN(playlistId)) {
-      console.log("❌ [PLAYLIST REORDER API] Invalid playlist ID:", params.playlistId)
-      return NextResponse.json({ error: "Invalid playlist ID" }, { status: 400 })
-    }
-
+    const playlistId = params.playlistId
     const body = await request.json()
-    console.log("📝 [PLAYLIST REORDER API] Request body:", body)
-
     const { items } = body
 
-    if (!Array.isArray(items)) {
+    console.log("🔄 [API] Reordering playlist items:", { playlistId, itemCount: items?.length })
+
+    if (!items || !Array.isArray(items)) {
       return NextResponse.json({ error: "Items array is required" }, { status: 400 })
     }
 
-    const sql = getDb()
-
-    // Verify playlist ownership
-    const playlist = await sql`
-      SELECT id FROM playlists WHERE id = ${playlistId} AND user_id = ${user.id}
+    // Validate that all items belong to this playlist
+    const playlistItems = await sql`
+      SELECT id FROM playlist_items WHERE playlist_id = ${playlistId}
     `
 
-    if (playlist.length === 0) {
-      console.log("❌ [PLAYLIST REORDER API] Playlist not found or not owned by user")
-      return NextResponse.json({ error: "Playlist not found" }, { status: 404 })
+    const validItemIds = new Set(playlistItems.map((item) => item.id))
+    const requestedItemIds = items.map((item) => item.id)
+
+    for (const itemId of requestedItemIds) {
+      if (!validItemIds.has(itemId)) {
+        return NextResponse.json({ error: `Item ${itemId} does not belong to this playlist` }, { status: 400 })
+      }
     }
 
-    // Update positions for all items
+    // Update positions in a transaction-like manner
+    // First, set all positions to negative values to avoid conflicts
+    for (const item of items) {
+      await sql`
+        UPDATE playlist_items 
+        SET position = ${-item.position}
+        WHERE id = ${item.id} AND playlist_id = ${playlistId}
+      `
+    }
+
+    // Then set the correct positive positions
     for (const item of items) {
       await sql`
         UPDATE playlist_items 
@@ -50,20 +48,14 @@ export async function PUT(request: Request, { params }: { params: { playlistId: 
       `
     }
 
-    console.log(`✅ [PLAYLIST REORDER API] Updated positions for ${items.length} items`)
+    console.log("🔄 [API] Successfully reordered playlist items")
 
     return NextResponse.json({
       success: true,
       message: "Playlist items reordered successfully",
     })
   } catch (error) {
-    console.error("❌ [PLAYLIST REORDER API] Error:", error)
-    return NextResponse.json(
-      {
-        error: "Failed to reorder playlist items",
-        details: error instanceof Error ? error.message : "Unknown error",
-      },
-      { status: 500 },
-    )
+    console.error("Error reordering playlist items:", error)
+    return NextResponse.json({ error: "Failed to reorder playlist items" }, { status: 500 })
   }
 }
