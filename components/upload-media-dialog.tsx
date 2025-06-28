@@ -40,12 +40,12 @@ export function UploadMediaDialog({ open, onOpenChange, onUploadComplete }: Uplo
     setUploadComplete(false)
     setUploadProgress(0)
 
-    // Check file size (500MB for videos, 100MB for others)
-    const maxSize = file.type.startsWith("video/") ? 500 * 1024 * 1024 : 100 * 1024 * 1024
-    const maxSizeMB = file.type.startsWith("video/") ? "500MB" : "100MB"
+    // Check file size (100MB for videos due to server limits, 50MB for others)
+    const maxSize = file.type.startsWith("video/") ? 100 * 1024 * 1024 : 50 * 1024 * 1024
+    const maxSizeMB = file.type.startsWith("video/") ? "100MB" : "50MB"
 
     if (file.size > maxSize) {
-      setError(`File size must be less than ${maxSizeMB}`)
+      setError(`File size must be less than ${maxSizeMB}. Your file is ${Math.round(file.size / 1024 / 1024)}MB.`)
       return
     }
 
@@ -86,22 +86,47 @@ export function UploadMediaDialog({ open, onOpenChange, onUploadComplete }: Uplo
       console.log("API response received:", response.status, response.statusText)
       setUploadProgress(80)
 
-      const data = await response.json()
-      console.log("Response data:", data)
+      // Handle different response types
+      let data
+      const contentType = response.headers.get("content-type")
+
+      if (contentType && contentType.includes("application/json")) {
+        data = await response.json()
+        console.log("Response data (JSON):", data)
+      } else {
+        // Handle non-JSON responses (like 413 errors)
+        const text = await response.text()
+        console.log("Response data (Text):", text)
+        data = { error: text || `Server error (${response.status})` }
+      }
 
       if (response.ok && data.success) {
         console.log("Upload successful!")
         setUploadProgress(100)
         setUploadComplete(true)
 
-        // Wait a moment to show success, then close
+        // Wait a moment to show success, then close and refresh
         setTimeout(() => {
           onUploadComplete()
           handleClose()
         }, 1500)
       } else {
         console.error("Upload failed:", data.error)
-        setError(data.error || `Upload failed (${response.status})`)
+
+        // Provide specific error messages based on status code
+        let errorMessage = data.error || "Upload failed"
+
+        if (response.status === 413) {
+          errorMessage = "File is too large for the server. Try a smaller file or compress your video."
+        } else if (response.status === 401) {
+          errorMessage = "You are not authorized to upload files. Please log in again."
+        } else if (response.status === 400) {
+          errorMessage = data.error || "Invalid file or request."
+        } else if (response.status >= 500) {
+          errorMessage = "Server error. Please try again later."
+        }
+
+        setError(errorMessage)
         setUploadProgress(0)
       }
     } catch (err) {
@@ -116,7 +141,7 @@ export function UploadMediaDialog({ open, onOpenChange, onUploadComplete }: Uplo
   const handleClose = () => {
     if (uploading) {
       console.log("Cannot close dialog during upload")
-      return
+      return false
     }
 
     console.log("Closing dialog and resetting state")
@@ -125,6 +150,7 @@ export function UploadMediaDialog({ open, onOpenChange, onUploadComplete }: Uplo
     setError(null)
     setUploadProgress(0)
     setUploadComplete(false)
+    return true
   }
 
   const formatFileSize = (bytes: number) => {
@@ -136,7 +162,19 @@ export function UploadMediaDialog({ open, onOpenChange, onUploadComplete }: Uplo
   }
 
   return (
-    <AlertDialog open={open} onOpenChange={uploading ? undefined : handleClose}>
+    <AlertDialog
+      open={open}
+      onOpenChange={(newOpen) => {
+        if (!newOpen && uploading) {
+          // Prevent closing during upload
+          console.log("Prevented dialog close during upload")
+          return
+        }
+        if (!newOpen) {
+          handleClose()
+        }
+      }}
+    >
       <AlertDialogContent className="sm:max-w-md">
         <AlertDialogHeader>
           <AlertDialogTitle className="flex items-center gap-2">
@@ -144,8 +182,7 @@ export function UploadMediaDialog({ open, onOpenChange, onUploadComplete }: Uplo
             Upload Media
           </AlertDialogTitle>
           <AlertDialogDescription>
-            Select a file to upload to your media library. Supported formats: Images, Videos, Audio, PDF, Office
-            documents.
+            Select a file to upload to your media library. Max size: 100MB for videos, 50MB for other files.
           </AlertDialogDescription>
         </AlertDialogHeader>
 
@@ -174,6 +211,7 @@ export function UploadMediaDialog({ open, onOpenChange, onUploadComplete }: Uplo
                 <Loader2 className="h-4 w-4 animate-spin" />
                 Uploading... {uploadProgress}%
               </div>
+              <div className="text-xs text-center text-gray-500">Please wait, do not close this window</div>
             </div>
           )}
 
@@ -198,13 +236,25 @@ export function UploadMediaDialog({ open, onOpenChange, onUploadComplete }: Uplo
         <AlertDialogFooter>
           <AlertDialogCancel
             disabled={uploading}
-            onClick={handleClose}
+            onClick={(e) => {
+              if (uploading) {
+                e.preventDefault()
+                console.log("Cancel button disabled during upload")
+                return
+              }
+              handleClose()
+            }}
             className={uploading ? "opacity-50 cursor-not-allowed" : ""}
           >
             {uploading ? "Uploading..." : "Cancel"}
           </AlertDialogCancel>
           <AlertDialogAction
-            onClick={handleUpload}
+            onClick={(e) => {
+              e.preventDefault()
+              if (!uploading && !uploadComplete) {
+                handleUpload()
+              }
+            }}
             disabled={!selectedFile || uploading || uploadComplete}
             className={!selectedFile || uploading || uploadComplete ? "opacity-50 cursor-not-allowed" : ""}
           >

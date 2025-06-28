@@ -32,14 +32,19 @@ export async function POST(request: NextRequest) {
       lastModified: file.lastModified,
     })
 
-    // Check file size (500MB limit for videos, 100MB for others)
-    const maxSize = file.type.startsWith("video/") ? 500 * 1024 * 1024 : 100 * 1024 * 1024
+    // Check file size (100MB limit for videos, 50MB for others due to server constraints)
+    const maxSize = file.type.startsWith("video/") ? 100 * 1024 * 1024 : 50 * 1024 * 1024
+    const maxSizeMB = file.type.startsWith("video/") ? "100MB" : "50MB"
     console.log("Max size allowed:", maxSize, "File size:", file.size)
 
     if (file.size > maxSize) {
-      const maxSizeMB = file.type.startsWith("video/") ? "500MB" : "100MB"
       console.log("ERROR: File too large")
-      return NextResponse.json({ error: `File size must be less than ${maxSizeMB}` }, { status: 400 })
+      return NextResponse.json(
+        {
+          error: `File size must be less than ${maxSizeMB}. Your file is ${Math.round(file.size / 1024 / 1024)}MB.`,
+        },
+        { status: 400 },
+      )
     }
 
     // Generate unique filename
@@ -184,6 +189,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json(
       {
+        success: false,
         error: errorMessage,
         details: error instanceof Error ? error.message : "Unknown error",
         timestamp: new Date().toISOString(),

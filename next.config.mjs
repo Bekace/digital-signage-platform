@@ -8,7 +8,20 @@ const nextConfig = {
   },
   images: {
     unoptimized: true,
-    domains: ['hebbkx1anhila5yf.public.blob.vercel-storage.com'],
+    domains: ['blob.vercel-storage.com'],
+  },
+  experimental: {
+    serverComponentsExternalPackages: ['sharp'],
+  },
+  // Increase body size limit for file uploads
+  api: {
+    bodyParser: {
+      sizeLimit: '100mb',
+    },
+  },
+  // Add server configuration for larger uploads
+  serverRuntimeConfig: {
+    maxFileSize: 100 * 1024 * 1024, // 100MB
   },
 }
 
