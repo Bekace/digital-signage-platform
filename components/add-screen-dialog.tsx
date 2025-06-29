@@ -12,8 +12,8 @@ import {
 } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
-import { Copy, RefreshCw, Monitor, Clock, Plus } from "lucide-react"
-import { toast } from "sonner"
+import { Copy, RefreshCw, Monitor, Clock } from "lucide-react"
+import { useToast } from "@/hooks/use-toast"
 
 interface PairingCode {
   code: string
@@ -25,6 +25,7 @@ export function AddScreenDialog() {
   const [pairingCode, setPairingCode] = useState<PairingCode | null>(null)
   const [isGenerating, setIsGenerating] = useState(false)
   const [timeLeft, setTimeLeft] = useState<string>("")
+  const { toast } = useToast()
 
   const generatePairingCode = async () => {
     setIsGenerating(true)
@@ -53,13 +54,20 @@ export function AddScreenDialog() {
         // Clear interval when dialog closes
         setTimeout(() => clearInterval(interval), 30 * 60 * 1000)
 
-        toast.success(`Pairing code generated: ${data.code}`)
+        toast({
+          title: "Pairing code generated",
+          description: `Code: ${data.code} (expires in 30 minutes)`,
+        })
       } else {
         throw new Error(data.error || "Failed to generate code")
       }
     } catch (error) {
       console.error("Error generating pairing code:", error)
-      toast.error(error instanceof Error ? error.message : "Failed to generate pairing code")
+      toast({
+        title: "Error",
+        description: error instanceof Error ? error.message : "Failed to generate pairing code",
+        variant: "destructive",
+      })
     } finally {
       setIsGenerating(false)
     }
@@ -83,9 +91,16 @@ export function AddScreenDialog() {
   const copyToClipboard = async (text: string) => {
     try {
       await navigator.clipboard.writeText(text)
-      toast.success("Copied to clipboard!")
+      toast({
+        title: "Copied!",
+        description: "Pairing code copied to clipboard",
+      })
     } catch (error) {
-      toast.error("Failed to copy to clipboard")
+      toast({
+        title: "Error",
+        description: "Failed to copy to clipboard",
+        variant: "destructive",
+      })
     }
   }
 
@@ -102,16 +117,13 @@ export function AddScreenDialog() {
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogTrigger asChild>
         <Button>
-          <Plus className="mr-2 h-4 w-4" />
+          <Monitor className="mr-2 h-4 w-4" />
           Add Screen
         </Button>
       </DialogTrigger>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <Monitor className="h-5 w-5" />
-            Add New Screen
-          </DialogTitle>
+          <DialogTitle>Add New Screen</DialogTitle>
           <DialogDescription>
             Generate a pairing code to connect a new display device to your account.
           </DialogDescription>
@@ -162,12 +174,12 @@ export function AddScreenDialog() {
                 </Button>
               </div>
 
-              <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
-                <h4 className="font-medium text-sm mb-2 text-blue-900">Next Steps:</h4>
-                <ol className="text-sm text-blue-800 space-y-1">
+              <div className="bg-blue-50 p-4 rounded-lg">
+                <h4 className="font-medium text-sm mb-2">Next Steps:</h4>
+                <ol className="text-sm text-muted-foreground space-y-1">
                   <li>1. Open your device browser</li>
                   <li>
-                    2. Go to: <code className="bg-blue-100 px-1 rounded">/device-player</code>
+                    2. Go to: <code className="bg-white px-1 rounded">/device-player</code>
                   </li>
                   <li>3. Enter the pairing code above</li>
                   <li>4. Click "Connect Device"</li>

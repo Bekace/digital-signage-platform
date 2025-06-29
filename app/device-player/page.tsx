@@ -1,27 +1,15 @@
 "use client"
 
-import { useState, useEffect, useRef, useCallback } from "react"
+import type React from "react"
+
+import { useState, useEffect, useRef } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
-import {
-  Monitor,
-  Wifi,
-  WifiOff,
-  Play,
-  Pause,
-  Volume2,
-  VolumeX,
-  Maximize,
-  RotateCcw,
-  SkipForward,
-  SkipBack,
-  Loader2,
-  AlertCircle,
-} from "lucide-react"
-import { toast } from "sonner"
+import { Monitor, Wifi, WifiOff, Play, Pause, Volume2, VolumeX, Maximize, RotateCcw } from "lucide-react"
+import { useToast } from "@/hooks/use-toast"
 
 interface Device {
   id: number
@@ -29,35 +17,32 @@ interface Device {
   status: string
 }
 
-interface MediaFile {
+interface MediaItem {
   id: number
-  filename: string
-  original_name: string
-  file_type: string
-  url: string
-  thumbnail_url?: string
-  mime_type?: string
-  media_source?: string
-  external_url?: string
-}
-
-interface PlaylistItem {
-  id: number
-  media_id: number
-  position: number
+  order_index: number
   duration: number
-  transition_type: string
-  media: MediaFile
+  media: {
+    id: number
+    filename: string
+    file_type: string
+    url: string
+    thumbnail_url?: string
+    metadata?: any
+  }
 }
 
 interface Playlist {
   id: number
   name: string
   description: string
-  loop_enabled: boolean
-  shuffle: boolean
-  background_color?: string
-  items: PlaylistItem[]
+  settings: {
+    loop: boolean
+    shuffle: boolean
+    transitionDuration: number
+    backgroundColor?: string
+    textColor?: string
+  }
+  items: MediaItem[]
 }
 
 export default function DevicePlayer() {
@@ -67,15 +52,11 @@ export default function DevicePlayer() {
   const [currentItemIndex, setCurrentItemIndex] = useState(0)
   const [isPlaying, setIsPlaying] = useState(false)
   const [progress, setProgress] = useState(0)
-  const [currentTime, setCurrentTime] = useState(0)
-  const [totalTime, setTotalTime] = useState(0)
   const [volume, setVolume] = useState(1)
   const [isMuted, setIsMuted] = useState(false)
   const [isFullscreen, setIsFullscreen] = useState(false)
   const [isConnecting, setIsConnecting] = useState(false)
   const [connectionStatus, setConnectionStatus] = useState<"disconnected" | "connecting" | "connected">("disconnected")
-  const [mediaLoading, setMediaLoading] = useState(false)
-  const [mediaError, setMediaError] = useState<string | null>(null)
   const [performanceMetrics, setPerformanceMetrics] = useState({
     mediaLoadTime: 0,
     playbackErrors: 0,
@@ -83,15 +64,18 @@ export default function DevicePlayer() {
     totalItemsPlayed: 0,
   })
 
-  const videoRef = useRef<HTMLVideoElement>(null)
-  const audioRef = useRef<HTMLAudioElement>(null)
-  const imageTimerRef = useRef<NodeJS.Timeout | null>(null)
+  const mediaRef = useRef<HTMLVideoElement | HTMLAudioElement | null>(null)
   const heartbeatInterval = useRef<NodeJS.Timeout | null>(null)
   const playlistInterval = useRef<NodeJS.Timeout | null>(null)
+  const { toast } = useToast()
 
   const connectDevice = async () => {
     if (!pairingCode.trim()) {
-      toast.error("Please enter a pairing code")
+      toast({
+        title: "Error",
+        description: "Please enter a pairing code",
+        variant: "destructive",
+      })
       return
     }
 
@@ -105,7 +89,7 @@ export default function DevicePlayer() {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          deviceCode: pairingCode.trim().toUpperCase(),
+          code: pairingCode.trim().toUpperCase(),
           deviceName: `Web Player ${new Date().toLocaleString()}`,
           deviceType: "web-player",
           platform: navigator.userAgent,
@@ -126,14 +110,21 @@ export default function DevicePlayer() {
         // Start playlist polling
         startPlaylistPolling(data.device.id)
 
-        toast.success(`Connected! Device: ${data.device.name}`)
+        toast({
+          title: "Connected!",
+          description: `Device "${data.device.name}" registered successfully`,
+        })
       } else {
         throw new Error(data.error || "Failed to register device")
       }
     } catch (error) {
       console.error("Connection error:", error)
       setConnectionStatus("disconnected")
-      toast.error(error instanceof Error ? error.message : "Failed to register device")
+      toast({
+        title: "Connection Failed",
+        description: error instanceof Error ? error.message : "Failed to register device",
+        variant: "destructive",
+      })
     } finally {
       setIsConnecting(false)
     }
@@ -186,7 +177,7 @@ export default function DevicePlayer() {
           // Start playing if not already playing
           if (!isPlaying && data.playlist.items.length > 0) {
             setIsPlaying(true)
-            playCurrentItem()
+            playCurrentItem(data.playlist.items[0])
           }
         }
       } catch (error) {
@@ -201,223 +192,35 @@ export default function DevicePlayer() {
     playlistInterval.current = setInterval(fetchPlaylist, 5000)
   }
 
-  const playCurrentItem = useCallback(() => {
-    if (!playlist || !playlist.items.length) return
-
-    const currentItem = playlist.items[currentItemIndex]
-    if (!currentItem) return
-
-    const media = currentItem.media
-    console.log("Playing item:", media.original_name, "Type:", media.mime_type || media.file_type)
-
-    setMediaLoading(true)
-    setMediaError(null)
-
-    // Clear any existing timers
-    if (imageTimerRef.current) {
-      clearTimeout(imageTimerRef.current)
-      imageTimerRef.current = null
-    }
-
-    // Reset progress
-    setProgress(0)
-    setCurrentTime(0)
-
+  const playCurrentItem = (item: MediaItem) => {
     const startTime = Date.now()
 
-    if (isVideoFile(media.mime_type || media.file_type)) {
-      playVideo(media, currentItem.duration, startTime)
-    } else if (isAudioFile(media.mime_type || media.file_type)) {
-      playAudio(media, currentItem.duration, startTime)
-    } else if (media.media_source === "google_slides") {
-      playSlides(media, currentItem.duration, startTime)
-    } else {
-      playImage(media, currentItem.duration, startTime)
-    }
-  }, [playlist, currentItemIndex, isPlaying, isMuted])
+    // Update performance metrics
+    setPerformanceMetrics((prev) => ({
+      ...prev,
+      totalItemsPlayed: prev.totalItemsPlayed + 1,
+    }))
 
-  const playVideo = (media: MediaFile, duration: number, startTime: number) => {
-    const video = videoRef.current
-    if (video) {
-      video.src = media.url
-      video.muted = isMuted
-      video.load()
-
-      video.onloadedmetadata = () => {
+    // Simulate media loading
+    setTimeout(
+      () => {
         const loadTime = Date.now() - startTime
-        setPerformanceMetrics((prev) => ({ ...prev, mediaLoadTime: loadTime }))
-        setTotalTime(video.duration)
-        setMediaLoading(false)
-
-        if (isPlaying) {
-          video.play().catch((err) => {
-            console.error("Video play error:", err)
-            handleMediaError("Failed to play video")
-          })
-        }
-      }
-
-      video.ontimeupdate = () => {
-        setCurrentTime(video.currentTime)
-        setProgress((video.currentTime / video.duration) * 100)
-      }
-
-      video.onended = () => {
         setPerformanceMetrics((prev) => ({
           ...prev,
-          successfulTransitions: prev.successfulTransitions + 1,
-          totalItemsPlayed: prev.totalItemsPlayed + 1,
+          mediaLoadTime: loadTime,
         }))
-        nextItem()
-      }
-
-      video.onerror = () => {
-        handleMediaError("Failed to load video")
-      }
-    }
-  }
-
-  const playAudio = (media: MediaFile, duration: number, startTime: number) => {
-    const audio = audioRef.current
-    if (audio) {
-      audio.src = media.url
-      audio.muted = isMuted
-      audio.load()
-
-      audio.onloadedmetadata = () => {
-        const loadTime = Date.now() - startTime
-        setPerformanceMetrics((prev) => ({ ...prev, mediaLoadTime: loadTime }))
-        setTotalTime(audio.duration)
-        setMediaLoading(false)
-
-        if (isPlaying) {
-          audio.play().catch((err) => {
-            console.error("Audio play error:", err)
-            handleMediaError("Failed to play audio")
-          })
-        }
-      }
-
-      audio.ontimeupdate = () => {
-        setCurrentTime(audio.currentTime)
-        setProgress((audio.currentTime / audio.duration) * 100)
-      }
-
-      audio.onended = () => {
-        setPerformanceMetrics((prev) => ({
-          ...prev,
-          successfulTransitions: prev.successfulTransitions + 1,
-          totalItemsPlayed: prev.totalItemsPlayed + 1,
-        }))
-        nextItem()
-      }
-
-      audio.onerror = () => {
-        handleMediaError("Failed to load audio")
-      }
-    }
-  }
-
-  const playImage = (media: MediaFile, duration: number, startTime: number) => {
-    const itemDuration = duration || 8
-    setTotalTime(itemDuration)
-
-    // Preload image
-    const img = new Image()
-    img.crossOrigin = "anonymous"
-
-    img.onload = () => {
-      const loadTime = Date.now() - startTime
-      setPerformanceMetrics((prev) => ({ ...prev, mediaLoadTime: loadTime }))
-      setMediaLoading(false)
-
-      if (isPlaying) {
-        startImageTimer(itemDuration)
-      }
-    }
-
-    img.onerror = () => {
-      handleMediaError("Failed to load image")
-    }
-
-    img.src = media.url
-  }
-
-  const playSlides = (media: MediaFile, duration: number, startTime: number) => {
-    const itemDuration = duration || 60
-    setTotalTime(itemDuration)
-
-    setTimeout(() => {
-      const loadTime = Date.now() - startTime
-      setPerformanceMetrics((prev) => ({ ...prev, mediaLoadTime: loadTime }))
-      setMediaLoading(false)
-
-      if (isPlaying) {
-        startImageTimer(itemDuration)
-      }
-    }, 1000)
-  }
-
-  const startImageTimer = (duration: number) => {
-    const startTime = Date.now()
-
-    const updateProgress = () => {
-      const elapsed = (Date.now() - startTime) / 1000
-      setCurrentTime(elapsed)
-      setProgress((elapsed / duration) * 100)
-
-      if (elapsed >= duration) {
-        setPerformanceMetrics((prev) => ({
-          ...prev,
-          successfulTransitions: prev.successfulTransitions + 1,
-          totalItemsPlayed: prev.totalItemsPlayed + 1,
-        }))
-        nextItem()
-      } else {
-        imageTimerRef.current = setTimeout(updateProgress, 100)
-      }
-    }
-
-    updateProgress()
-  }
-
-  const handleMediaError = (errorMessage: string) => {
-    setMediaLoading(false)
-    setMediaError(errorMessage)
-    setIsPlaying(false)
-    setPerformanceMetrics((prev) => ({ ...prev, playbackErrors: prev.playbackErrors + 1 }))
-
-    // Auto-advance after 3 seconds
-    setTimeout(() => {
-      nextItem()
-    }, 3000)
-  }
-
-  const isVideoFile = (fileType: string) => {
-    return (
-      fileType?.startsWith("video/") ||
-      fileType?.includes("mp4") ||
-      fileType?.includes("webm") ||
-      fileType?.includes("ogg")
-    )
-  }
-
-  const isAudioFile = (fileType: string) => {
-    return (
-      fileType?.startsWith("audio/") ||
-      fileType?.includes("mp3") ||
-      fileType?.includes("wav") ||
-      fileType?.includes("ogg")
-    )
+      },
+      Math.random() * 1000 + 500,
+    ) // Random load time between 500-1500ms
   }
 
   const nextItem = () => {
-    if (!playlist || !playlist.items.length) return
+    if (!playlist || playlist.items.length === 0) return
 
     let nextIndex = currentItemIndex + 1
 
     if (nextIndex >= playlist.items.length) {
-      if (playlist.loop_enabled) {
+      if (playlist.settings.loop) {
         nextIndex = 0
       } else {
         setIsPlaying(false)
@@ -426,53 +229,21 @@ export default function DevicePlayer() {
     }
 
     setCurrentItemIndex(nextIndex)
-  }
+    setProgress(0)
+    playCurrentItem(playlist.items[nextIndex])
 
-  const previousItem = () => {
-    if (!playlist || !playlist.items.length) return
-
-    const prevIndex = currentItemIndex - 1
-    if (prevIndex < 0) {
-      if (playlist.loop_enabled) {
-        setCurrentItemIndex(playlist.items.length - 1)
-      } else {
-        setCurrentItemIndex(0)
-      }
-    } else {
-      setCurrentItemIndex(prevIndex)
-    }
+    setPerformanceMetrics((prev) => ({
+      ...prev,
+      successfulTransitions: prev.successfulTransitions + 1,
+    }))
   }
 
   const togglePlayPause = () => {
     setIsPlaying(!isPlaying)
-
-    const video = videoRef.current
-    const audio = audioRef.current
-
-    if (!isPlaying) {
-      // Resume
-      if (video && !video.paused) video.play()
-      if (audio && !audio.paused) audio.play()
-      playCurrentItem()
-    } else {
-      // Pause
-      if (video) video.pause()
-      if (audio) audio.pause()
-      if (imageTimerRef.current) {
-        clearTimeout(imageTimerRef.current)
-        imageTimerRef.current = null
-      }
-    }
   }
 
   const toggleMute = () => {
     setIsMuted(!isMuted)
-
-    const video = videoRef.current
-    const audio = audioRef.current
-
-    if (video) video.muted = !isMuted
-    if (audio) audio.muted = !isMuted
   }
 
   const toggleFullscreen = () => {
@@ -485,121 +256,83 @@ export default function DevicePlayer() {
     }
   }
 
-  const formatTime = (seconds: number) => {
-    const mins = Math.floor(seconds / 60)
-    const secs = Math.floor(seconds % 60)
-    return `${mins}:${secs.toString().padStart(2, "0")}`
-  }
+  const renderMedia = (item: MediaItem) => {
+    const { media } = item
 
-  const renderCurrentMedia = () => {
-    if (!playlist || !playlist.items.length) {
+    if (media.file_type.startsWith("video/")) {
       return (
-        <div className="flex-1 flex items-center justify-center bg-black text-white">
-          <div className="text-center">
-            <Monitor className="h-16 w-16 mx-auto mb-4 opacity-50" />
-            <h2 className="text-2xl font-semibold mb-2">No Content Assigned</h2>
-            <p className="text-gray-400">Waiting for playlist assignment...</p>
-          </div>
-        </div>
+        <video
+          ref={mediaRef as React.RefObject<HTMLVideoElement>}
+          src={media.url}
+          className="w-full h-full object-contain"
+          autoPlay={isPlaying}
+          muted={isMuted}
+          onEnded={nextItem}
+          onTimeUpdate={(e) => {
+            const video = e.target as HTMLVideoElement
+            setProgress((video.currentTime / video.duration) * 100)
+          }}
+        />
       )
     }
 
-    const currentItem = playlist.items[currentItemIndex]
-    if (!currentItem) return null
-
-    const media = currentItem.media
-
-    if (mediaLoading) {
+    if (media.file_type.startsWith("audio/")) {
       return (
-        <div className="flex-1 bg-black flex items-center justify-center text-white">
-          <div className="text-center">
-            <Loader2 className="h-12 w-12 mx-auto mb-4 animate-spin" />
-            <h3 className="text-xl font-semibold mb-2">Loading Media</h3>
-            <p className="text-gray-400">{media.original_name}</p>
-          </div>
-        </div>
-      )
-    }
-
-    if (mediaError) {
-      return (
-        <div className="flex-1 bg-black flex items-center justify-center text-white">
-          <div className="text-center">
-            <AlertCircle className="h-16 w-16 mx-auto mb-4 text-red-500" />
-            <h3 className="text-xl font-semibold mb-2">Media Error</h3>
-            <p className="text-gray-400 mb-2">{mediaError}</p>
-            <p className="text-sm text-gray-500">{media.original_name}</p>
-            <div className="text-xs text-gray-600 mt-2">Auto-advancing in 3 seconds...</div>
-          </div>
-        </div>
-      )
-    }
-
-    const backgroundColor = playlist.background_color || "#000000"
-
-    if (isVideoFile(media.mime_type || media.file_type)) {
-      return (
-        <div className="flex-1 flex items-center justify-center" style={{ backgroundColor }}>
-          <video
-            ref={videoRef}
-            className="max-w-full max-h-full object-contain"
-            controls={false}
+        <div className="flex flex-col items-center justify-center h-full bg-gradient-to-br from-purple-900 to-blue-900 text-white">
+          <audio
+            ref={mediaRef as React.RefObject<HTMLAudioElement>}
+            src={media.url}
+            autoPlay={isPlaying}
             muted={isMuted}
-            playsInline
+            onEnded={nextItem}
+            onTimeUpdate={(e) => {
+              const audio = e.target as HTMLAudioElement
+              setProgress((audio.currentTime / audio.duration) * 100)
+            }}
           />
-        </div>
-      )
-    }
-
-    if (isAudioFile(media.mime_type || media.file_type)) {
-      return (
-        <div className="flex-1 bg-gradient-to-br from-purple-900 to-blue-900 flex items-center justify-center text-white">
-          <audio ref={audioRef} className="hidden" />
-          <div className="text-center space-y-6">
-            <div className="w-32 h-32 mx-auto bg-white/20 rounded-full flex items-center justify-center">
-              <Volume2 className="h-16 w-16" />
-            </div>
-            <div>
-              <h2 className="text-2xl font-semibold mb-2">{media.original_name}</h2>
-              <div className="w-64 mx-auto">
-                <Progress value={progress} className="h-2" />
-                <div className="flex justify-between text-sm mt-2 opacity-75">
-                  <span>{formatTime(currentTime)}</span>
-                  <span>{formatTime(totalTime)}</span>
-                </div>
-              </div>
-            </div>
+          <div className="text-center">
+            <Volume2 className="w-24 h-24 mb-4 mx-auto" />
+            <h2 className="text-2xl font-bold mb-2">{media.filename}</h2>
+            <p className="text-lg opacity-75">Now Playing</p>
           </div>
         </div>
       )
     }
 
-    if (media.media_source === "google_slides" && media.external_url) {
+    if (media.file_type.startsWith("image/")) {
       return (
-        <div className="flex-1" style={{ backgroundColor }}>
-          <iframe src={media.external_url} className="w-full h-full border-0" allow="fullscreen" />
-        </div>
-      )
-    }
-
-    // Default to image display
-    return (
-      <div className="flex-1 flex items-center justify-center" style={{ backgroundColor }}>
         <img
           src={media.url || "/placeholder.svg"}
-          alt={media.original_name}
-          className="max-w-full max-h-full object-contain"
+          alt={media.filename}
+          className="w-full h-full object-contain"
+          onLoad={() => {
+            // Auto-advance after duration
+            setTimeout(nextItem, item.duration * 1000)
+          }}
         />
+      )
+    }
+
+    if (media.url.includes("docs.google.com/presentation")) {
+      return (
+        <iframe
+          src={media.url}
+          className="w-full h-full border-0"
+          title={media.filename}
+          onLoad={() => {
+            // Auto-advance after duration
+            setTimeout(nextItem, item.duration * 1000)
+          }}
+        />
+      )
+    }
+
+    return (
+      <div className="flex items-center justify-center h-full bg-gray-100">
+        <p className="text-gray-500">Unsupported media type: {media.file_type}</p>
       </div>
     )
   }
-
-  // Play current item when it changes
-  useEffect(() => {
-    if (isPlaying && playlist) {
-      playCurrentItem()
-    }
-  }, [currentItemIndex, playCurrentItem])
 
   // Cleanup intervals on unmount
   useEffect(() => {
@@ -609,9 +342,6 @@ export default function DevicePlayer() {
       }
       if (playlistInterval.current) {
         clearInterval(playlistInterval.current)
-      }
-      if (imageTimerRef.current) {
-        clearTimeout(imageTimerRef.current)
       }
     }
   }, [])
@@ -641,19 +371,8 @@ export default function DevicePlayer() {
               />
             </div>
             <Button onClick={connectDevice} disabled={isConnecting || !pairingCode.trim()} className="w-full">
-              {isConnecting ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Connecting...
-                </>
-              ) : (
-                "Connect Device"
-              )}
+              {isConnecting ? "Connecting..." : "Connect Device"}
             </Button>
-            <div className="text-center text-sm text-gray-500">
-              <p>Get your pairing code from:</p>
-              <p className="font-mono bg-gray-100 px-2 py-1 rounded mt-1">Dashboard → Screens → Add Screen</p>
-            </div>
           </CardContent>
         </Card>
       </div>
@@ -676,14 +395,9 @@ export default function DevicePlayer() {
           {playlist && (
             <div>
               <span>{playlist.name}</span>
-              <Badge variant="secondary" className="ml-2 text-xs">
-                {currentItemIndex + 1}/{playlist.items.length}
-              </Badge>
-              {playlist.loop_enabled && (
-                <Badge variant="outline" className="ml-1 text-xs border-green-500 text-green-400">
-                  Loop
-                </Badge>
-              )}
+              <span className="ml-2 text-gray-400">
+                ({currentItemIndex + 1}/{playlist.items.length})
+              </span>
             </div>
           )}
         </div>
@@ -698,77 +412,46 @@ export default function DevicePlayer() {
       </div>
 
       {/* Media Display */}
-      <div className="w-full h-screen pt-12">{renderCurrentMedia()}</div>
+      <div className="w-full h-screen pt-12">
+        {playlist && playlist.items.length > 0 ? (
+          renderMedia(playlist.items[currentItemIndex])
+        ) : (
+          <div className="flex items-center justify-center h-full">
+            <div className="text-center">
+              <Monitor className="w-24 h-24 mx-auto mb-4 text-gray-600" />
+              <h2 className="text-2xl font-bold mb-2">Waiting for Content</h2>
+              <p className="text-gray-400">No playlist assigned to this device</p>
+            </div>
+          </div>
+        )}
+      </div>
 
       {/* Progress Bar */}
       {isPlaying && (
-        <div className="absolute bottom-16 left-0 right-0 px-4">
+        <div className="absolute bottom-0 left-0 right-0">
           <Progress value={progress} className="h-1" />
         </div>
       )}
 
       {/* Controls */}
-      <div className="absolute bottom-4 left-0 right-0 px-4">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center space-x-2">
-            {playlist && playlist.items[currentItemIndex] && (
-              <span className="text-sm truncate max-w-48">{playlist.items[currentItemIndex].media.original_name}</span>
-            )}
-          </div>
-
-          <div className="flex items-center space-x-2">
-            <Button
-              size="sm"
-              variant="secondary"
-              onClick={previousItem}
-              disabled={!playlist || playlist.items.length <= 1}
-              className="bg-black bg-opacity-75"
-            >
-              <SkipBack className="w-4 h-4" />
-            </Button>
-
-            <Button
-              size="sm"
-              variant="secondary"
-              onClick={togglePlayPause}
-              disabled={!playlist || playlist.items.length === 0}
-              className="bg-black bg-opacity-75"
-            >
-              {isPlaying ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
-            </Button>
-
-            <Button
-              size="sm"
-              variant="secondary"
-              onClick={nextItem}
-              disabled={!playlist || playlist.items.length <= 1}
-              className="bg-black bg-opacity-75"
-            >
-              <SkipForward className="w-4 h-4" />
-            </Button>
-
-            <Button size="sm" variant="secondary" onClick={toggleMute} className="bg-black bg-opacity-75">
-              {isMuted ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
-            </Button>
-
-            <Button size="sm" variant="secondary" onClick={toggleFullscreen} className="bg-black bg-opacity-75">
-              <Maximize className="w-4 h-4" />
-            </Button>
-
-            <Button
-              size="sm"
-              variant="secondary"
-              onClick={() => window.location.reload()}
-              className="bg-black bg-opacity-75"
-            >
-              <RotateCcw className="w-4 h-4" />
-            </Button>
-          </div>
-
-          <div className="text-xs text-gray-400">
-            {formatTime(currentTime)} / {formatTime(totalTime)}
-          </div>
-        </div>
+      <div className="absolute bottom-4 right-4 flex space-x-2">
+        <Button size="sm" variant="secondary" onClick={togglePlayPause} className="bg-black bg-opacity-75">
+          {isPlaying ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
+        </Button>
+        <Button size="sm" variant="secondary" onClick={toggleMute} className="bg-black bg-opacity-75">
+          {isMuted ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
+        </Button>
+        <Button size="sm" variant="secondary" onClick={toggleFullscreen} className="bg-black bg-opacity-75">
+          <Maximize className="w-4 h-4" />
+        </Button>
+        <Button
+          size="sm"
+          variant="secondary"
+          onClick={() => window.location.reload()}
+          className="bg-black bg-opacity-75"
+        >
+          <RotateCcw className="w-4 h-4" />
+        </Button>
       </div>
     </div>
   )

@@ -36,11 +36,38 @@ export async function GET(request: NextRequest, { params }: { params: { deviceId
       })
     }
 
-    // Get playlist details
+    // Get playlist with items and media details
     const playlistResult = await sql`
-      SELECT id, name, description, loop_enabled, shuffle, background_color
-      FROM playlists
-      WHERE id = ${device.assigned_playlist_id}
+      SELECT 
+        p.id,
+        p.name,
+        p.description,
+        p.loop_playlist,
+        p.shuffle_items,
+        p.transition_duration,
+        p.background_color,
+        p.text_color,
+        JSON_AGG(
+          JSON_BUILD_OBJECT(
+            'id', pi.id,
+            'order_index', pi.order_index,
+            'duration', pi.duration,
+            'media', JSON_BUILD_OBJECT(
+              'id', mf.id,
+              'filename', mf.filename,
+              'file_type', mf.file_type,
+              'file_size', mf.file_size,
+              'url', mf.url,
+              'thumbnail_url', mf.thumbnail_url,
+              'metadata', mf.metadata
+            )
+          ) ORDER BY pi.order_index
+        ) as items
+      FROM playlists p
+      LEFT JOIN playlist_items pi ON p.id = pi.playlist_id
+      LEFT JOIN media_files mf ON pi.media_id = mf.id
+      WHERE p.id = ${device.assigned_playlist_id}
+      GROUP BY p.id, p.name, p.description, p.loop_playlist, p.shuffle_items, p.transition_duration, p.background_color, p.text_color
     `
 
     if (playlistResult.length === 0) {
@@ -49,51 +76,8 @@ export async function GET(request: NextRequest, { params }: { params: { deviceId
 
     const playlist = playlistResult[0]
 
-    // Get playlist items with media details
-    const itemsResult = await sql`
-      SELECT 
-        pi.id,
-        pi.media_id,
-        pi.position,
-        pi.duration,
-        pi.transition_type,
-        mf.id as media_file_id,
-        mf.filename,
-        mf.original_name,
-        mf.file_type,
-        mf.url,
-        mf.thumbnail_url,
-        mf.mime_type,
-        mf.dimensions,
-        mf.media_source,
-        mf.external_url
-      FROM playlist_items pi
-      JOIN media_files mf ON pi.media_id = mf.id
-      WHERE pi.playlist_id = ${device.assigned_playlist_id}
-      AND pi.deleted_at IS NULL
-      AND mf.deleted_at IS NULL
-      ORDER BY pi.position ASC
-    `
-
-    const items = itemsResult.map((item) => ({
-      id: item.id,
-      media_id: item.media_id,
-      position: item.position,
-      duration: item.duration || 8,
-      transition_type: item.transition_type || "fade",
-      media: {
-        id: item.media_file_id,
-        filename: item.filename,
-        original_name: item.original_name,
-        file_type: item.file_type,
-        url: item.url,
-        thumbnail_url: item.thumbnail_url,
-        mime_type: item.mime_type,
-        dimensions: item.dimensions,
-        media_source: item.media_source,
-        external_url: item.external_url,
-      },
-    }))
+    // Filter out items with null media (deleted media files)
+    const validItems = playlist.items.filter((item: any) => item.media && item.media.id)
 
     return NextResponse.json({
       device: {
@@ -105,10 +89,14 @@ export async function GET(request: NextRequest, { params }: { params: { deviceId
         id: playlist.id,
         name: playlist.name,
         description: playlist.description,
-        loop_enabled: playlist.loop_enabled || false,
-        shuffle: playlist.shuffle || false,
-        background_color: playlist.background_color,
-        items: items,
+        settings: {
+          loop: playlist.loop_playlist,
+          shuffle: playlist.shuffle_items,
+          transitionDuration: playlist.transition_duration,
+          backgroundColor: playlist.background_color,
+          textColor: playlist.text_color,
+        },
+        items: validItems,
       },
     })
   } catch (error) {

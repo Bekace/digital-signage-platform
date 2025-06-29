@@ -19,7 +19,6 @@ ALTER TABLE devices ADD COLUMN IF NOT EXISTS platform VARCHAR(100);
 ALTER TABLE devices ADD COLUMN IF NOT EXISTS capabilities JSONB DEFAULT '[]';
 ALTER TABLE devices ADD COLUMN IF NOT EXISTS screen_resolution VARCHAR(20);
 ALTER TABLE devices ADD COLUMN IF NOT EXISTS user_id INTEGER REFERENCES users(id) ON DELETE CASCADE;
-ALTER TABLE devices ADD COLUMN IF NOT EXISTS assigned_playlist_id INTEGER REFERENCES playlists(id) ON DELETE SET NULL;
 
 -- Create device heartbeats table for monitoring
 CREATE TABLE IF NOT EXISTS device_heartbeats (

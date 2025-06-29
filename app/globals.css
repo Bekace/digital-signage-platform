@@ -24,11 +24,6 @@
     --input: 214.3 31.8% 91.4%;
     --ring: 221.2 83.2% 53.3%;
     --radius: 0.5rem;
-    --chart-1: 12 76% 61%;
-    --chart-2: 173 58% 39%;
-    --chart-3: 197 37% 24%;
-    --chart-4: 43 74% 66%;
-    --chart-5: 27 87% 67%;
   }
 
   .dark {
@@ -51,11 +46,6 @@
     --border: 217.2 32.6% 17.5%;
     --input: 217.2 32.6% 17.5%;
     --ring: 224.3 76.3% 94.1%;
-    --chart-1: 220 70% 50%;
-    --chart-2: 160 60% 45%;
-    --chart-3: 30 80% 55%;
-    --chart-4: 280 65% 60%;
-    --chart-5: 340 75% 55%;
   }
 }
 
@@ -65,83 +55,5 @@
   }
   body {
     @apply bg-background text-foreground;
-  }
-}
-
-/* Custom scrollbar styles */
-::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
-}
-
-::-webkit-scrollbar-track {
-  @apply bg-muted;
-}
-
-::-webkit-scrollbar-thumb {
-  @apply bg-muted-foreground/30 rounded-md;
-}
-
-::-webkit-scrollbar-thumb:hover {
-  @apply bg-muted-foreground/50;
-}
-
-/* Loading animations */
-@keyframes pulse {
-  0%,
-  100% {
-    opacity: 1;
-  }
-  50% {
-    opacity: 0.5;
-  }
-}
-
-.animate-pulse {
-  animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
-}
-
-/* Media player styles */
-.media-player {
-  @apply w-full h-full object-cover;
-}
-
-.media-controls {
-  @apply absolute bottom-4 left-4 right-4 bg-black/50 rounded-lg p-2 flex items-center justify-between;
-}
-
-/* Playlist item styles */
-.playlist-item {
-  @apply border rounded-lg p-4 hover:bg-muted/50 transition-colors cursor-pointer;
-}
-
-.playlist-item.active {
-  @apply border-primary bg-primary/5;
-}
-
-/* Device status indicators */
-.status-online {
-  @apply bg-green-500;
-}
-
-.status-offline {
-  @apply bg-red-500;
-}
-
-.status-idle {
-  @apply bg-yellow-500;
-}
-
-/* Responsive utilities */
-@media (max-width: 768px) {
-  .mobile-hidden {
-    display: none;
-  }
-}
-
-/* Print styles */
-@media print {
-  .no-print {
-    display: none !important;
   }
 }

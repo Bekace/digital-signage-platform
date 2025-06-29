@@ -1,79 +1,155 @@
-import { type NextRequest, NextResponse } from "next/server"
-import { neon } from "@neondatabase/serverless"
-import jwt from "jsonwebtoken"
+import { NextResponse } from "next/server"
+import { getCurrentUser } from "@/lib/auth"
+import { getDb } from "@/lib/db"
 
-const sql = neon(process.env.DATABASE_URL!)
+export const dynamic = "force-dynamic"
 
-export async function GET(request: NextRequest) {
+export async function GET() {
+  console.log("🎵 [PLAYLISTS API] Starting GET request")
+
   try {
-    // Get token from cookie
-    const token = request.cookies.get("auth-token")?.value
-
-    if (!token) {
-      return NextResponse.json({ error: "No authentication token" }, { status: 401 })
+    const user = await getCurrentUser()
+    if (!user) {
+      console.log("❌ [PLAYLISTS API] No user authenticated")
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    // Verify JWT token
-    const decoded = jwt.verify(token, process.env.JWT_SECRET!) as { userId: number }
+    const sql = getDb()
 
-    // Get playlists for this user
+    // Get playlists with item count
     const playlists = await sql`
       SELECT 
-        id,
-        name,
-        description,
-        is_active as "isActive",
-        loop_playlist as "loopPlaylist",
-        shuffle_items as "shuffleItems",
-        created_at as "createdAt",
-        updated_at as "updatedAt"
-      FROM playlists 
-      WHERE user_id = ${decoded.userId}
-      ORDER BY created_at DESC
+        p.id,
+        p.name,
+        p.description,
+        p.status,
+        p.loop_enabled,
+        p.schedule_enabled,
+        p.start_time,
+        p.end_time,
+        p.selected_days,
+        p.created_at,
+        p.updated_at,
+        p.scale_image,
+        p.scale_video,
+        p.scale_document,
+        p.shuffle,
+        p.default_transition,
+        p.transition_speed,
+        p.auto_advance,
+        p.background_color,
+        p.text_overlay,
+        COUNT(pi.id) as item_count,
+        COALESCE(SUM(pi.duration), 0) as total_duration
+      FROM playlists p
+      LEFT JOIN playlist_items pi ON p.id = pi.playlist_id
+      WHERE p.user_id = ${user.id}
+      GROUP BY p.id, p.name, p.description, p.status, p.loop_enabled, p.schedule_enabled, 
+               p.start_time, p.end_time, p.selected_days, p.created_at, p.updated_at,
+               p.scale_image, p.scale_video, p.scale_document, p.shuffle, p.default_transition,
+               p.transition_speed, p.auto_advance, p.background_color, p.text_overlay
+      ORDER BY p.updated_at DESC
     `
+
+    console.log(`✅ [PLAYLISTS API] Found ${playlists.length} playlists for user ${user.id}`)
+
+    // Ensure we always return an array
+    const playlistsArray = Array.isArray(playlists) ? playlists : []
 
     return NextResponse.json({
       success: true,
-      playlists: playlists,
+      playlists: playlistsArray,
     })
   } catch (error) {
-    console.error("Playlists fetch error:", error)
-    return NextResponse.json({ error: "Failed to fetch playlists" }, { status: 500 })
+    console.error("❌ [PLAYLISTS API] Error:", error)
+    return NextResponse.json(
+      {
+        error: "Failed to fetch playlists",
+        details: error instanceof Error ? error.message : "Unknown error",
+        playlists: [], // Always return empty array on error
+      },
+      { status: 500 },
+    )
   }
 }
 
-export async function POST(request: NextRequest) {
-  try {
-    // Get token from cookie
-    const token = request.cookies.get("auth-token")?.value
+export async function POST(request: Request) {
+  console.log("➕ [PLAYLISTS API] Starting POST request")
 
-    if (!token) {
-      return NextResponse.json({ error: "No authentication token" }, { status: 401 })
+  try {
+    const user = await getCurrentUser()
+    if (!user) {
+      console.log("❌ [PLAYLISTS API] No user authenticated")
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    // Verify JWT token
-    const decoded = jwt.verify(token, process.env.JWT_SECRET!) as { userId: number }
-
     const body = await request.json()
+    console.log("📝 [PLAYLISTS API] Request body:", body)
+
     const { name, description } = body
 
-    if (!name) {
+    if (!name || name.trim() === "") {
       return NextResponse.json({ error: "Playlist name is required" }, { status: 400 })
     }
 
-    // Create new playlist
-    const result = await sql`
-      INSERT INTO playlists (user_id, name, description, is_active, loop_playlist, shuffle_items)
-      VALUES (${decoded.userId}, ${name}, ${description || ""}, true, true, false)
-      RETURNING id, name, description, is_active as "isActive", loop_playlist as "loopPlaylist", shuffle_items as "shuffleItems", created_at as "createdAt"
+    const sql = getDb()
+
+    // Create new playlist with all default values
+    const newPlaylist = await sql`
+      INSERT INTO playlists (
+        user_id, 
+        name, 
+        description,
+        status,
+        loop_enabled,
+        schedule_enabled,
+        scale_image,
+        scale_video,
+        scale_document,
+        shuffle,
+        default_transition,
+        transition_speed,
+        auto_advance,
+        background_color,
+        text_overlay
+      )
+      VALUES (
+        ${user.id}, 
+        ${name.trim()}, 
+        ${description || ""},
+        'draft',
+        true,
+        false,
+        'fit',
+        'fit',
+        'fit',
+        false,
+        'fade',
+        'normal',
+        true,
+        '#000000',
+        false
+      )
+      RETURNING *
     `
 
-    return NextResponse.json({
-      success: true,
-      playlist: result[0],
-    })
+    console.log(`✅ [PLAYLISTS API] Created playlist with ID ${newPlaylist[0].id}`)
+
+    return NextResponse.json(
+      {
+        success: true,
+        playlist: newPlaylist[0],
+      },
+      { status: 201 },
+    )
   } catch (error) {
-    console.error("Playlist creation error:", error)
-    return NextResponse.json({ error: "Failed to create playlist" }, { status: 500 })
+    console.error("❌ [PLAYLISTS API] Error:", error)
+    return NextResponse.json(
+      {
+        error: "Failed to create playlist",
+        details: error instanceof Error ? error.message : "Unknown error",
+      },
+      { status: 500 },
+    )
   }
 }

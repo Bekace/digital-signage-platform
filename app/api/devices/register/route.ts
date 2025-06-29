@@ -6,16 +6,9 @@ const sql = neon(process.env.DATABASE_URL!)
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const {
-      deviceCode,
-      deviceName = "Web Player Device",
-      deviceType = "web-player",
-      platform = "Unknown",
-      capabilities = [],
-      screenResolution = "",
-    } = body
+    const { code, deviceName, deviceType = "web-player", platform, capabilities = [], screenResolution } = body
 
-    if (!deviceCode) {
+    if (!code) {
       return NextResponse.json({ error: "Device code is required" }, { status: 400 })
     }
 
@@ -23,7 +16,7 @@ export async function POST(request: NextRequest) {
     const pairingCodeResult = await sql`
       SELECT id, user_id, expires_at, used_at 
       FROM device_pairing_codes 
-      WHERE code = ${deviceCode}
+      WHERE code = ${code}
     `
 
     if (pairingCodeResult.length === 0) {
@@ -52,20 +45,16 @@ export async function POST(request: NextRequest) {
         screen_resolution, 
         user_id,
         status,
-        last_seen,
-        created_at,
-        updated_at
+        last_seen
       )
       VALUES (
-        ${deviceName}, 
+        ${deviceName || `Device ${code}`}, 
         ${deviceType}, 
-        ${platform}, 
+        ${platform || "Unknown"}, 
         ${JSON.stringify(capabilities)}, 
-        ${screenResolution}, 
+        ${screenResolution || ""}, 
         ${pairingCode.user_id},
         'online',
-        CURRENT_TIMESTAMP,
-        CURRENT_TIMESTAMP,
         CURRENT_TIMESTAMP
       )
       RETURNING id, name, device_type, status, created_at
