@@ -1,5 +1,7 @@
 "use client"
 
+import type React from "react"
+
 import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -7,7 +9,7 @@ import { Badge } from "@/components/ui/badge"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Separator } from "@/components/ui/separator"
 import { toast } from "sonner"
-import { Monitor, Smartphone, Tv, Globe, Play, Pause, Square, RotateCcw, Plus } from "lucide-react"
+import { Monitor, Smartphone, Tv, Globe, Play, Pause, Square, RotateCcw, Plus, Wifi, WifiOff } from "lucide-react"
 import { DashboardLayout } from "@/components/dashboard-layout"
 import { AddScreenDialog } from "@/components/add-screen-dialog"
 
@@ -212,7 +214,17 @@ export default function ScreensPage() {
   }
 
   const getStatusBadge = (status: string) => {
-    return <Badge variant={status === "online" ? "default" : "secondary"}>{status}</Badge>
+    return status === "online" ? (
+      <Badge className="bg-green-500">
+        <Wifi className="h-3 w-3 mr-1" />
+        Online
+      </Badge>
+    ) : (
+      <Badge variant="secondary">
+        <WifiOff className="h-3 w-3 mr-1" />
+        Offline
+      </Badge>
+    )
   }
 
   const getPlaylistStatusBadge = (status: string) => {
@@ -224,11 +236,36 @@ export default function ScreensPage() {
       none: "secondary",
     }
 
-    return <Badge variant={variants[status] || "secondary"}>{status === "none" ? "No Playlist" : status}</Badge>
+    const icons: Record<string, React.ReactNode> = {
+      playing: <Play className="h-3 w-3 mr-1" />,
+      paused: <Pause className="h-3 w-3 mr-1" />,
+      stopped: <Square className="h-3 w-3 mr-1" />,
+      assigned: <Monitor className="h-3 w-3 mr-1" />,
+      none: null,
+    }
+
+    return (
+      <Badge variant={variants[status] || "secondary"}>
+        {icons[status]}
+        {status === "none" ? "No Playlist" : status}
+      </Badge>
+    )
   }
 
   const canControl = (device: Device) => {
     return device.status === "online" && device.assignedPlaylistId
+  }
+
+  const formatLastSeen = (lastSeen: string) => {
+    const date = new Date(lastSeen)
+    const now = new Date()
+    const diffMs = now.getTime() - date.getTime()
+    const diffMins = Math.floor(diffMs / 60000)
+
+    if (diffMins < 1) return "Just now"
+    if (diffMins < 60) return `${diffMins}m ago`
+    if (diffMins < 1440) return `${Math.floor(diffMins / 60)}h ago`
+    return `${Math.floor(diffMins / 1440)}d ago`
   }
 
   if (loading) {
@@ -311,7 +348,7 @@ export default function ScreensPage() {
                 </p>
                 <Button onClick={() => setShowAddDialog(true)}>
                   <Plus className="h-4 w-4 mr-2" />
-                  Add Your First Screen
+                  Add Screen
                 </Button>
               </CardContent>
             </Card>
@@ -325,8 +362,8 @@ export default function ScreensPage() {
                       <div>
                         <CardTitle className="text-lg">{device.name}</CardTitle>
                         <CardDescription>
-                          {device.deviceType.replace("_", " ").toUpperCase()} • Last seen:{" "}
-                          {new Date(device.lastSeen).toLocaleString()}
+                          {device.deviceType.replace("_", " ").toUpperCase()} • Last seen{" "}
+                          {formatLastSeen(device.lastSeen)}
                         </CardDescription>
                       </div>
                     </div>
@@ -407,12 +444,25 @@ export default function ScreensPage() {
                           Restart
                         </Button>
                       </div>
-                      {device.lastControlAction && (
+                      {device.lastControlAction && device.lastControlTime && (
                         <div className="text-sm text-muted-foreground">
-                          Last action: {device.lastControlAction} • {new Date(device.lastControlTime!).toLocaleString()}
+                          Last action: {device.lastControlAction} • {new Date(device.lastControlTime).toLocaleString()}
                         </div>
                       )}
                     </div>
+
+                    {/* Status Messages */}
+                    {device.status === "offline" && (
+                      <div className="text-sm text-muted-foreground bg-muted p-3 rounded-lg">
+                        Device is offline. Controls will be available when the device comes online.
+                      </div>
+                    )}
+
+                    {device.status === "online" && !device.assignedPlaylistId && (
+                      <div className="text-sm text-muted-foreground bg-muted p-3 rounded-lg">
+                        Assign a playlist to start controlling playback on this device.
+                      </div>
+                    )}
                   </div>
                 </CardContent>
               </Card>

@@ -15,8 +15,9 @@ import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
+import { Separator } from "@/components/ui/separator"
 import { toast } from "sonner"
-import { Copy, Monitor, Smartphone, Tv, Globe, CheckCircle } from "lucide-react"
+import { Copy, Check, Monitor, Smartphone, Tv, Globe, Plus } from "lucide-react"
 
 interface AddScreenDialogProps {
   open: boolean
@@ -28,12 +29,12 @@ export function AddScreenDialog({ open, onOpenChange, onScreenAdded }: AddScreen
   const [step, setStep] = useState<"form" | "pairing">("form")
   const [screenName, setScreenName] = useState("")
   const [deviceType, setDeviceType] = useState("")
-  const [loading, setLoading] = useState(false)
   const [pairingCode, setPairingCode] = useState("")
-  const [deviceId, setDeviceId] = useState<number | null>(null)
+  const [loading, setLoading] = useState(false)
+  const [copied, setCopied] = useState(false)
 
   const deviceTypes = [
-    { value: "fire_tv", label: "Amazon Fire TV", icon: Tv },
+    { value: "fire_tv", label: "Fire TV Stick", icon: Tv },
     { value: "android_tv", label: "Android TV", icon: Tv },
     { value: "android", label: "Android Device", icon: Smartphone },
     { value: "ios", label: "iOS Device", icon: Smartphone },
@@ -42,20 +43,15 @@ export function AddScreenDialog({ open, onOpenChange, onScreenAdded }: AddScreen
   ]
 
   const generatePairingCode = async () => {
-    if (!screenName.trim() || !deviceType) {
-      toast.error("Please fill in all fields")
-      return
-    }
-
     try {
       setLoading(true)
+      console.log("🔗 [ADD SCREEN] Generating pairing code for:", { screenName, deviceType })
+
       const token = localStorage.getItem("token")
       if (!token) {
-        toast.error("Please log in to add a screen")
+        toast.error("Please log in to add screens")
         return
       }
-
-      console.log("🔗 [ADD SCREEN] Generating pairing code for:", screenName, deviceType)
 
       const response = await fetch("/api/devices/generate-code", {
         method: "POST",
@@ -64,8 +60,8 @@ export function AddScreenDialog({ open, onOpenChange, onScreenAdded }: AddScreen
           Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
-          name: screenName.trim(),
-          deviceType: deviceType,
+          screenName,
+          deviceType,
         }),
       })
 
@@ -73,8 +69,7 @@ export function AddScreenDialog({ open, onOpenChange, onScreenAdded }: AddScreen
       console.log("🔗 [ADD SCREEN] Generate code response:", data)
 
       if (data.success) {
-        setPairingCode(data.code)
-        setDeviceId(data.deviceId)
+        setPairingCode(data.pairingCode || data.code)
         setStep("pairing")
         toast.success("Pairing code generated successfully")
       } else {
@@ -88,13 +83,14 @@ export function AddScreenDialog({ open, onOpenChange, onScreenAdded }: AddScreen
     }
   }
 
-  const copyToClipboard = async (text: string) => {
+  const copyToClipboard = async () => {
     try {
-      await navigator.clipboard.writeText(text)
-      toast.success("Copied to clipboard")
+      await navigator.clipboard.writeText(pairingCode)
+      setCopied(true)
+      toast.success("Pairing code copied to clipboard")
+      setTimeout(() => setCopied(false), 2000)
     } catch (error) {
-      console.error("Failed to copy to clipboard:", error)
-      toast.error("Failed to copy to clipboard")
+      toast.error("Failed to copy pairing code")
     }
   }
 
@@ -103,7 +99,7 @@ export function AddScreenDialog({ open, onOpenChange, onScreenAdded }: AddScreen
     setScreenName("")
     setDeviceType("")
     setPairingCode("")
-    setDeviceId(null)
+    setCopied(false)
     onOpenChange(false)
   }
 
@@ -117,51 +113,50 @@ export function AddScreenDialog({ open, onOpenChange, onScreenAdded }: AddScreen
     switch (type) {
       case "fire_tv":
         return [
-          "Install the Digital Signage app from Amazon Appstore",
+          "Install the SignageCloud app from the Amazon Appstore",
           "Open the app on your Fire TV",
-          'Select "Pair with Server"',
-          "Enter the pairing code shown below",
-          "Your Fire TV will connect automatically",
+          "Select 'Connect to Dashboard'",
+          "Enter the pairing code when prompted",
+          "Your screen will appear in the dashboard once connected",
         ]
       case "android_tv":
         return [
-          "Install the Digital Signage app from Google Play Store",
+          "Install the SignageCloud app from Google Play Store",
           "Open the app on your Android TV",
-          'Select "Pair with Server"',
-          "Enter the pairing code shown below",
-          "Your Android TV will connect automatically",
+          "Select 'Connect to Dashboard'",
+          "Enter the pairing code when prompted",
+          "Your screen will appear in the dashboard once connected",
         ]
       case "android":
         return [
-          "Install the Digital Signage app from Google Play Store",
+          "Install the SignageCloud app from Google Play Store",
           "Open the app on your Android device",
-          'Tap "Pair with Server"',
-          "Enter the pairing code shown below",
-          "Your device will connect automatically",
+          "Tap 'Connect to Dashboard'",
+          "Enter the pairing code when prompted",
+          "Your device will appear in the dashboard once connected",
         ]
       case "ios":
         return [
-          "Install the Digital Signage app from App Store",
+          "Install the SignageCloud app from the App Store",
           "Open the app on your iOS device",
-          'Tap "Pair with Server"',
-          "Enter the pairing code shown below",
-          "Your device will connect automatically",
+          "Tap 'Connect to Dashboard'",
+          "Enter the pairing code when prompted",
+          "Your device will appear in the dashboard once connected",
         ]
       case "web":
         return [
           "Open a web browser on your device",
-          "Navigate to the player URL provided",
-          'Click "Pair with Server"',
-          "Enter the pairing code shown below",
-          "Your browser will connect automatically",
+          "Navigate to your SignageCloud player URL",
+          "Click 'Connect to Dashboard'",
+          "Enter the pairing code when prompted",
+          "Your browser will appear in the dashboard once connected",
         ]
       default:
         return [
-          "Install the appropriate Digital Signage app",
-          "Open the app on your device",
-          'Look for "Pair with Server" option',
-          "Enter the pairing code shown below",
-          "Your device will connect automatically",
+          "Install or open your SignageCloud compatible app",
+          "Look for 'Connect to Dashboard' or 'Pair Device' option",
+          "Enter the pairing code when prompted",
+          "Your device will appear in the dashboard once connected",
         ]
     }
   }
@@ -170,25 +165,32 @@ export function AddScreenDialog({ open, onOpenChange, onScreenAdded }: AddScreen
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[600px]">
+      <DialogContent className="sm:max-w-[500px]">
         {step === "form" ? (
           <>
             <DialogHeader>
-              <DialogTitle>Add New Screen</DialogTitle>
-              <DialogDescription>Set up a new digital signage display by providing basic information</DialogDescription>
+              <DialogTitle className="flex items-center gap-2">
+                <Plus className="h-5 w-5" />
+                Add New Screen
+              </DialogTitle>
+              <DialogDescription>
+                Add a new digital signage display to your account. You'll get a pairing code to connect your device.
+              </DialogDescription>
             </DialogHeader>
-            <div className="grid gap-4 py-4">
-              <div className="grid gap-2">
-                <Label htmlFor="screen-name">Screen Name</Label>
+
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="screenName">Screen Name</Label>
                 <Input
-                  id="screen-name"
+                  id="screenName"
                   placeholder="e.g., Lobby Display, Conference Room TV"
                   value={screenName}
                   onChange={(e) => setScreenName(e.target.value)}
                 />
               </div>
-              <div className="grid gap-2">
-                <Label htmlFor="device-type">Device Type</Label>
+
+              <div className="space-y-2">
+                <Label htmlFor="deviceType">Device Type</Label>
                 <Select value={deviceType} onValueChange={setDeviceType}>
                   <SelectTrigger>
                     <SelectValue placeholder="Select device type" />
@@ -198,8 +200,8 @@ export function AddScreenDialog({ open, onOpenChange, onScreenAdded }: AddScreen
                       const Icon = type.icon
                       return (
                         <SelectItem key={type.value} value={type.value}>
-                          <div className="flex items-center">
-                            <Icon className="h-4 w-4 mr-2" />
+                          <div className="flex items-center gap-2">
+                            <Icon className="h-4 w-4" />
                             {type.label}
                           </div>
                         </SelectItem>
@@ -209,11 +211,12 @@ export function AddScreenDialog({ open, onOpenChange, onScreenAdded }: AddScreen
                 </Select>
               </div>
             </div>
+
             <DialogFooter>
               <Button variant="outline" onClick={handleClose}>
                 Cancel
               </Button>
-              <Button onClick={generatePairingCode} disabled={loading}>
+              <Button onClick={generatePairingCode} disabled={!screenName || !deviceType || loading}>
                 {loading ? "Generating..." : "Generate Pairing Code"}
               </Button>
             </DialogFooter>
@@ -221,27 +224,25 @@ export function AddScreenDialog({ open, onOpenChange, onScreenAdded }: AddScreen
         ) : (
           <>
             <DialogHeader>
-              <DialogTitle className="flex items-center">
-                {selectedDeviceType && <selectedDeviceType.icon className="h-5 w-5 mr-2" />}
-                Pair Your {selectedDeviceType?.label}
+              <DialogTitle className="flex items-center gap-2">
+                {selectedDeviceType && <selectedDeviceType.icon className="h-5 w-5" />}
+                Connect Your {selectedDeviceType?.label}
               </DialogTitle>
-              <DialogDescription>
-                Follow these steps to connect your device to the digital signage system
-              </DialogDescription>
+              <DialogDescription>Use this pairing code to connect "{screenName}" to your dashboard</DialogDescription>
             </DialogHeader>
-            <div className="space-y-4">
-              {/* Pairing Code Card */}
+
+            <div className="space-y-6">
+              {/* Pairing Code */}
               <Card>
                 <CardHeader>
                   <CardTitle className="text-lg">Pairing Code</CardTitle>
-                  <CardDescription>Enter this code on your device to establish connection</CardDescription>
+                  <CardDescription>Enter this code in your SignageCloud app</CardDescription>
                 </CardHeader>
                 <CardContent>
                   <div className="flex items-center justify-between p-4 bg-muted rounded-lg">
                     <div className="text-3xl font-mono font-bold tracking-wider">{pairingCode}</div>
-                    <Button variant="outline" size="sm" onClick={() => copyToClipboard(pairingCode)}>
-                      <Copy className="h-4 w-4 mr-2" />
-                      Copy
+                    <Button variant="outline" size="sm" onClick={copyToClipboard}>
+                      {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
                     </Button>
                   </div>
                 </CardContent>
@@ -251,15 +252,16 @@ export function AddScreenDialog({ open, onOpenChange, onScreenAdded }: AddScreen
               <Card>
                 <CardHeader>
                   <CardTitle className="text-lg">Setup Instructions</CardTitle>
-                  <CardDescription>
-                    Follow these steps on your {selectedDeviceType?.label.toLowerCase()}
-                  </CardDescription>
+                  <CardDescription>Follow these steps to connect your device</CardDescription>
                 </CardHeader>
                 <CardContent>
                   <ol className="space-y-2">
                     {getDeviceInstructions(deviceType).map((instruction, index) => (
-                      <li key={index} className="flex items-start">
-                        <Badge variant="outline" className="mr-3 mt-0.5 min-w-[24px] justify-center">
+                      <li key={index} className="flex gap-3">
+                        <Badge
+                          variant="outline"
+                          className="min-w-[24px] h-6 rounded-full p-0 flex items-center justify-center"
+                        >
                           {index + 1}
                         </Badge>
                         <span className="text-sm">{instruction}</span>
@@ -269,31 +271,19 @@ export function AddScreenDialog({ open, onOpenChange, onScreenAdded }: AddScreen
                 </CardContent>
               </Card>
 
-              {/* Status */}
-              <Card>
-                <CardContent className="pt-6">
-                  <div className="flex items-center justify-center text-center">
-                    <div className="space-y-2">
-                      <div className="flex items-center justify-center">
-                        <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary mr-2"></div>
-                        <span className="text-sm font-medium">Waiting for device connection...</span>
-                      </div>
-                      <p className="text-xs text-muted-foreground">
-                        The dialog will close automatically when your device connects
-                      </p>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
+              <Separator />
+
+              <div className="text-center text-sm text-muted-foreground">
+                <p>The pairing code will expire in 10 minutes.</p>
+                <p>Your screen will appear in the dashboard once connected.</p>
+              </div>
             </div>
+
             <DialogFooter>
               <Button variant="outline" onClick={handleClose}>
-                Cancel
+                Close
               </Button>
-              <Button onClick={handleScreenAdded}>
-                <CheckCircle className="h-4 w-4 mr-2" />
-                Done
-              </Button>
+              <Button onClick={handleScreenAdded}>Done</Button>
             </DialogFooter>
           </>
         )}

@@ -6,121 +6,122 @@ const sql = neon(process.env.DATABASE_URL!)
 
 export async function POST(request: NextRequest, { params }: { params: { deviceId: string } }) {
   try {
-    console.log("🎬 [ASSIGN PLAYLIST] Starting playlist assignment for device:", params.deviceId)
+    console.log("🎬 [ASSIGN PLAYLIST API] POST request for device:", params.deviceId)
 
-    const authHeader = request.headers.get("authorization")
-    if (!authHeader?.startsWith("Bearer ")) {
-      console.log("❌ [ASSIGN PLAYLIST] No valid authorization header")
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    const token = request.headers.get("authorization")?.replace("Bearer ", "")
+    if (!token) {
+      console.log("❌ [ASSIGN PLAYLIST API] No token provided")
+      return NextResponse.json({ success: false, error: "Authentication required" }, { status: 401 })
     }
 
-    const token = authHeader.substring(7)
     const decoded = jwt.verify(token, process.env.JWT_SECRET!) as { userId: number }
-    console.log("✅ [ASSIGN PLAYLIST] User authenticated:", decoded.userId)
+    console.log("✅ [ASSIGN PLAYLIST API] Token verified for user:", decoded.userId)
 
     const { playlistId } = await request.json()
-    console.log("🎬 [ASSIGN PLAYLIST] Playlist ID to assign:", playlistId)
+    console.log("🎬 [ASSIGN PLAYLIST API] Assigning playlist:", playlistId, "to device:", params.deviceId)
 
     // Verify device ownership
     const deviceResult = await sql`
-      SELECT id, name, user_id 
-      FROM devices 
+      SELECT id, name FROM devices 
       WHERE id = ${params.deviceId} AND user_id = ${decoded.userId}
     `
 
     if (deviceResult.length === 0) {
-      console.log("❌ [ASSIGN PLAYLIST] Device not found or not owned by user")
-      return NextResponse.json({ error: "Device not found" }, { status: 404 })
+      console.log("❌ [ASSIGN PLAYLIST API] Device not found or not owned by user")
+      return NextResponse.json({ success: false, error: "Device not found" }, { status: 404 })
     }
 
-    console.log("✅ [ASSIGN PLAYLIST] Device verified:", deviceResult[0].name)
-
-    // Verify playlist ownership if playlistId is provided
     if (playlistId) {
+      // Verify playlist ownership
       const playlistResult = await sql`
-        SELECT id, name, user_id 
-        FROM playlists 
+        SELECT id, name FROM playlists 
         WHERE id = ${playlistId} AND user_id = ${decoded.userId}
       `
 
       if (playlistResult.length === 0) {
-        console.log("❌ [ASSIGN PLAYLIST] Playlist not found or not owned by user")
-        return NextResponse.json({ error: "Playlist not found" }, { status: 404 })
+        console.log("❌ [ASSIGN PLAYLIST API] Playlist not found or not owned by user")
+        return NextResponse.json({ success: false, error: "Playlist not found" }, { status: 404 })
       }
 
-      console.log("✅ [ASSIGN PLAYLIST] Playlist verified:", playlistResult[0].name)
+      // Assign playlist
+      await sql`
+        UPDATE devices 
+        SET assigned_playlist_id = ${playlistId}, 
+            playlist_status = 'assigned',
+            last_control_action = 'assigned',
+            last_control_time = NOW(),
+            updated_at = NOW()
+        WHERE id = ${params.deviceId}
+      `
+
+      console.log("✅ [ASSIGN PLAYLIST API] Playlist assigned successfully")
+      return NextResponse.json({
+        success: true,
+        message: `Playlist "${playlistResult[0].name}" assigned to "${deviceResult[0].name}"`,
+      })
+    } else {
+      // Unassign playlist
+      await sql`
+        UPDATE devices 
+        SET assigned_playlist_id = NULL, 
+            playlist_status = 'none',
+            last_control_action = 'unassigned',
+            last_control_time = NOW(),
+            updated_at = NOW()
+        WHERE id = ${params.deviceId}
+      `
+
+      console.log("✅ [ASSIGN PLAYLIST API] Playlist unassigned successfully")
+      return NextResponse.json({
+        success: true,
+        message: `Playlist unassigned from "${deviceResult[0].name}"`,
+      })
     }
-
-    // Update device with assigned playlist
-    const updateResult = await sql`
-      UPDATE devices 
-      SET assigned_playlist_id = ${playlistId || null},
-          playlist_status = ${playlistId ? "assigned" : "none"},
-          last_control_action = ${playlistId ? "assigned" : "unassigned"},
-          last_control_time = NOW(),
-          updated_at = NOW()
-      WHERE id = ${params.deviceId} AND user_id = ${decoded.userId}
-      RETURNING id, name, assigned_playlist_id, playlist_status
-    `
-
-    if (updateResult.length === 0) {
-      console.log("❌ [ASSIGN PLAYLIST] Failed to update device")
-      return NextResponse.json({ error: "Failed to assign playlist" }, { status: 500 })
-    }
-
-    console.log("✅ [ASSIGN PLAYLIST] Device updated successfully:", updateResult[0])
-
-    return NextResponse.json({
-      success: true,
-      message: playlistId ? "Playlist assigned successfully" : "Playlist unassigned successfully",
-      device: updateResult[0],
-    })
   } catch (error) {
-    console.error("❌ [ASSIGN PLAYLIST] Error:", error)
-    return NextResponse.json({ error: "Failed to assign playlist" }, { status: 500 })
+    console.error("💥 [ASSIGN PLAYLIST API] Error:", error)
+    return NextResponse.json({ success: false, error: "Failed to assign playlist" }, { status: 500 })
   }
 }
 
 export async function DELETE(request: NextRequest, { params }: { params: { deviceId: string } }) {
   try {
-    console.log("🗑️ [UNASSIGN PLAYLIST] Starting playlist unassignment for device:", params.deviceId)
+    console.log("🗑️ [ASSIGN PLAYLIST API] DELETE request for device:", params.deviceId)
 
-    const authHeader = request.headers.get("authorization")
-    if (!authHeader?.startsWith("Bearer ")) {
-      console.log("❌ [UNASSIGN PLAYLIST] No valid authorization header")
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    const token = request.headers.get("authorization")?.replace("Bearer ", "")
+    if (!token) {
+      return NextResponse.json({ success: false, error: "Authentication required" }, { status: 401 })
     }
 
-    const token = authHeader.substring(7)
     const decoded = jwt.verify(token, process.env.JWT_SECRET!) as { userId: number }
-    console.log("✅ [UNASSIGN PLAYLIST] User authenticated:", decoded.userId)
 
-    // Update device to remove assigned playlist
-    const updateResult = await sql`
+    // Verify device ownership
+    const deviceResult = await sql`
+      SELECT id, name FROM devices 
+      WHERE id = ${params.deviceId} AND user_id = ${decoded.userId}
+    `
+
+    if (deviceResult.length === 0) {
+      return NextResponse.json({ success: false, error: "Device not found" }, { status: 404 })
+    }
+
+    // Unassign playlist
+    await sql`
       UPDATE devices 
-      SET assigned_playlist_id = NULL,
+      SET assigned_playlist_id = NULL, 
           playlist_status = 'none',
           last_control_action = 'unassigned',
           last_control_time = NOW(),
           updated_at = NOW()
-      WHERE id = ${params.deviceId} AND user_id = ${decoded.userId}
-      RETURNING id, name, assigned_playlist_id, playlist_status
+      WHERE id = ${params.deviceId}
     `
 
-    if (updateResult.length === 0) {
-      console.log("❌ [UNASSIGN PLAYLIST] Device not found or not owned by user")
-      return NextResponse.json({ error: "Device not found" }, { status: 404 })
-    }
-
-    console.log("✅ [UNASSIGN PLAYLIST] Playlist unassigned successfully:", updateResult[0])
-
+    console.log("✅ [ASSIGN PLAYLIST API] Playlist unassigned successfully")
     return NextResponse.json({
       success: true,
-      message: "Playlist unassigned successfully",
-      device: updateResult[0],
+      message: `Playlist unassigned from "${deviceResult[0].name}"`,
     })
   } catch (error) {
-    console.error("❌ [UNASSIGN PLAYLIST] Error:", error)
-    return NextResponse.json({ error: "Failed to unassign playlist" }, { status: 500 })
+    console.error("💥 [ASSIGN PLAYLIST API] Error:", error)
+    return NextResponse.json({ success: false, error: "Failed to unassign playlist" }, { status: 500 })
   }
 }

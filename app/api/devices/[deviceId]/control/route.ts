@@ -6,100 +6,96 @@ const sql = neon(process.env.DATABASE_URL!)
 
 export async function POST(request: NextRequest, { params }: { params: { deviceId: string } }) {
   try {
-    console.log("🎮 [DEVICE CONTROL] Starting control action for device:", params.deviceId)
+    console.log("🎮 [DEVICE CONTROL API] POST request for device:", params.deviceId)
 
-    const authHeader = request.headers.get("authorization")
-    if (!authHeader?.startsWith("Bearer ")) {
-      console.log("❌ [DEVICE CONTROL] No valid authorization header")
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    const token = request.headers.get("authorization")?.replace("Bearer ", "")
+    if (!token) {
+      console.log("❌ [DEVICE CONTROL API] No token provided")
+      return NextResponse.json({ success: false, error: "Authentication required" }, { status: 401 })
     }
 
-    const token = authHeader.substring(7)
     const decoded = jwt.verify(token, process.env.JWT_SECRET!) as { userId: number }
-    console.log("✅ [DEVICE CONTROL] User authenticated:", decoded.userId)
+    console.log("✅ [DEVICE CONTROL API] Token verified for user:", decoded.userId)
 
     const { action } = await request.json()
-    console.log("🎮 [DEVICE CONTROL] Control action:", action)
+    console.log("🎮 [DEVICE CONTROL API] Control action:", action, "for device:", params.deviceId)
 
     // Validate action
     const validActions = ["play", "pause", "stop", "restart"]
     if (!validActions.includes(action)) {
-      console.log("❌ [DEVICE CONTROL] Invalid action:", action)
-      return NextResponse.json({ error: "Invalid action" }, { status: 400 })
+      console.log("❌ [DEVICE CONTROL API] Invalid action:", action)
+      return NextResponse.json({ success: false, error: "Invalid control action" }, { status: 400 })
     }
 
-    // Get device info
+    // Verify device ownership and get current status
     const deviceResult = await sql`
-      SELECT id, name, status, assigned_playlist_id, playlist_status, user_id
-      FROM devices 
-      WHERE id = ${params.deviceId} AND user_id = ${decoded.userId}
+      SELECT d.id, d.name, d.status, d.assigned_playlist_id, d.playlist_status, p.name as playlist_name
+      FROM devices d
+      LEFT JOIN playlists p ON d.assigned_playlist_id = p.id
+      WHERE d.id = ${params.deviceId} AND d.user_id = ${decoded.userId}
     `
 
     if (deviceResult.length === 0) {
-      console.log("❌ [DEVICE CONTROL] Device not found or not owned by user")
-      return NextResponse.json({ error: "Device not found" }, { status: 404 })
+      console.log("❌ [DEVICE CONTROL API] Device not found or not owned by user")
+      return NextResponse.json({ success: false, error: "Device not found" }, { status: 404 })
     }
 
     const device = deviceResult[0]
-    console.log("✅ [DEVICE CONTROL] Device found:", device.name, "Status:", device.status)
 
     // Check if device is online
     if (device.status !== "online") {
-      console.log("❌ [DEVICE CONTROL] Device is not online:", device.status)
-      return NextResponse.json({ error: "Device is not online" }, { status: 400 })
+      console.log("❌ [DEVICE CONTROL API] Device is offline")
+      return NextResponse.json({ success: false, error: "Device is offline" }, { status: 400 })
     }
 
-    // Check if device has assigned playlist for play/restart actions
+    // Check if playlist is assigned for play/restart actions
     if ((action === "play" || action === "restart") && !device.assigned_playlist_id) {
-      console.log("❌ [DEVICE CONTROL] No playlist assigned for play/restart action")
-      return NextResponse.json({ error: "No playlist assigned to device" }, { status: 400 })
+      console.log("❌ [DEVICE CONTROL API] No playlist assigned for play/restart action")
+      return NextResponse.json({ success: false, error: "No playlist assigned to device" }, { status: 400 })
     }
 
-    // Map action to playlist status
-    let newPlaylistStatus = device.playlist_status
-    switch (action) {
-      case "play":
-        newPlaylistStatus = "playing"
-        break
-      case "pause":
-        newPlaylistStatus = "paused"
-        break
-      case "stop":
-        newPlaylistStatus = "stopped"
-        break
-      case "restart":
-        newPlaylistStatus = "playing"
-        break
+    // Map control actions to playlist status
+    const statusMap: Record<string, string> = {
+      play: "playing",
+      pause: "paused",
+      stop: "stopped",
+      restart: "playing",
     }
 
-    console.log("🎮 [DEVICE CONTROL] Updating playlist status to:", newPlaylistStatus)
+    const newStatus = statusMap[action]
+    console.log("🎮 [DEVICE CONTROL API] Updating playlist status to:", newStatus)
 
-    // Update device with control action
-    const updateResult = await sql`
+    // Update device status
+    await sql`
       UPDATE devices 
-      SET playlist_status = ${newPlaylistStatus},
+      SET playlist_status = ${newStatus},
           last_control_action = ${action},
           last_control_time = NOW(),
           updated_at = NOW()
-      WHERE id = ${params.deviceId} AND user_id = ${decoded.userId}
-      RETURNING id, name, playlist_status, last_control_action, last_control_time
+      WHERE id = ${params.deviceId}
     `
 
-    if (updateResult.length === 0) {
-      console.log("❌ [DEVICE CONTROL] Failed to update device")
-      return NextResponse.json({ error: "Failed to execute control action" }, { status: 500 })
-    }
+    console.log("✅ [DEVICE CONTROL API] Control action completed successfully")
 
-    console.log("✅ [DEVICE CONTROL] Control action executed successfully:", updateResult[0])
+    const actionMessages: Record<string, string> = {
+      play: `Started playing "${device.playlist_name}" on "${device.name}"`,
+      pause: `Paused playback on "${device.name}"`,
+      stop: `Stopped playback on "${device.name}"`,
+      restart: `Restarted "${device.playlist_name}" on "${device.name}"`,
+    }
 
     return NextResponse.json({
       success: true,
-      message: `Device ${action} command executed successfully`,
-      device: updateResult[0],
-      action: action,
+      message: actionMessages[action],
+      device: {
+        id: device.id,
+        name: device.name,
+        playlistStatus: newStatus,
+        lastControlAction: action,
+      },
     })
   } catch (error) {
-    console.error("❌ [DEVICE CONTROL] Error:", error)
-    return NextResponse.json({ error: "Failed to execute control action" }, { status: 500 })
+    console.error("💥 [DEVICE CONTROL API] Error:", error)
+    return NextResponse.json({ success: false, error: "Failed to control device" }, { status: 500 })
   }
 }
