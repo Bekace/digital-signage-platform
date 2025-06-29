@@ -10,42 +10,34 @@ export async function GET(request: NextRequest) {
     const token = request.cookies.get("auth-token")?.value
 
     if (!token) {
-      return NextResponse.json({ error: "Authentication required" }, { status: 401 })
+      return NextResponse.json({ error: "No authentication token" }, { status: 401 })
     }
 
     // Verify JWT token
     const decoded = jwt.verify(token, process.env.JWT_SECRET!) as { userId: number }
 
-    // Get user's playlists with item counts
+    // Get user's playlists
     const playlists = await sql`
       SELECT 
-        p.id,
-        p.name,
-        p.description,
-        p.is_default as "isDefault",
-        p.loop_playlist as "loopPlaylist",
-        p.shuffle_items as "shuffleItems",
-        p.transition_type as "transitionType",
-        p.transition_duration as "transitionDuration",
-        p.created_at as "createdAt",
-        p.updated_at as "updatedAt",
-        COUNT(pi.id) as "itemCount"
-      FROM playlists p
-      LEFT JOIN playlist_items pi ON p.id = pi.playlist_id
-      WHERE p.user_id = ${decoded.userId} AND p.deleted_at IS NULL
-      GROUP BY p.id, p.name, p.description, p.is_default, p.loop_playlist, p.shuffle_items, p.transition_type, p.transition_duration, p.created_at, p.updated_at
-      ORDER BY p.created_at DESC
+        id,
+        name,
+        description,
+        is_active as "isActive",
+        loop_playlist as "loopPlaylist",
+        shuffle_items as "shuffleItems",
+        created_at as "createdAt",
+        updated_at as "updatedAt"
+      FROM playlists 
+      WHERE user_id = ${decoded.userId} AND deleted_at IS NULL
+      ORDER BY created_at DESC
     `
 
     return NextResponse.json({
       success: true,
-      playlists: playlists.map((playlist) => ({
-        ...playlist,
-        itemCount: Number.parseInt(playlist.itemCount),
-      })),
+      playlists: playlists,
     })
   } catch (error) {
-    console.error("Error fetching playlists:", error)
+    console.error("Playlists fetch error:", error)
     return NextResponse.json({ error: "Failed to fetch playlists" }, { status: 500 })
   }
 }
@@ -56,59 +48,31 @@ export async function POST(request: NextRequest) {
     const token = request.cookies.get("auth-token")?.value
 
     if (!token) {
-      return NextResponse.json({ error: "Authentication required" }, { status: 401 })
+      return NextResponse.json({ error: "No authentication token" }, { status: 401 })
     }
 
     // Verify JWT token
     const decoded = jwt.verify(token, process.env.JWT_SECRET!) as { userId: number }
 
-    const body = await request.json()
-    const {
-      name,
-      description,
-      loopPlaylist = true,
-      shuffleItems = false,
-      transitionType = "fade",
-      transitionDuration = 1000,
-    } = body
+    const { name, description } = await request.json()
 
     if (!name) {
       return NextResponse.json({ error: "Playlist name is required" }, { status: 400 })
     }
 
     // Create new playlist
-    const result = await sql`
-      INSERT INTO playlists (
-        user_id, 
-        name, 
-        description, 
-        loop_playlist, 
-        shuffle_items, 
-        transition_type, 
-        transition_duration,
-        created_at,
-        updated_at
-      )
-      VALUES (
-        ${decoded.userId}, 
-        ${name}, 
-        ${description || ""}, 
-        ${loopPlaylist}, 
-        ${shuffleItems}, 
-        ${transitionType}, 
-        ${transitionDuration},
-        NOW(),
-        NOW()
-      )
-      RETURNING id, name, description, loop_playlist as "loopPlaylist", shuffle_items as "shuffleItems", transition_type as "transitionType", transition_duration as "transitionDuration", created_at as "createdAt"
+    const newPlaylist = await sql`
+      INSERT INTO playlists (user_id, name, description, is_active, created_at, updated_at)
+      VALUES (${decoded.userId}, ${name}, ${description || ""}, true, NOW(), NOW())
+      RETURNING id, name, description, is_active as "isActive", created_at as "createdAt"
     `
 
     return NextResponse.json({
       success: true,
-      playlist: result[0],
+      playlist: newPlaylist[0],
     })
   } catch (error) {
-    console.error("Error creating playlist:", error)
+    console.error("Playlist creation error:", error)
     return NextResponse.json({ error: "Failed to create playlist" }, { status: 500 })
   }
 }

@@ -10,7 +10,7 @@ export async function GET(request: NextRequest) {
     const token = request.cookies.get("auth-token")?.value
 
     if (!token) {
-      return NextResponse.json({ error: "Authentication required" }, { status: 401 })
+      return NextResponse.json({ error: "No authentication token" }, { status: 401 })
     }
 
     // Verify JWT token
@@ -27,7 +27,6 @@ export async function GET(request: NextRequest) {
         url,
         thumbnail_url as "thumbnailUrl",
         duration,
-        metadata,
         created_at as "createdAt"
       FROM media_files 
       WHERE user_id = ${decoded.userId} AND deleted_at IS NULL
@@ -36,13 +35,10 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      media: media.map((item) => ({
-        ...item,
-        metadata: item.metadata ? JSON.parse(item.metadata) : null,
-      })),
+      media: media,
     })
   } catch (error) {
-    console.error("Error fetching media:", error)
+    console.error("Media fetch error:", error)
     return NextResponse.json({ error: "Failed to fetch media" }, { status: 500 })
   }
 }

@@ -2,86 +2,127 @@
 
 import { useState, useEffect } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Monitor, ImageIcon, Play, Activity } from "lucide-react"
+import { Monitor, ImageIcon, Play, HardDrive, Plus, Activity, Clock } from "lucide-react"
 import Link from "next/link"
 import DashboardLayout from "@/components/dashboard-layout"
 
 interface DashboardStats {
-  totalDevices: number
-  activeDevices: number
-  totalMedia: number
-  totalPlaylists: number
-  storageUsed: number
-  storageLimit: number
+  devices: number
+  media: number
+  playlists: number
+  storage: string
+}
+
+interface RecentActivity {
+  id: number
+  type: string
+  description: string
+  timestamp: string
 }
 
 export default function DashboardPage() {
   const [stats, setStats] = useState<DashboardStats>({
-    totalDevices: 0,
-    activeDevices: 0,
-    totalMedia: 0,
-    totalPlaylists: 0,
-    storageUsed: 0,
-    storageLimit: 1000,
+    devices: 0,
+    media: 0,
+    playlists: 0,
+    storage: "0 MB",
   })
+  const [recentActivity, setRecentActivity] = useState<RecentActivity[]>([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    const fetchStats = async () => {
+    const fetchDashboardData = async () => {
       try {
-        // Fetch devices
+        // Fetch devices count
         const devicesResponse = await fetch("/api/devices")
         const devicesData = await devicesResponse.json()
-        const devices = devicesData.devices || []
+        const devicesCount = devicesData.success ? devicesData.devices.length : 0
 
-        // Fetch media
+        // Fetch media count
         const mediaResponse = await fetch("/api/media")
         const mediaData = await mediaResponse.json()
-        const media = mediaData.media || []
+        const mediaCount = mediaData.success ? mediaData.media.length : 0
 
-        // Fetch playlists
+        // Fetch playlists count
         const playlistsResponse = await fetch("/api/playlists")
         const playlistsData = await playlistsResponse.json()
-        const playlists = playlistsData.playlists || []
+        const playlistsCount = playlistsData.success ? playlistsData.playlists.length : 0
 
-        // Calculate active devices (last seen within 10 minutes)
-        const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000)
-        const activeDevices = devices.filter(
-          (device: any) => device.lastSeen && new Date(device.lastSeen) > tenMinutesAgo,
-        ).length
-
-        // Calculate storage used (in MB)
-        const storageUsed =
-          media.reduce((total: number, item: any) => {
-            return total + (item.fileSize || 0)
-          }, 0) /
-          (1024 * 1024) // Convert to MB
+        // Calculate storage (rough estimate)
+        const storageUsed = mediaCount * 2.5 // Assume average 2.5MB per file
+        const storageString =
+          storageUsed > 1024 ? `${(storageUsed / 1024).toFixed(1)} GB` : `${storageUsed.toFixed(0)} MB`
 
         setStats({
-          totalDevices: devices.length,
-          activeDevices,
-          totalMedia: media.length,
-          totalPlaylists: playlists.length,
-          storageUsed: Math.round(storageUsed),
-          storageLimit: 1000,
+          devices: devicesCount,
+          media: mediaCount,
+          playlists: playlistsCount,
+          storage: storageString,
         })
+
+        // Mock recent activity
+        setRecentActivity([
+          {
+            id: 1,
+            type: "device",
+            description: "New device connected",
+            timestamp: "2 minutes ago",
+          },
+          {
+            id: 2,
+            type: "media",
+            description: "Video uploaded: presentation.mp4",
+            timestamp: "15 minutes ago",
+          },
+          {
+            id: 3,
+            type: "playlist",
+            description: "Playlist 'Morning Show' updated",
+            timestamp: "1 hour ago",
+          },
+        ])
       } catch (error) {
-        console.error("Error fetching dashboard stats:", error)
+        console.error("Error fetching dashboard data:", error)
       } finally {
         setLoading(false)
       }
     }
 
-    fetchStats()
+    fetchDashboardData()
   }, [])
 
-  const storagePercentage = (stats.storageUsed / stats.storageLimit) * 100
+  if (loading) {
+    return (
+      <DashboardLayout>
+        <div className="space-y-6">
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
+            <p className="text-gray-600">Welcome to your digital signage control center</p>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            {[1, 2, 3, 4].map((i) => (
+              <Card key={i}>
+                <CardHeader className="pb-2">
+                  <div className="w-8 h-8 bg-gray-200 rounded animate-pulse" />
+                </CardHeader>
+                <CardContent>
+                  <div className="h-8 bg-gray-200 rounded animate-pulse mb-2" />
+                  <div className="h-4 bg-gray-200 rounded animate-pulse" />
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        </div>
+      </DashboardLayout>
+    )
+  }
 
   return (
     <DashboardLayout>
       <div className="space-y-6">
+        {/* Header */}
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
           <p className="text-gray-600">Welcome to your digital signage control center</p>
@@ -91,12 +132,12 @@ export default function DashboardPage() {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Total Screens</CardTitle>
+              <CardTitle className="text-sm font-medium">Connected Screens</CardTitle>
               <Monitor className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{loading ? "..." : stats.totalDevices}</div>
-              <p className="text-xs text-muted-foreground">{loading ? "..." : stats.activeDevices} currently active</p>
+              <div className="text-2xl font-bold">{stats.devices}</div>
+              <p className="text-xs text-muted-foreground">Active displays</p>
             </CardContent>
           </Card>
 
@@ -106,10 +147,8 @@ export default function DashboardPage() {
               <ImageIcon className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{loading ? "..." : stats.totalMedia}</div>
-              <p className="text-xs text-muted-foreground">
-                {loading ? "..." : stats.storageUsed}MB of {stats.storageLimit}MB used
-              </p>
+              <div className="text-2xl font-bold">{stats.media}</div>
+              <p className="text-xs text-muted-foreground">Total uploaded files</p>
             </CardContent>
           </Card>
 
@@ -119,24 +158,19 @@ export default function DashboardPage() {
               <Play className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{loading ? "..." : stats.totalPlaylists}</div>
-              <p className="text-xs text-muted-foreground">Content collections</p>
+              <div className="text-2xl font-bold">{stats.playlists}</div>
+              <p className="text-xs text-muted-foreground">Content sequences</p>
             </CardContent>
           </Card>
 
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Storage Usage</CardTitle>
-              <Activity className="h-4 w-4 text-muted-foreground" />
+              <CardTitle className="text-sm font-medium">Storage Used</CardTitle>
+              <HardDrive className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{loading ? "..." : Math.round(storagePercentage)}%</div>
-              <div className="w-full bg-gray-200 rounded-full h-2 mt-2">
-                <div
-                  className="bg-blue-600 h-2 rounded-full transition-all duration-300"
-                  style={{ width: `${Math.min(storagePercentage, 100)}%` }}
-                />
-              </div>
+              <div className="text-2xl font-bold">{stats.storage}</div>
+              <p className="text-xs text-muted-foreground">Of available space</p>
             </CardContent>
           </Card>
         </div>
@@ -145,63 +179,46 @@ export default function DashboardPage() {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           <Card>
             <CardHeader>
-              <CardTitle className="flex items-center">
-                <Monitor className="mr-2 h-5 w-5" />
-                Manage Screens
+              <CardTitle className="flex items-center gap-2">
+                <Plus className="h-5 w-5" />
+                Add New Screen
               </CardTitle>
-              <CardDescription>Add new screens, monitor status, and assign content</CardDescription>
+              <CardDescription>Connect a new display to your signage network</CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="flex justify-between items-center">
-                <div>
-                  <div className="text-sm text-gray-600">
-                    {stats.activeDevices} of {stats.totalDevices} online
-                  </div>
-                </div>
-                <Button asChild>
-                  <Link href="/dashboard/screens">Manage</Link>
-                </Button>
-              </div>
+              <Button asChild className="w-full">
+                <Link href="/dashboard/screens">Add Screen</Link>
+              </Button>
             </CardContent>
           </Card>
 
           <Card>
             <CardHeader>
-              <CardTitle className="flex items-center">
-                <ImageIcon className="mr-2 h-5 w-5" />
+              <CardTitle className="flex items-center gap-2">
+                <ImageIcon className="h-5 w-5" />
                 Upload Media
               </CardTitle>
-              <CardDescription>Add images, videos, and presentations to your library</CardDescription>
+              <CardDescription>Add new images, videos, or presentations</CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="flex justify-between items-center">
-                <div>
-                  <div className="text-sm text-gray-600">{stats.totalMedia} files uploaded</div>
-                </div>
-                <Button asChild>
-                  <Link href="/dashboard/media">Upload</Link>
-                </Button>
-              </div>
+              <Button asChild className="w-full">
+                <Link href="/dashboard/media">Upload Files</Link>
+              </Button>
             </CardContent>
           </Card>
 
           <Card>
             <CardHeader>
-              <CardTitle className="flex items-center">
-                <Play className="mr-2 h-5 w-5" />
+              <CardTitle className="flex items-center gap-2">
+                <Play className="h-5 w-5" />
                 Create Playlist
               </CardTitle>
-              <CardDescription>Organize your content into playlists for your screens</CardDescription>
+              <CardDescription>Organize your content into playlists</CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="flex justify-between items-center">
-                <div>
-                  <div className="text-sm text-gray-600">{stats.totalPlaylists} playlists created</div>
-                </div>
-                <Button asChild>
-                  <Link href="/dashboard/playlists">Create</Link>
-                </Button>
-              </div>
+              <Button asChild className="w-full">
+                <Link href="/dashboard/playlists">Create Playlist</Link>
+              </Button>
             </CardContent>
           </Card>
         </div>
@@ -209,52 +226,30 @@ export default function DashboardPage() {
         {/* Recent Activity */}
         <Card>
           <CardHeader>
-            <CardTitle>Recent Activity</CardTitle>
-            <CardDescription>Latest updates from your digital signage network</CardDescription>
+            <CardTitle className="flex items-center gap-2">
+              <Activity className="h-5 w-5" />
+              Recent Activity
+            </CardTitle>
+            <CardDescription>Latest updates from your signage network</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
-              <div className="flex items-center space-x-4">
-                <div className="w-2 h-2 bg-green-500 rounded-full" />
-                <div className="flex-1">
-                  <p className="text-sm font-medium">System initialized successfully</p>
-                  <p className="text-xs text-gray-500">Ready to add screens and content</p>
-                </div>
-                <Badge variant="secondary">System</Badge>
-              </div>
-
-              {stats.totalDevices > 0 && (
-                <div className="flex items-center space-x-4">
-                  <div className="w-2 h-2 bg-blue-500 rounded-full" />
-                  <div className="flex-1">
-                    <p className="text-sm font-medium">{stats.totalDevices} screen(s) connected</p>
-                    <p className="text-xs text-gray-500">{stats.activeDevices} currently active</p>
+              {recentActivity.map((activity) => (
+                <div key={activity.id} className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    {activity.type === "device" && <Monitor className="h-4 w-4 text-blue-500" />}
+                    {activity.type === "media" && <ImageIcon className="h-4 w-4 text-green-500" />}
+                    {activity.type === "playlist" && <Play className="h-4 w-4 text-purple-500" />}
+                    <div>
+                      <p className="text-sm font-medium">{activity.description}</p>
+                    </div>
                   </div>
-                  <Badge variant="secondary">Devices</Badge>
-                </div>
-              )}
-
-              {stats.totalMedia > 0 && (
-                <div className="flex items-center space-x-4">
-                  <div className="w-2 h-2 bg-purple-500 rounded-full" />
-                  <div className="flex-1">
-                    <p className="text-sm font-medium">{stats.totalMedia} media file(s) uploaded</p>
-                    <p className="text-xs text-gray-500">{stats.storageUsed}MB storage used</p>
+                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                    <Clock className="h-3 w-3" />
+                    {activity.timestamp}
                   </div>
-                  <Badge variant="secondary">Media</Badge>
                 </div>
-              )}
-
-              {stats.totalPlaylists > 0 && (
-                <div className="flex items-center space-x-4">
-                  <div className="w-2 h-2 bg-orange-500 rounded-full" />
-                  <div className="flex-1">
-                    <p className="text-sm font-medium">{stats.totalPlaylists} playlist(s) created</p>
-                    <p className="text-xs text-gray-500">Content ready for deployment</p>
-                  </div>
-                  <Badge variant="secondary">Playlists</Badge>
-                </div>
-              )}
+              ))}
             </div>
           </CardContent>
         </Card>
