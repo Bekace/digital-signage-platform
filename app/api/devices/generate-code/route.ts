@@ -1,29 +1,31 @@
 import { type NextRequest, NextResponse } from "next/server"
+import { neon } from "@neondatabase/serverless"
+
+const sql = neon(process.env.DATABASE_URL!)
 
 export async function POST(request: NextRequest) {
   try {
-    // Generate 6-digit code
-    const code = Math.floor(100000 + Math.random() * 900000).toString()
+    // Generate a 6-digit pairing code
+    const code = Math.random().toString(36).substring(2, 8).toUpperCase()
 
-    // Code expires in 10 minutes from NOW - add extra buffer
-    const now = new Date()
-    const expiresAt = new Date(now.getTime() + 11 * 60 * 1000) // 11 minutes to account for any timing issues
+    // Store the code in database with expiration (30 minutes)
+    const expiresAt = new Date(Date.now() + 30 * 60 * 1000) // 30 minutes from now
+
+    await sql`
+      INSERT INTO device_pairing_codes (code, expires_at, created_at)
+      VALUES (${code}, ${expiresAt.toISOString()}, ${new Date().toISOString()})
+      ON CONFLICT (code) DO UPDATE SET
+        expires_at = ${expiresAt.toISOString()},
+        created_at = ${new Date().toISOString()}
+    `
 
     return NextResponse.json({
       success: true,
       code: code,
       expiresAt: expiresAt.toISOString(),
-      message: "Device code generated successfully",
-      serverTime: now.toISOString(), // Include server time for comparison
     })
   } catch (error) {
-    console.error("Generate code error:", error)
-    return NextResponse.json(
-      {
-        success: false,
-        message: "Internal server error",
-      },
-      { status: 500 },
-    )
+    console.error("Error generating pairing code:", error)
+    return NextResponse.json({ success: false, message: "Failed to generate pairing code" }, { status: 500 })
   }
 }

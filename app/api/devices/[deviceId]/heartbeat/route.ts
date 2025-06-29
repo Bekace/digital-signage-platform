@@ -1,23 +1,42 @@
 import { type NextRequest, NextResponse } from "next/server"
+import { neon } from "@neondatabase/serverless"
+
+const sql = neon(process.env.DATABASE_URL!)
 
 export async function POST(request: NextRequest, { params }: { params: { deviceId: string } }) {
   try {
-    const deviceId = params.deviceId
-    const heartbeatData = await request.json()
-    const authHeader = request.headers.get("authorization")
+    const { deviceId } = params
+    const body = await request.json()
+    const { status = "online", currentItem = null, progress = 0, performanceMetrics = {}, timestamp } = body
 
-    if (!authHeader || !authHeader.startsWith("Bearer ")) {
-      return NextResponse.json({ success: false, message: "Invalid device credentials" }, { status: 401 })
-    }
+    console.log(`Heartbeat from device ${deviceId}:`, { status, currentItem, progress })
 
-    // Demo heartbeat - always succeeds
+    // Update device status and last seen
+    await sql`
+      UPDATE devices 
+      SET 
+        status = ${status},
+        last_seen = CURRENT_TIMESTAMP,
+        current_media_id = ${currentItem},
+        playback_progress = ${progress},
+        performance_metrics = ${JSON.stringify(performanceMetrics)},
+        updated_at = CURRENT_TIMESTAMP
+      WHERE id = ${Number.parseInt(deviceId)}
+    `
+
+    // Log heartbeat for monitoring
+    await sql`
+      INSERT INTO device_heartbeats (device_id, status, current_media_id, progress, metrics, created_at)
+      VALUES (${Number.parseInt(deviceId)}, ${status}, ${currentItem}, ${progress}, ${JSON.stringify(performanceMetrics)}, CURRENT_TIMESTAMP)
+    `
+
     return NextResponse.json({
       success: true,
       message: "Heartbeat received",
       serverTime: new Date().toISOString(),
-      commands: [], // No pending commands in demo
     })
   } catch (error) {
-    return NextResponse.json({ success: false, message: "Internal server error" }, { status: 500 })
+    console.error("Heartbeat error:", error)
+    return NextResponse.json({ success: false, message: "Failed to process heartbeat" }, { status: 500 })
   }
 }

@@ -1,88 +1,107 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { neon } from "@neondatabase/serverless"
-import jwt from "jsonwebtoken"
+import { verifyToken } from "@/lib/auth"
 
 const sql = neon(process.env.DATABASE_URL!)
 
 export async function GET(request: NextRequest) {
   try {
-    console.log("📱 [DEVICES API] GET request")
+    const { searchParams } = new URL(request.url)
+    const code = searchParams.get("code")
 
-    const token = request.headers.get("authorization")?.replace("Bearer ", "")
-    if (!token) {
-      console.log("❌ [DEVICES API] No token provided")
-      return NextResponse.json({ success: false, error: "Authentication required" }, { status: 401 })
+    if (code) {
+      // Get devices by pairing code
+      const devices = await sql`
+        SELECT d.*, dpc.code as pairing_code
+        FROM devices d
+        LEFT JOIN device_pairing_codes dpc ON d.id = dpc.device_id
+        WHERE dpc.code = ${code}
+        AND dpc.expires_at > CURRENT_TIMESTAMP
+      `
+
+      return NextResponse.json({
+        success: true,
+        devices: devices,
+      })
     }
 
-    const decoded = jwt.verify(token, process.env.JWT_SECRET!) as { userId: number }
-    console.log("✅ [DEVICES API] Token verified for user:", decoded.userId)
+    // Get user's token from Authorization header
+    const authHeader = request.headers.get("authorization")
+    if (!authHeader?.startsWith("Bearer ")) {
+      return NextResponse.json({ success: false, message: "Authorization required" }, { status: 401 })
+    }
 
-    // Fetch devices with playlist information
+    const token = authHeader.substring(7)
+    const decoded = verifyToken(token)
+
+    if (!decoded) {
+      return NextResponse.json({ success: false, message: "Invalid token" }, { status: 401 })
+    }
+
+    // Get all devices for the user
     const devices = await sql`
-      SELECT 
-        d.id,
-        d.name,
-        d.device_type as "deviceType",
-        d.platform,
-        d.status,
-        d.last_seen as "lastSeen",
-        d.assigned_playlist_id as "assignedPlaylistId",
-        d.playlist_status as "playlistStatus",
-        d.last_control_action as "lastControlAction",
-        d.last_control_time as "lastControlTime",
-        d.created_at as "createdAt",
-        d.updated_at as "updatedAt",
-        p.id as "playlistId",
-        p.name as "playlistName",
-        (SELECT COUNT(*) FROM playlist_items pi WHERE pi.playlist_id = p.id) as "playlistItemCount"
+      SELECT d.*, p.name as playlist_name
       FROM devices d
-      LEFT JOIN playlists p ON d.assigned_playlist_id = p.id
+      LEFT JOIN playlists p ON d.current_playlist_id = p.id
       WHERE d.user_id = ${decoded.userId}
       ORDER BY d.created_at DESC
     `
 
-    console.log("📱 [DEVICES API] Found", devices.length, "devices")
+    return NextResponse.json({
+      success: true,
+      devices: devices,
+    })
+  } catch (error) {
+    console.error("Error fetching devices:", error)
+    return NextResponse.json({ success: false, message: "Failed to fetch devices" }, { status: 500 })
+  }
+}
 
-    // Format devices with playlist information
-    const formattedDevices = devices.map((device) => ({
-      id: device.id,
-      name: device.name,
-      deviceType: device.deviceType,
-      platform: device.platform,
-      status: device.status,
-      lastSeen: device.lastSeen,
-      assignedPlaylistId: device.assignedPlaylistId,
-      playlistStatus: device.playlistStatus || "none",
-      lastControlAction: device.lastControlAction,
-      lastControlTime: device.lastControlTime,
-      createdAt: device.createdAt,
-      updatedAt: device.updatedAt,
-      playlist: device.playlistId
-        ? {
-            id: device.playlistId,
-            name: device.playlistName,
-            itemCount: Number.parseInt(device.playlistItemCount) || 0,
-          }
-        : null,
-    }))
+export async function POST(request: NextRequest) {
+  try {
+    const body = await request.json()
+    const { name, location, description } = body
 
-    // Calculate statistics
-    const stats = {
-      total: devices.length,
-      online: devices.filter((d) => d.status === "online").length,
-      offline: devices.filter((d) => d.status === "offline").length,
-      playing: devices.filter((d) => d.playlistStatus === "playing").length,
+    // Get user's token from Authorization header
+    const authHeader = request.headers.get("authorization")
+    if (!authHeader?.startsWith("Bearer ")) {
+      return NextResponse.json({ success: false, message: "Authorization required" }, { status: 401 })
     }
 
-    console.log("📊 [DEVICES API] Stats:", stats)
+    const token = authHeader.substring(7)
+    const decoded = verifyToken(token)
+
+    if (!decoded) {
+      return NextResponse.json({ success: false, message: "Invalid token" }, { status: 401 })
+    }
+
+    // Generate a pairing code for the new device
+    const pairingCode = Math.random().toString(36).substring(2, 8).toUpperCase()
+    const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000) // 24 hours
+
+    // Create the device
+    const [device] = await sql`
+      INSERT INTO devices (user_id, name, location, description, status, created_at)
+      VALUES (${decoded.userId}, ${name}, ${location || ""}, ${description || ""}, 'offline', ${new Date().toISOString()})
+      RETURNING *
+    `
+
+    // Create pairing code
+    await sql`
+      INSERT INTO device_pairing_codes (code, expires_at, device_id, created_at)
+      VALUES (${pairingCode}, ${expiresAt.toISOString()}, ${device.id}, ${new Date().toISOString()})
+    `
 
     return NextResponse.json({
       success: true,
-      devices: formattedDevices,
-      stats,
+      device: {
+        ...device,
+        pairingCode: pairingCode,
+        pairingExpiresAt: expiresAt.toISOString(),
+      },
     })
   } catch (error) {
-    console.error("💥 [DEVICES API] Error:", error)
-    return NextResponse.json({ success: false, error: "Failed to fetch devices" }, { status: 500 })
+    console.error("Error creating device:", error)
+    return NextResponse.json({ success: false, message: "Failed to create device" }, { status: 500 })
   }
 }

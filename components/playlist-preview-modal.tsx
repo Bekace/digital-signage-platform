@@ -19,6 +19,11 @@ import {
   Tv,
   Maximize,
   Minimize,
+  ImageIcon,
+  Video,
+  Music,
+  ExternalLink,
+  FileText,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 
@@ -34,6 +39,8 @@ interface MediaFile {
   mime_type?: string
   dimensions?: string
   duration?: number
+  media_source?: string
+  external_url?: string
 }
 
 interface PlaylistItem {
@@ -137,6 +144,27 @@ export function PlaylistPreviewModal({ open, onOpenChange, playlist, items }: Pl
     return url
   }
 
+  // Helper functions for media type detection
+  const isVideoFile = (media: MediaFile) => {
+    return media.mime_type?.startsWith("video/") || media.file_type?.includes("video")
+  }
+
+  const isAudioFile = (media: MediaFile) => {
+    return media.mime_type?.startsWith("audio/") || media.file_type?.includes("audio")
+  }
+
+  const isImageFile = (media: MediaFile) => {
+    return media.mime_type?.startsWith("image/") || media.file_type?.includes("image")
+  }
+
+  const isPDFFile = (media: MediaFile) => {
+    return media.mime_type === "application/pdf" || media.file_type?.includes("pdf")
+  }
+
+  const isSlidesFile = (media: MediaFile) => {
+    return media.media_source === "google_slides"
+  }
+
   // Reset when modal opens/closes or item changes
   useEffect(() => {
     if (open) {
@@ -165,11 +193,11 @@ export function PlaylistPreviewModal({ open, onOpenChange, playlist, items }: Pl
     if (open && isPlaying) {
       // Small delay to let media load
       setTimeout(() => {
-        if (videoRef.current) {
+        if (videoRef.current && isVideoFile(currentMedia!)) {
           videoRef.current.currentTime = 0
           videoRef.current.play().catch(console.error)
         }
-        if (audioRef.current) {
+        if (audioRef.current && isAudioFile(currentMedia!)) {
           audioRef.current.currentTime = 0
           audioRef.current.play().catch(console.error)
         }
@@ -189,7 +217,13 @@ export function PlaylistPreviewModal({ open, onOpenChange, playlist, items }: Pl
 
   // Handle auto-advance and progress
   useEffect(() => {
-    if (isPlaying && !mediaError) {
+    if (isPlaying && !mediaError && currentMedia) {
+      // For video and audio, let the native events handle progress
+      if (isVideoFile(currentMedia) || isAudioFile(currentMedia)) {
+        return
+      }
+
+      // For images and other static content, use timer
       intervalRef.current = setInterval(() => {
         setProgress((prev) => {
           const newProgress = prev + 100 / (itemDuration / 100)
@@ -223,16 +257,16 @@ export function PlaylistPreviewModal({ open, onOpenChange, playlist, items }: Pl
         clearInterval(intervalRef.current)
       }
     }
-  }, [isPlaying, currentIndex, items.length, playlist.loop_enabled, itemDuration, mediaError])
+  }, [isPlaying, currentIndex, items.length, playlist.loop_enabled, itemDuration, mediaError, currentMedia])
 
   const handlePlayPause = () => {
-    if (mediaError) return
+    if (mediaError || !currentMedia) return
 
     const newPlayingState = !isPlaying
     setIsPlaying(newPlayingState)
 
     // Handle video/audio elements
-    if (videoRef.current) {
+    if (videoRef.current && isVideoFile(currentMedia)) {
       if (newPlayingState) {
         videoRef.current.play().catch(console.error)
       } else {
@@ -240,7 +274,7 @@ export function PlaylistPreviewModal({ open, onOpenChange, playlist, items }: Pl
       }
     }
 
-    if (audioRef.current) {
+    if (audioRef.current && isAudioFile(currentMedia)) {
       if (newPlayingState) {
         audioRef.current.play().catch(console.error)
       } else {
@@ -270,11 +304,11 @@ export function PlaylistPreviewModal({ open, onOpenChange, playlist, items }: Pl
     setMediaError(false)
 
     // Auto-play video/audio when loaded if we're in playing state
-    if (isPlaying) {
-      if (videoRef.current) {
+    if (isPlaying && currentMedia) {
+      if (videoRef.current && isVideoFile(currentMedia)) {
         videoRef.current.play().catch(console.error)
       }
-      if (audioRef.current) {
+      if (audioRef.current && isAudioFile(currentMedia)) {
         audioRef.current.play().catch(console.error)
       }
     }
@@ -286,12 +320,32 @@ export function PlaylistPreviewModal({ open, onOpenChange, playlist, items }: Pl
     setIsPlaying(false)
   }
 
-  const handleVideoPlay = () => {
-    setIsPlaying(true)
+  const handleVideoTimeUpdate = () => {
+    const video = videoRef.current
+    if (video && currentMedia && isVideoFile(currentMedia)) {
+      const currentTime = video.currentTime
+      const duration = video.duration
+      setProgress((currentTime / duration) * 100)
+      setTimeRemaining((duration - currentTime) * 1000)
+    }
   }
 
-  const handleVideoPause = () => {
-    setIsPlaying(false)
+  const handleAudioTimeUpdate = () => {
+    const audio = audioRef.current
+    if (audio && currentMedia && isAudioFile(currentMedia)) {
+      const currentTime = audio.currentTime
+      const duration = audio.duration
+      setProgress((currentTime / duration) * 100)
+      setTimeRemaining((duration - currentTime) * 1000)
+    }
+  }
+
+  const handleVideoEnded = () => {
+    handleNext()
+  }
+
+  const handleAudioEnded = () => {
+    handleNext()
   }
 
   const toggleFullscreen = async () => {
@@ -333,6 +387,23 @@ export function PlaylistPreviewModal({ open, onOpenChange, playlist, items }: Pl
     return "object-contain"
   }
 
+  const getMediaIcon = (media: MediaFile) => {
+    if (isVideoFile(media)) return <Video className="h-4 w-4" />
+    if (isAudioFile(media)) return <Music className="h-4 w-4" />
+    if (isSlidesFile(media)) return <ExternalLink className="h-4 w-4" />
+    if (isImageFile(media)) return <ImageIcon className="h-4 w-4" />
+    return <FileText className="h-4 w-4" />
+  }
+
+  const getMediaTypeLabel = (media: MediaFile) => {
+    if (isVideoFile(media)) return "Video"
+    if (isAudioFile(media)) return "Audio"
+    if (isSlidesFile(media)) return "Slides"
+    if (isImageFile(media)) return "Image"
+    if (isPDFFile(media)) return "PDF"
+    return "Document"
+  }
+
   if (!currentMedia) {
     return (
       <Dialog open={open} onOpenChange={onOpenChange}>
@@ -367,12 +438,6 @@ export function PlaylistPreviewModal({ open, onOpenChange, playlist, items }: Pl
     )
   }
 
-  const isImage = currentMedia.mime_type?.startsWith("image/") || currentMedia.file_type === "image"
-  const isVideo = currentMedia.mime_type?.startsWith("video/") || currentMedia.file_type === "video"
-  const isAudio = currentMedia.mime_type?.startsWith("audio/")
-  const isPDF = currentMedia.mime_type === "application/pdf" || currentMedia.file_type === "document"
-  const isPresentation = currentMedia.file_type === "presentation"
-
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
@@ -396,8 +461,12 @@ export function PlaylistPreviewModal({ open, onOpenChange, playlist, items }: Pl
                 <Tv className="h-3 w-3" />
                 <span>1920×1080</span>
               </Badge>
+              <Badge variant="secondary" className="flex items-center space-x-1 bg-green-600 text-white">
+                {getMediaIcon(currentMedia)}
+                <span>{getMediaTypeLabel(currentMedia)}</span>
+              </Badge>
               {isFullscreen && (
-                <Badge variant="secondary" className="bg-green-600 text-white">
+                <Badge variant="secondary" className="bg-purple-600 text-white">
                   Fullscreen Mode
                 </Badge>
               )}
@@ -457,38 +526,34 @@ export function PlaylistPreviewModal({ open, onOpenChange, playlist, items }: Pl
               )}
 
               {/* Image Display */}
-              {isImage && !mediaError && (
+              {isImageFile(currentMedia) && !mediaError && (
                 <img
                   src={currentMedia.url || "/placeholder.svg"}
                   alt={currentMedia.original_name || currentMedia.filename}
-                  className={cn("w-full h-full", getScaleClass(currentMedia.mime_type))}
+                  className={cn("w-full h-full", getScaleClass(currentMedia.mime_type || ""))}
                   onLoad={handleMediaLoad}
                   onError={handleMediaError}
                 />
               )}
 
               {/* Video Display */}
-              {isVideo && !mediaError && (
+              {isVideoFile(currentMedia) && !mediaError && (
                 <video
                   ref={videoRef}
                   src={currentMedia.url}
-                  className={cn("w-full h-full", getScaleClass(currentMedia.mime_type))}
+                  className={cn("w-full h-full", getScaleClass(currentMedia.mime_type || ""))}
                   muted={isMuted}
                   autoPlay={isPlaying}
                   loop={false}
                   onLoadedData={handleMediaLoad}
                   onError={handleMediaError}
-                  onPlay={handleVideoPlay}
-                  onPause={handleVideoPause}
-                  onEnded={() => {
-                    // Video ended naturally, advance to next
-                    handleNext()
-                  }}
+                  onTimeUpdate={handleVideoTimeUpdate}
+                  onEnded={handleVideoEnded}
                 />
               )}
 
               {/* Audio Display */}
-              {isAudio && !mediaError && (
+              {isAudioFile(currentMedia) && !mediaError && (
                 <div className="absolute inset-0 flex items-center justify-center text-white">
                   <div className="text-center">
                     <div className="bg-white/10 rounded-lg p-8 backdrop-blur-sm">
@@ -497,6 +562,9 @@ export function PlaylistPreviewModal({ open, onOpenChange, playlist, items }: Pl
                         {currentMedia.original_name || currentMedia.filename}
                       </h3>
                       <p className="text-gray-300">Audio File</p>
+                      <div className="mt-4 w-64 mx-auto">
+                        <Progress value={progress} className="h-2" />
+                      </div>
                     </div>
                   </div>
                   <audio
@@ -506,18 +574,14 @@ export function PlaylistPreviewModal({ open, onOpenChange, playlist, items }: Pl
                     muted={isMuted}
                     onLoadedData={handleMediaLoad}
                     onError={handleMediaError}
-                    onPlay={handleVideoPlay}
-                    onPause={handleVideoPause}
-                    onEnded={() => {
-                      // Audio ended naturally, advance to next
-                      handleNext()
-                    }}
+                    onTimeUpdate={handleAudioTimeUpdate}
+                    onEnded={handleAudioEnded}
                   />
                 </div>
               )}
 
               {/* PDF Display */}
-              {isPDF && !mediaError && (
+              {isPDFFile(currentMedia) && !mediaError && (
                 <iframe
                   src={currentMedia.url}
                   className="w-full h-full border-0"
@@ -527,10 +591,10 @@ export function PlaylistPreviewModal({ open, onOpenChange, playlist, items }: Pl
                 />
               )}
 
-              {/* Presentation Display */}
-              {isPresentation && !mediaError && (
+              {/* Google Slides Display */}
+              {isSlidesFile(currentMedia) && !mediaError && (
                 <iframe
-                  src={getCleanPresentationUrl(currentMedia.url)}
+                  src={getCleanPresentationUrl(currentMedia.external_url || currentMedia.url)}
                   className="w-full h-full border-0"
                   onLoad={handleMediaLoad}
                   onError={handleMediaError}
@@ -544,7 +608,7 @@ export function PlaylistPreviewModal({ open, onOpenChange, playlist, items }: Pl
                 <div className="absolute bottom-4 left-4 bg-black/70 text-white p-3 rounded-lg backdrop-blur-sm">
                   <h4 className="font-medium">{currentMedia.original_name || currentMedia.filename}</h4>
                   <p className="text-sm text-gray-300">
-                    {currentMedia.file_type} • {formatTime(timeRemaining)} remaining
+                    {getMediaTypeLabel(currentMedia)} • {formatTime(timeRemaining)} remaining
                   </p>
                 </div>
               )}
@@ -600,7 +664,7 @@ export function PlaylistPreviewModal({ open, onOpenChange, playlist, items }: Pl
                   <SkipForward className="h-4 w-4" />
                 </Button>
 
-                {(isVideo || isAudio) && (
+                {(isVideoFile(currentMedia) || isAudioFile(currentMedia)) && (
                   <Button
                     variant="ghost"
                     size="sm"
