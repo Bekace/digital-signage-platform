@@ -1,190 +1,301 @@
 "use client"
 
-import { useState, useEffect } from "react"
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { useState } from "react"
 import { Button } from "@/components/ui/button"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Card, CardContent } from "@/components/ui/card"
-import { Copy, RefreshCw } from "lucide-react"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Badge } from "@/components/ui/badge"
+import { toast } from "sonner"
+import { Copy, Monitor, Smartphone, Tv, Globe, CheckCircle } from "lucide-react"
 
 interface AddScreenDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
+  onScreenAdded: () => void
 }
 
-export function AddScreenDialog({ open, onOpenChange }: AddScreenDialogProps) {
-  const [step, setStep] = useState(1)
+export function AddScreenDialog({ open, onOpenChange, onScreenAdded }: AddScreenDialogProps) {
+  const [step, setStep] = useState<"form" | "pairing">("form")
+  const [screenName, setScreenName] = useState("")
   const [deviceType, setDeviceType] = useState("")
-  const [deviceCode, setDeviceCode] = useState("")
-  const [codeExpiry, setCodeExpiry] = useState<Date | null>(null)
   const [loading, setLoading] = useState(false)
+  const [pairingCode, setPairingCode] = useState("")
+  const [deviceId, setDeviceId] = useState<number | null>(null)
 
-  useEffect(() => {
-    if (open && step === 2) {
-      generateDeviceCode()
+  const deviceTypes = [
+    { value: "fire_tv", label: "Amazon Fire TV", icon: Tv },
+    { value: "android_tv", label: "Android TV", icon: Tv },
+    { value: "android", label: "Android Device", icon: Smartphone },
+    { value: "ios", label: "iOS Device", icon: Smartphone },
+    { value: "web", label: "Web Browser", icon: Globe },
+    { value: "other", label: "Other Device", icon: Monitor },
+  ]
+
+  const generatePairingCode = async () => {
+    if (!screenName.trim() || !deviceType) {
+      toast.error("Please fill in all fields")
+      return
     }
-  }, [open, step])
 
-  const generateDeviceCode = async () => {
-    setLoading(true)
     try {
+      setLoading(true)
+      const token = localStorage.getItem("token")
+      if (!token) {
+        toast.error("Please log in to add a screen")
+        return
+      }
+
+      console.log("🔗 [ADD SCREEN] Generating pairing code for:", screenName, deviceType)
+
       const response = await fetch("/api/devices/generate-code", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer your-user-token`, // In real app, get from auth context
+          Authorization: `Bearer ${token}`,
         },
+        body: JSON.stringify({
+          name: screenName.trim(),
+          deviceType: deviceType,
+        }),
       })
 
       const data = await response.json()
+      console.log("🔗 [ADD SCREEN] Generate code response:", data)
+
       if (data.success) {
-        setDeviceCode(data.code)
-        setCodeExpiry(new Date(data.expiresAt))
+        setPairingCode(data.code)
+        setDeviceId(data.deviceId)
+        setStep("pairing")
+        toast.success("Pairing code generated successfully")
+      } else {
+        toast.error(data.error || "Failed to generate pairing code")
       }
     } catch (error) {
-      console.error("Failed to generate device code:", error)
+      console.error("❌ [ADD SCREEN] Error generating code:", error)
+      toast.error("Failed to generate pairing code")
     } finally {
       setLoading(false)
     }
   }
 
-  const copyToClipboard = () => {
-    navigator.clipboard.writeText(deviceCode)
-  }
-
-  const handleNext = () => {
-    if (step === 1 && deviceType) {
-      setStep(2)
+  const copyToClipboard = async (text: string) => {
+    try {
+      await navigator.clipboard.writeText(text)
+      toast.success("Copied to clipboard")
+    } catch (error) {
+      console.error("Failed to copy to clipboard:", error)
+      toast.error("Failed to copy to clipboard")
     }
   }
 
   const handleClose = () => {
-    setStep(1)
+    setStep("form")
+    setScreenName("")
     setDeviceType("")
-    setDeviceCode("")
-    setCodeExpiry(null)
+    setPairingCode("")
+    setDeviceId(null)
     onOpenChange(false)
   }
 
-  const getDeviceInstructions = () => {
-    switch (deviceType) {
-      case "firestick":
+  const handleScreenAdded = () => {
+    handleClose()
+    onScreenAdded()
+    toast.success("Screen added successfully!")
+  }
+
+  const getDeviceInstructions = (type: string) => {
+    switch (type) {
+      case "fire_tv":
         return [
-          "Install the SignageCloud app on your Fire TV Stick",
-          "Launch the app and you'll see a setup screen",
-          "Enter the 6-digit code shown below",
-          "The device will automatically connect and start displaying content",
+          "Install the Digital Signage app from Amazon Appstore",
+          "Open the app on your Fire TV",
+          'Select "Pair with Server"',
+          "Enter the pairing code shown below",
+          "Your Fire TV will connect automatically",
         ]
-      case "android-tv":
+      case "android_tv":
         return [
-          "Install the SignageCloud app on your Android TV",
-          "Open the app and navigate to the setup screen",
-          "Enter the 6-digit code shown below",
-          "Your Android TV will connect and begin showing your content",
+          "Install the Digital Signage app from Google Play Store",
+          "Open the app on your Android TV",
+          'Select "Pair with Server"',
+          "Enter the pairing code shown below",
+          "Your Android TV will connect automatically",
         ]
-      case "web-browser":
+      case "android":
         return [
-          "Open a web browser on your display device",
-          "Navigate to: https://player.signagecloud.com",
-          "Enter the 6-digit code shown below",
-          "The browser will enter fullscreen mode and display your content",
+          "Install the Digital Signage app from Google Play Store",
+          "Open the app on your Android device",
+          'Tap "Pair with Server"',
+          "Enter the pairing code shown below",
+          "Your device will connect automatically",
+        ]
+      case "ios":
+        return [
+          "Install the Digital Signage app from App Store",
+          "Open the app on your iOS device",
+          'Tap "Pair with Server"',
+          "Enter the pairing code shown below",
+          "Your device will connect automatically",
+        ]
+      case "web":
+        return [
+          "Open a web browser on your device",
+          "Navigate to the player URL provided",
+          'Click "Pair with Server"',
+          "Enter the pairing code shown below",
+          "Your browser will connect automatically",
         ]
       default:
-        return []
+        return [
+          "Install the appropriate Digital Signage app",
+          "Open the app on your device",
+          'Look for "Pair with Server" option',
+          "Enter the pairing code shown below",
+          "Your device will connect automatically",
+        ]
     }
   }
 
+  const selectedDeviceType = deviceTypes.find((dt) => dt.value === deviceType)
+
   return (
-    <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="sm:max-w-[500px]">
-        <DialogHeader>
-          <DialogTitle>Add New Screen</DialogTitle>
-          <DialogDescription>Connect a new display device to your SignageCloud account</DialogDescription>
-        </DialogHeader>
-
-        {step === 1 && (
-          <div className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="deviceType">Device Type</Label>
-              <Select value={deviceType} onValueChange={setDeviceType}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select your device type" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="firestick">Amazon Fire TV Stick</SelectItem>
-                  <SelectItem value="android-tv">Android TV</SelectItem>
-                  <SelectItem value="web-browser">Web Browser</SelectItem>
-                  <SelectItem value="raspberry-pi">Raspberry Pi</SelectItem>
-                  <SelectItem value="windows">Windows PC</SelectItem>
-                  <SelectItem value="mac">Mac</SelectItem>
-                </SelectContent>
-              </Select>
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-[600px]">
+        {step === "form" ? (
+          <>
+            <DialogHeader>
+              <DialogTitle>Add New Screen</DialogTitle>
+              <DialogDescription>Set up a new digital signage display by providing basic information</DialogDescription>
+            </DialogHeader>
+            <div className="grid gap-4 py-4">
+              <div className="grid gap-2">
+                <Label htmlFor="screen-name">Screen Name</Label>
+                <Input
+                  id="screen-name"
+                  placeholder="e.g., Lobby Display, Conference Room TV"
+                  value={screenName}
+                  onChange={(e) => setScreenName(e.target.value)}
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="device-type">Device Type</Label>
+                <Select value={deviceType} onValueChange={setDeviceType}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select device type" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {deviceTypes.map((type) => {
+                      const Icon = type.icon
+                      return (
+                        <SelectItem key={type.value} value={type.value}>
+                          <div className="flex items-center">
+                            <Icon className="h-4 w-4 mr-2" />
+                            {type.label}
+                          </div>
+                        </SelectItem>
+                      )
+                    })}
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="screenName">Screen Name</Label>
-              <Input id="screenName" placeholder="e.g., Lobby Display, Reception TV" />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="location">Location (Optional)</Label>
-              <Input id="location" placeholder="e.g., Main Lobby, Conference Room A" />
-            </div>
-
-            <div className="flex justify-end space-x-2">
+            <DialogFooter>
               <Button variant="outline" onClick={handleClose}>
                 Cancel
               </Button>
-              <Button onClick={handleNext} disabled={!deviceType}>
-                Next
+              <Button onClick={generatePairingCode} disabled={loading}>
+                {loading ? "Generating..." : "Generate Pairing Code"}
               </Button>
-            </div>
-          </div>
-        )}
-
-        {step === 2 && (
-          <div className="space-y-6">
-            <Card>
-              <CardContent className="p-6">
-                <div className="text-center space-y-4">
-                  <h3 className="text-lg font-semibold">Device Code</h3>
-                  <div className="flex items-center justify-center space-x-2">
-                    <div className="text-4xl font-mono font-bold tracking-wider bg-gray-100 px-4 py-2 rounded-lg">
-                      {loading ? "------" : deviceCode}
-                    </div>
-                    <Button variant="outline" size="sm" onClick={copyToClipboard} disabled={loading}>
-                      <Copy className="h-4 w-4" />
+            </DialogFooter>
+          </>
+        ) : (
+          <>
+            <DialogHeader>
+              <DialogTitle className="flex items-center">
+                {selectedDeviceType && <selectedDeviceType.icon className="h-5 w-5 mr-2" />}
+                Pair Your {selectedDeviceType?.label}
+              </DialogTitle>
+              <DialogDescription>
+                Follow these steps to connect your device to the digital signage system
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4">
+              {/* Pairing Code Card */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-lg">Pairing Code</CardTitle>
+                  <CardDescription>Enter this code on your device to establish connection</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="flex items-center justify-between p-4 bg-muted rounded-lg">
+                    <div className="text-3xl font-mono font-bold tracking-wider">{pairingCode}</div>
+                    <Button variant="outline" size="sm" onClick={() => copyToClipboard(pairingCode)}>
+                      <Copy className="h-4 w-4 mr-2" />
+                      Copy
                     </Button>
                   </div>
-                  {codeExpiry && (
-                    <p className="text-sm text-gray-600">Code expires at {codeExpiry.toLocaleTimeString()}</p>
-                  )}
-                  <Button variant="outline" size="sm" onClick={generateDeviceCode} disabled={loading}>
-                    <RefreshCw className="h-4 w-4 mr-2" />
-                    Generate New Code
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
+                </CardContent>
+              </Card>
 
-            <div className="space-y-3">
-              <h4 className="font-medium">Setup Instructions:</h4>
-              <ol className="list-decimal list-inside space-y-2 text-sm">
-                {getDeviceInstructions().map((instruction, index) => (
-                  <li key={index}>{instruction}</li>
-                ))}
-              </ol>
+              {/* Instructions */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-lg">Setup Instructions</CardTitle>
+                  <CardDescription>
+                    Follow these steps on your {selectedDeviceType?.label.toLowerCase()}
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <ol className="space-y-2">
+                    {getDeviceInstructions(deviceType).map((instruction, index) => (
+                      <li key={index} className="flex items-start">
+                        <Badge variant="outline" className="mr-3 mt-0.5 min-w-[24px] justify-center">
+                          {index + 1}
+                        </Badge>
+                        <span className="text-sm">{instruction}</span>
+                      </li>
+                    ))}
+                  </ol>
+                </CardContent>
+              </Card>
+
+              {/* Status */}
+              <Card>
+                <CardContent className="pt-6">
+                  <div className="flex items-center justify-center text-center">
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-center">
+                        <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary mr-2"></div>
+                        <span className="text-sm font-medium">Waiting for device connection...</span>
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        The dialog will close automatically when your device connects
+                      </p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
             </div>
-
-            <div className="flex justify-end space-x-2">
-              <Button variant="outline" onClick={() => setStep(1)}>
-                Back
+            <DialogFooter>
+              <Button variant="outline" onClick={handleClose}>
+                Cancel
               </Button>
-              <Button onClick={handleClose}>Done</Button>
-            </div>
-          </div>
+              <Button onClick={handleScreenAdded}>
+                <CheckCircle className="h-4 w-4 mr-2" />
+                Done
+              </Button>
+            </DialogFooter>
+          </>
         )}
       </DialogContent>
     </Dialog>
