@@ -5,108 +5,81 @@ const sql = neon(process.env.DATABASE_URL!)
 
 export async function GET(request: NextRequest, { params }: { params: { deviceId: string } }) {
   try {
-    const deviceId = Number.parseInt(params.deviceId)
+    const { deviceId } = params
 
-    if (isNaN(deviceId)) {
-      return NextResponse.json({ error: "Invalid device ID" }, { status: 400 })
-    }
+    console.log(`Getting playlist for device ${deviceId}`)
 
-    // Get device and its assigned playlist
-    const deviceResult = await sql`
-      SELECT d.id, d.name, d.assigned_playlist_id, d.status
+    // Get device with assigned playlist
+    const [device] = await sql`
+      SELECT d.*, p.id as playlist_id, p.name as playlist_name
       FROM devices d
-      WHERE d.id = ${deviceId}
+      LEFT JOIN playlists p ON d.assigned_playlist_id = p.id
+      WHERE d.id = ${Number.parseInt(deviceId)}
     `
 
-    if (deviceResult.length === 0) {
-      return NextResponse.json({ error: "Device not found" }, { status: 404 })
+    if (!device) {
+      return NextResponse.json({ success: false, message: "Device not found" }, { status: 404 })
     }
 
-    const device = deviceResult[0]
-
-    if (!device.assigned_playlist_id) {
+    if (!device.playlist_id) {
       return NextResponse.json({
-        device: {
-          id: device.id,
-          name: device.name,
-          status: device.status,
-        },
+        success: true,
         playlist: null,
         message: "No playlist assigned",
       })
     }
 
-    // Get playlist with items and media details
-    const playlistResult = await sql`
+    // Get full playlist with items and media
+    const playlist = await sql`
       SELECT 
-        p.id,
-        p.name,
-        p.description,
-        p.loop_playlist,
-        p.shuffle_items,
-        p.transition_duration,
-        p.background_color,
-        p.text_color,
-        JSON_AGG(
-          JSON_BUILD_OBJECT(
+        p.*,
+        json_agg(
+          json_build_object(
             'id', pi.id,
-            'order_index', pi.order_index,
+            'media_id', pi.media_id,
+            'position', pi.position,
             'duration', pi.duration,
-            'media', JSON_BUILD_OBJECT(
-              'id', mf.id,
-              'filename', mf.filename,
-              'file_type', mf.file_type,
-              'file_size', mf.file_size,
-              'url', mf.url,
-              'thumbnail_url', mf.thumbnail_url,
-              'metadata', mf.metadata
+            'transition_type', pi.transition_type,
+            'media', json_build_object(
+              'id', m.id,
+              'filename', m.filename,
+              'original_name', m.original_name,
+              'file_type', m.file_type,
+              'url', m.url,
+              'thumbnail_url', m.thumbnail_url,
+              'mime_type', m.mime_type,
+              'dimensions', m.dimensions,
+              'duration', m.duration,
+              'media_source', m.media_source,
+              'external_url', m.external_url
             )
-          ) ORDER BY pi.order_index
+          ) ORDER BY pi.position
         ) as items
       FROM playlists p
       LEFT JOIN playlist_items pi ON p.id = pi.playlist_id
-      LEFT JOIN media_files mf ON pi.media_id = mf.id
-      WHERE p.id = ${device.assigned_playlist_id}
-      GROUP BY p.id, p.name, p.description, p.loop_playlist, p.shuffle_items, p.transition_duration, p.background_color, p.text_color
+      LEFT JOIN media_files m ON pi.media_id = m.id
+      WHERE p.id = ${device.playlist_id}
+      GROUP BY p.id
     `
 
-    if (playlistResult.length === 0) {
-      return NextResponse.json({ error: "Playlist not found" }, { status: 404 })
+    if (!playlist.length) {
+      return NextResponse.json({ success: false, message: "Playlist not found" }, { status: 404 })
     }
 
-    const playlist = playlistResult[0]
+    const playlistData = playlist[0]
 
-    // Filter out items with null media (deleted media files)
-    const validItems = playlist.items.filter((item: any) => item.media && item.media.id)
+    // Filter out null items (in case of missing media)
+    const validItems = playlistData.items.filter((item: any) => item.media_id !== null)
 
     return NextResponse.json({
-      device: {
-        id: device.id,
-        name: device.name,
-        status: device.status,
-      },
+      success: true,
       playlist: {
-        id: playlist.id,
-        name: playlist.name,
-        description: playlist.description,
-        settings: {
-          loop: playlist.loop_playlist,
-          shuffle: playlist.shuffle_items,
-          transitionDuration: playlist.transition_duration,
-          backgroundColor: playlist.background_color,
-          textColor: playlist.text_color,
-        },
+        ...playlistData,
         items: validItems,
       },
     })
   } catch (error) {
     console.error("Get playlist error:", error)
-    return NextResponse.json(
-      {
-        error: "Failed to get playlist",
-        details: error instanceof Error ? error.message : "Unknown error",
-      },
-      { status: 500 },
-    )
+    return NextResponse.json({ success: false, message: "Failed to get playlist" }, { status: 500 })
   }
 }
