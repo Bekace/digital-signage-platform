@@ -1,50 +1,55 @@
-import { NextResponse } from "next/server"
-import { getCurrentUser } from "@/lib/auth"
-import { getDb } from "@/lib/db"
+import { type NextRequest, NextResponse } from "next/server"
+import { neon } from "@neondatabase/serverless"
+import jwt from "jsonwebtoken"
 
-export async function GET() {
+const sql = neon(process.env.DATABASE_URL!)
+
+export async function GET(request: NextRequest) {
   try {
-    const user = await getCurrentUser()
+    // Get token from cookie
+    const token = request.cookies.get("auth-token")?.value
 
-    if (!user) {
-      return NextResponse.json({ success: false, message: "Not authenticated" }, { status: 401 })
+    if (!token) {
+      return NextResponse.json({ error: "No authentication token" }, { status: 401 })
     }
 
-    const sql = getDb()
+    // Verify JWT token
+    const decoded = jwt.verify(token, process.env.JWT_SECRET!) as { userId: number }
 
-    // Get complete user profile including company info and admin status
+    // Get user profile from database
     const users = await sql`
       SELECT 
-        id, email, first_name, last_name, company, 
-        company_address, company_phone, plan, created_at, is_admin
+        id,
+        email,
+        first_name as "firstName",
+        last_name as "lastName", 
+        company_name as "companyName",
+        is_admin as "isAdmin",
+        created_at as "createdAt"
       FROM users 
-      WHERE id = ${user.id}
-      LIMIT 1
+      WHERE id = ${decoded.userId}
     `
 
     if (users.length === 0) {
-      return NextResponse.json({ success: false, message: "User not found" }, { status: 404 })
+      return NextResponse.json({ error: "User not found" }, { status: 404 })
     }
 
-    const userData = users[0]
+    const user = users[0]
 
     return NextResponse.json({
       success: true,
       user: {
-        id: userData.id,
-        email: userData.email,
-        firstName: userData.first_name,
-        lastName: userData.last_name,
-        company: userData.company,
-        companyAddress: userData.company_address,
-        companyPhone: userData.company_phone,
-        plan: userData.plan,
-        createdAt: userData.created_at,
-        isAdmin: userData.is_admin || false,
+        id: user.id,
+        email: user.email,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        companyName: user.companyName,
+        isAdmin: user.isAdmin,
+        createdAt: user.createdAt,
       },
     })
   } catch (error) {
     console.error("Profile fetch error:", error)
-    return NextResponse.json({ success: false, message: "Internal server error" }, { status: 500 })
+    return NextResponse.json({ error: "Failed to fetch profile" }, { status: 500 })
   }
 }
