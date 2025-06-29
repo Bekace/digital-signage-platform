@@ -6,7 +6,7 @@ const sql = neon(process.env.DATABASE_URL!)
 
 export async function GET(request: NextRequest) {
   try {
-    // Get auth token from cookies
+    // Get token from cookie
     const token = request.cookies.get("auth-token")?.value
 
     if (!token) {
@@ -14,62 +14,35 @@ export async function GET(request: NextRequest) {
     }
 
     // Verify JWT token
-    let userId: number
-    try {
-      const decoded = jwt.verify(token, process.env.JWT_SECRET!) as { userId: number }
-      userId = decoded.userId
-    } catch (error) {
-      return NextResponse.json({ error: "Invalid token" }, { status: 401 })
-    }
+    const decoded = jwt.verify(token, process.env.JWT_SECRET!) as { userId: number }
 
-    // Get all devices for the user
+    // Get user's devices
     const devices = await sql`
       SELECT 
         d.id,
         d.name,
-        d.device_type,
-        d.platform,
+        d.device_type as "deviceType",
         d.capabilities,
-        d.screen_resolution,
+        d.last_seen as "lastSeen",
         d.status,
-        d.last_seen,
-        d.assigned_playlist_id,
-        d.created_at,
-        p.name as playlist_name
+        d.assigned_playlist_id as "assignedPlaylistId",
+        p.name as "playlistName",
+        d.created_at as "createdAt"
       FROM devices d
       LEFT JOIN playlists p ON d.assigned_playlist_id = p.id
-      WHERE d.user_id = ${userId}
+      WHERE d.user_id = ${decoded.userId}
       ORDER BY d.created_at DESC
     `
 
     return NextResponse.json({
       success: true,
       devices: devices.map((device) => ({
-        id: device.id,
-        name: device.name,
-        type: device.device_type,
-        platform: device.platform,
-        capabilities: JSON.parse(device.capabilities || "[]"),
-        screenResolution: device.screen_resolution,
-        status: device.status,
-        lastSeen: device.last_seen,
-        assignedPlaylist: device.assigned_playlist_id
-          ? {
-              id: device.assigned_playlist_id,
-              name: device.playlist_name,
-            }
-          : null,
-        createdAt: device.created_at,
+        ...device,
+        capabilities: device.capabilities ? JSON.parse(device.capabilities) : null,
       })),
     })
   } catch (error) {
-    console.error("Get devices error:", error)
-    return NextResponse.json(
-      {
-        error: "Failed to get devices",
-        details: error instanceof Error ? error.message : "Unknown error",
-      },
-      { status: 500 },
-    )
+    console.error("Error fetching devices:", error)
+    return NextResponse.json({ error: "Failed to fetch devices" }, { status: 500 })
   }
 }

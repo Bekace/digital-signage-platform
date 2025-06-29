@@ -22,7 +22,7 @@ export async function GET(request: NextRequest) {
         id,
         email,
         first_name as "firstName",
-        last_name as "lastName", 
+        last_name as "lastName",
         company_name as "companyName",
         is_admin as "isAdmin",
         created_at as "createdAt"
