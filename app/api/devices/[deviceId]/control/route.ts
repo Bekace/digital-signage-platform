@@ -25,8 +25,7 @@ export async function POST(request: NextRequest, { params }: { params: { deviceI
 
     // Verify device belongs to user and is online
     const deviceCheck = await sql`
-      SELECT device_id, status, assigned_playlist_id 
-      FROM devices 
+      SELECT device_id, status, assigned_playlist_id FROM devices 
       WHERE device_id = ${deviceId} AND user_id = ${userId}
     `
 
@@ -37,13 +36,13 @@ export async function POST(request: NextRequest, { params }: { params: { deviceI
 
     const device = deviceCheck[0]
 
-    if (device.status !== "online") {
+    if (device.status === "offline") {
       console.log("❌ [DEVICE CONTROL] Device is offline")
       return NextResponse.json({ success: false, message: "Device is offline" }, { status: 400 })
     }
 
-    if (!device.assigned_playlist_id) {
-      console.log("❌ [DEVICE CONTROL] No playlist assigned to device")
+    if (!device.assigned_playlist_id && action !== "stop") {
+      console.log("❌ [DEVICE CONTROL] No playlist assigned")
       return NextResponse.json({ success: false, message: "No playlist assigned to device" }, { status: 400 })
     }
 
@@ -55,25 +54,26 @@ export async function POST(request: NextRequest, { params }: { params: { deviceI
       restart: "playing",
     }
 
-    // Update device playlist status
+    // Update device control status
     await sql`
       UPDATE devices 
-      SET playlist_status = ${statusMap[action as keyof typeof statusMap]},
+      SET playlist_status = ${statusMap[action]},
           last_control_action = ${action},
           last_control_time = NOW(),
           updated_at = NOW()
       WHERE device_id = ${deviceId} AND user_id = ${userId}
     `
 
-    // In a real implementation, you would also send a command to the actual device
-    // For now, we'll just update the database status
     console.log(`✅ [DEVICE CONTROL] Device ${action} command sent successfully`)
+
+    // In a real implementation, you would send the control command to the actual device
+    // For now, we just update the database status
 
     return NextResponse.json({
       success: true,
       message: `Device ${action} command sent successfully`,
       action: action,
-      status: statusMap[action as keyof typeof statusMap],
+      status: statusMap[action],
     })
   } catch (error) {
     console.error("❌ [DEVICE CONTROL] Error:", error)
