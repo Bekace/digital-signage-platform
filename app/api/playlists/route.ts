@@ -16,7 +16,7 @@ export async function GET(request: NextRequest) {
     // Verify JWT token
     const decoded = jwt.verify(token, process.env.JWT_SECRET!) as { userId: number }
 
-    // Get user's playlists
+    // Get playlists for this user
     const playlists = await sql`
       SELECT 
         id,
@@ -28,7 +28,7 @@ export async function GET(request: NextRequest) {
         created_at as "createdAt",
         updated_at as "updatedAt"
       FROM playlists 
-      WHERE user_id = ${decoded.userId} AND deleted_at IS NULL
+      WHERE user_id = ${decoded.userId}
       ORDER BY created_at DESC
     `
 
@@ -54,22 +54,23 @@ export async function POST(request: NextRequest) {
     // Verify JWT token
     const decoded = jwt.verify(token, process.env.JWT_SECRET!) as { userId: number }
 
-    const { name, description } = await request.json()
+    const body = await request.json()
+    const { name, description } = body
 
     if (!name) {
       return NextResponse.json({ error: "Playlist name is required" }, { status: 400 })
     }
 
     // Create new playlist
-    const newPlaylist = await sql`
-      INSERT INTO playlists (user_id, name, description, is_active, created_at, updated_at)
-      VALUES (${decoded.userId}, ${name}, ${description || ""}, true, NOW(), NOW())
-      RETURNING id, name, description, is_active as "isActive", created_at as "createdAt"
+    const result = await sql`
+      INSERT INTO playlists (user_id, name, description, is_active, loop_playlist, shuffle_items)
+      VALUES (${decoded.userId}, ${name}, ${description || ""}, true, true, false)
+      RETURNING id, name, description, is_active as "isActive", loop_playlist as "loopPlaylist", shuffle_items as "shuffleItems", created_at as "createdAt"
     `
 
     return NextResponse.json({
       success: true,
-      playlist: newPlaylist[0],
+      playlist: result[0],
     })
   } catch (error) {
     console.error("Playlist creation error:", error)

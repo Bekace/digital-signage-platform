@@ -34,23 +34,21 @@ export default function DashboardPage() {
   useEffect(() => {
     const fetchDashboardData = async () => {
       try {
-        // Fetch devices count
-        const devicesResponse = await fetch("/api/devices")
+        const [devicesResponse, mediaResponse, playlistsResponse] = await Promise.all([
+          fetch("/api/devices"),
+          fetch("/api/media"),
+          fetch("/api/playlists"),
+        ])
+
         const devicesData = await devicesResponse.json()
-        const devicesCount = devicesData.success ? devicesData.devices.length : 0
-
-        // Fetch media count
-        const mediaResponse = await fetch("/api/media")
         const mediaData = await mediaResponse.json()
-        const mediaCount = mediaData.success ? mediaData.media.length : 0
-
-        // Fetch playlists count
-        const playlistsResponse = await fetch("/api/playlists")
         const playlistsData = await playlistsResponse.json()
+
+        const devicesCount = devicesData.success ? devicesData.devices.length : 0
+        const mediaCount = mediaData.success ? mediaData.media.length : 0
         const playlistsCount = playlistsData.success ? playlistsData.playlists.length : 0
 
-        // Calculate storage (rough estimate)
-        const storageUsed = mediaCount * 2.5 // Assume average 2.5MB per file
+        const storageUsed = mediaCount * 2.5
         const storageString =
           storageUsed > 1024 ? `${(storageUsed / 1024).toFixed(1)} GB` : `${storageUsed.toFixed(0)} MB`
 
@@ -61,25 +59,24 @@ export default function DashboardPage() {
           storage: storageString,
         })
 
-        // Mock recent activity
         setRecentActivity([
           {
             id: 1,
             type: "device",
-            description: "New device connected",
-            timestamp: "2 minutes ago",
+            description: "System initialized successfully",
+            timestamp: "Just now",
           },
           {
             id: 2,
             type: "media",
-            description: "Video uploaded: presentation.mp4",
-            timestamp: "15 minutes ago",
+            description: `${mediaCount} media files available`,
+            timestamp: "1 minute ago",
           },
           {
             id: 3,
             type: "playlist",
-            description: "Playlist 'Morning Show' updated",
-            timestamp: "1 hour ago",
+            description: `${playlistsCount} playlists created`,
+            timestamp: "2 minutes ago",
           },
         ])
       } catch (error) {
@@ -98,9 +95,8 @@ export default function DashboardPage() {
         <div className="space-y-6">
           <div>
             <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
-            <p className="text-gray-600">Welcome to your digital signage control center</p>
+            <p className="text-gray-600">Loading your digital signage control center...</p>
           </div>
-
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
             {[1, 2, 3, 4].map((i) => (
               <Card key={i}>
@@ -122,13 +118,11 @@ export default function DashboardPage() {
   return (
     <DashboardLayout>
       <div className="space-y-6">
-        {/* Header */}
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
           <p className="text-gray-600">Welcome to your digital signage control center</p>
         </div>
 
-        {/* Stats Cards */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -175,7 +169,6 @@ export default function DashboardPage() {
           </Card>
         </div>
 
-        {/* Quick Actions */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           <Card>
             <CardHeader>
@@ -223,7 +216,6 @@ export default function DashboardPage() {
           </Card>
         </div>
 
-        {/* Recent Activity */}
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">

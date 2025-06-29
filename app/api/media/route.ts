@@ -16,7 +16,7 @@ export async function GET(request: NextRequest) {
     // Verify JWT token
     const decoded = jwt.verify(token, process.env.JWT_SECRET!) as { userId: number }
 
-    // Get user's media files
+    // Get media files for this user
     const media = await sql`
       SELECT 
         id,
@@ -26,10 +26,10 @@ export async function GET(request: NextRequest) {
         file_size as "fileSize",
         url,
         thumbnail_url as "thumbnailUrl",
-        duration,
         created_at as "createdAt"
       FROM media_files 
-      WHERE user_id = ${decoded.userId} AND deleted_at IS NULL
+      WHERE user_id = ${decoded.userId}
+      AND deleted_at IS NULL
       ORDER BY created_at DESC
     `
 

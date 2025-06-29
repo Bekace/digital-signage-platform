@@ -1,7 +1,6 @@
 "use client"
 
 import type React from "react"
-
 import { useState, useEffect } from "react"
 import { Home, Monitor, ImageIcon, Play, Settings, Shield, Menu, DollarSign, Users, Tag, Bug } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -38,7 +37,6 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false)
 
   useEffect(() => {
-    // Check if user is admin
     const checkAdminStatus = async () => {
       try {
         const response = await fetch("/api/user/profile")
@@ -53,8 +51,6 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
 
     checkAdminStatus()
   }, [])
-
-  const allNavigation = [...navigation, ...(isAdmin ? adminNavigation : [])]
 
   return (
     <div className="flex h-screen bg-gray-100">
@@ -124,7 +120,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
             </div>
             <Separator />
             <nav className="flex-1 px-2 py-4 space-y-1">
-              {allNavigation.map((item) => {
+              {navigation.map((item) => {
                 const isActive = pathname === item.href
                 return (
                   <Link
@@ -140,6 +136,31 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
                   </Link>
                 )
               })}
+
+              {isAdmin && (
+                <>
+                  <Separator className="my-4" />
+                  <div className="px-2 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                    Administration
+                  </div>
+                  {adminNavigation.map((item) => {
+                    const isActive = pathname === item.href
+                    return (
+                      <Link
+                        key={item.name}
+                        href={item.href}
+                        onClick={() => setSidebarOpen(false)}
+                        className={`group flex items-center px-2 py-2 text-sm font-medium rounded-md ${
+                          isActive ? "bg-gray-100 text-gray-900" : "text-gray-600 hover:bg-gray-50 hover:text-gray-900"
+                        }`}
+                      >
+                        <item.icon className="mr-3 h-5 w-5" />
+                        {item.name}
+                      </Link>
+                    )
+                  })}
+                </>
+              )}
             </nav>
           </div>
         </SheetContent>

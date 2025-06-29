@@ -6,17 +6,14 @@ const sql = neon(process.env.DATABASE_URL!)
 
 export async function GET(request: NextRequest) {
   try {
-    // Get token from cookie
     const token = request.cookies.get("auth-token")?.value
 
     if (!token) {
       return NextResponse.json({ error: "No authentication token" }, { status: 401 })
     }
 
-    // Verify JWT token
     const decoded = jwt.verify(token, process.env.JWT_SECRET!) as { userId: number }
 
-    // Get user profile from database
     const users = await sql`
       SELECT 
         id,

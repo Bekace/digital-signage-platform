@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { LogOut, UserIcon, Settings, ChevronDown } from "lucide-react"
+import { LogOut, User, Settings, ChevronDown } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
   DropdownMenu,
@@ -55,6 +55,7 @@ export function DashboardHeader() {
 
       if (response.ok) {
         router.push("/login")
+        router.refresh()
       }
     } catch (error) {
       console.error("Logout error:", error)
@@ -86,8 +87,8 @@ export function DashboardHeader() {
   }
 
   return (
-    <header className="bg-white border-b border-gray-200 px-4 py-3 md:px-4 pr-16 md:pr-4">
-      <div className="flex items-center justify-between md:justify-between">
+    <header className="bg-white border-b border-gray-200 px-4 py-3">
+      <div className="flex items-center justify-between">
         <div className="flex-1">
           <h2 className="text-lg font-semibold text-gray-900">{user?.companyName || "Digital Signage Platform"}</h2>
         </div>
@@ -124,7 +125,7 @@ export function DashboardHeader() {
               <DropdownMenuSeparator />
               <DropdownMenuItem asChild>
                 <Link href="/dashboard/settings" className="flex items-center">
-                  <UserIcon className="mr-2 h-4 w-4" />
+                  <User className="mr-2 h-4 w-4" />
                   Profile Settings
                 </Link>
               </DropdownMenuItem>
@@ -135,7 +136,10 @@ export function DashboardHeader() {
                 </Link>
               </DropdownMenuItem>
               <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={handleLogout} className="text-red-600 focus:text-red-600 focus:bg-red-50">
+              <DropdownMenuItem
+                onClick={handleLogout}
+                className="text-red-600 focus:text-red-600 focus:bg-red-50 cursor-pointer"
+              >
                 <LogOut className="mr-2 h-4 w-4" />
                 Sign out
               </DropdownMenuItem>
