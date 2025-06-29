@@ -106,7 +106,7 @@ export default function DeviceSimulator() {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          pairingCode,
+          deviceCode: pairingCode, // Changed from pairingCode to deviceCode
           deviceType: devices.find((d) => d.id === deviceId)?.type,
           platform: "simulator",
           deviceInfo: {
@@ -133,7 +133,7 @@ export default function DeviceSimulator() {
         setPairingCode("")
         toast.success("Device connected successfully!")
       } else {
-        toast.error(data.error || "Failed to connect device")
+        toast.error(data.message || "Failed to connect device") // Changed from data.error to data.message
       }
     } catch (error) {
       console.error("Connection error:", error)
