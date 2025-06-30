@@ -1,106 +1,83 @@
--- Add device playlist management columns
--- This script safely adds columns for playlist assignment and control
-
-DO $$
+-- Add missing columns to devices table if they don't exist
+DO $$ 
 BEGIN
-    -- Add assigned_playlist_id column if it doesn't exist
-    IF NOT EXISTS (SELECT 1 FROM information_schema.columns 
-                   WHERE table_name = 'devices' AND column_name = 'assigned_playlist_id') THEN
-        ALTER TABLE devices ADD COLUMN assigned_playlist_id INTEGER REFERENCES playlists(id) ON DELETE SET NULL;
-        RAISE NOTICE 'Added assigned_playlist_id column to devices table';
+    -- Add assigned_playlist_id column
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'devices' AND column_name = 'assigned_playlist_id') THEN
+        ALTER TABLE devices ADD COLUMN assigned_playlist_id INTEGER REFERENCES playlists(id);
+        RAISE NOTICE 'Added assigned_playlist_id column';
     ELSE
-        RAISE NOTICE 'assigned_playlist_id column already exists in devices table';
+        RAISE NOTICE 'assigned_playlist_id column already exists';
     END IF;
-
-    -- Add playlist_status column if it doesn't exist
-    IF NOT EXISTS (SELECT 1 FROM information_schema.columns 
-                   WHERE table_name = 'devices' AND column_name = 'playlist_status') THEN
-        ALTER TABLE devices ADD COLUMN playlist_status VARCHAR(20) DEFAULT 'none';
-        RAISE NOTICE 'Added playlist_status column to devices table';
+    
+    -- Add playlist_status column
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'devices' AND column_name = 'playlist_status') THEN
+        ALTER TABLE devices ADD COLUMN playlist_status VARCHAR(50) DEFAULT 'none';
+        RAISE NOTICE 'Added playlist_status column';
     ELSE
-        RAISE NOTICE 'playlist_status column already exists in devices table';
+        RAISE NOTICE 'playlist_status column already exists';
     END IF;
-
-    -- Add last_control_action column if it doesn't exist
-    IF NOT EXISTS (SELECT 1 FROM information_schema.columns 
-                   WHERE table_name = 'devices' AND column_name = 'last_control_action') THEN
+    
+    -- Add last_control_action column
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'devices' AND column_name = 'last_control_action') THEN
         ALTER TABLE devices ADD COLUMN last_control_action VARCHAR(50);
-        RAISE NOTICE 'Added last_control_action column to devices table';
+        RAISE NOTICE 'Added last_control_action column';
     ELSE
-        RAISE NOTICE 'last_control_action column already exists in devices table';
+        RAISE NOTICE 'last_control_action column already exists';
     END IF;
-
-    -- Add last_control_time column if it doesn't exist
-    IF NOT EXISTS (SELECT 1 FROM information_schema.columns 
-                   WHERE table_name = 'devices' AND column_name = 'last_control_time') THEN
+    
+    -- Add last_control_time column
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'devices' AND column_name = 'last_control_time') THEN
         ALTER TABLE devices ADD COLUMN last_control_time TIMESTAMP;
-        RAISE NOTICE 'Added last_control_time column to devices table';
+        RAISE NOTICE 'Added last_control_time column';
     ELSE
-        RAISE NOTICE 'last_control_time column already exists in devices table';
+        RAISE NOTICE 'last_control_time column already exists';
     END IF;
-
+    
     -- Add updated_at column if it doesn't exist
-    IF NOT EXISTS (SELECT 1 FROM information_schema.columns 
-                   WHERE table_name = 'devices' AND column_name = 'updated_at') THEN
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'devices' AND column_name = 'updated_at') THEN
         ALTER TABLE devices ADD COLUMN updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;
-        RAISE NOTICE 'Added updated_at column to devices table';
+        RAISE NOTICE 'Added updated_at column';
     ELSE
-        RAISE NOTICE 'updated_at column already exists in devices table';
+        RAISE NOTICE 'updated_at column already exists';
     END IF;
-
-    -- Create index on assigned_playlist_id if it doesn't exist
-    IF NOT EXISTS (SELECT 1 FROM pg_indexes 
-                   WHERE tablename = 'devices' AND indexname = 'idx_devices_assigned_playlist') THEN
-        CREATE INDEX idx_devices_assigned_playlist ON devices(assigned_playlist_id);
-        RAISE NOTICE 'Created index idx_devices_assigned_playlist';
-    ELSE
-        RAISE NOTICE 'Index idx_devices_assigned_playlist already exists';
-    END IF;
-
-    -- Create index on playlist_status if it doesn't exist
-    IF NOT EXISTS (SELECT 1 FROM pg_indexes 
-                   WHERE tablename = 'devices' AND indexname = 'idx_devices_playlist_status') THEN
-        CREATE INDEX idx_devices_playlist_status ON devices(playlist_status);
-        RAISE NOTICE 'Created index idx_devices_playlist_status';
-    ELSE
-        RAISE NOTICE 'Index idx_devices_playlist_status already exists';
-    END IF;
-
-    -- Create index on updated_at if it doesn't exist
-    IF NOT EXISTS (SELECT 1 FROM pg_indexes 
-                   WHERE tablename = 'devices' AND indexname = 'idx_devices_updated_at') THEN
-        CREATE INDEX idx_devices_updated_at ON devices(updated_at);
-        RAISE NOTICE 'Created index idx_devices_updated_at';
-    ELSE
-        RAISE NOTICE 'Index idx_devices_updated_at already exists';
-    END IF;
-
-    -- Update existing devices to have default playlist status
-    UPDATE devices SET playlist_status = 'none', updated_at = CURRENT_TIMESTAMP WHERE playlist_status IS NULL;
-    RAISE NOTICE 'Updated existing devices with default playlist_status';
-
-    -- Add some sample data if devices table is empty
-    IF NOT EXISTS (SELECT 1 FROM devices) THEN
-        INSERT INTO devices (name, device_type, user_id, status, created_at, updated_at)
-        SELECT 'Sample Device', 'web', 1, 'offline', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
-        WHERE NOT EXISTS (SELECT 1 FROM devices LIMIT 1);
-        
-        RAISE NOTICE 'Added sample devices';
-    END IF;
-
+    
+    -- Update existing devices to have default values
+    UPDATE devices SET 
+        playlist_status = 'none' 
+    WHERE playlist_status IS NULL;
+    
+    UPDATE devices SET 
+        updated_at = CURRENT_TIMESTAMP 
+    WHERE updated_at IS NULL;
+    
+    -- Create indexes for better performance
+    CREATE INDEX IF NOT EXISTS idx_devices_user_id ON devices(user_id);
+    CREATE INDEX IF NOT EXISTS idx_devices_assigned_playlist ON devices(assigned_playlist_id);
+    CREATE INDEX IF NOT EXISTS idx_devices_status ON devices(status);
+    
+    RAISE NOTICE 'Migration completed successfully';
+    
 END $$;
 
--- Show final table structure
-SELECT 'Device table structure:' as info;
+-- Insert sample devices if table is empty
+INSERT INTO devices (user_id, name, device_type, status, playlist_status, created_at, updated_at)
+SELECT 1, 'Sample Fire TV', 'fire_tv', 'offline', 'none', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+WHERE NOT EXISTS (SELECT 1 FROM devices LIMIT 1);
+
+INSERT INTO devices (user_id, name, device_type, status, playlist_status, created_at, updated_at)
+SELECT 1, 'Sample Web Browser', 'web_browser', 'offline', 'none', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+WHERE NOT EXISTS (SELECT 1 FROM devices WHERE name = 'Sample Web Browser');
+
+-- Show results
+SELECT 'Device table structure after migration:' as info;
 SELECT column_name, data_type, is_nullable, column_default
 FROM information_schema.columns 
 WHERE table_name = 'devices' 
 ORDER BY ordinal_position;
 
--- Show sample data
-SELECT 'Sample devices:' as info;
+SELECT 'Sample devices created:' as info;
 SELECT id, name, device_type, status, playlist_status, user_id 
 FROM devices 
 LIMIT 5;
 
-SELECT 'Device migration completed successfully' as result;
+SELECT 'Migration completed successfully!' as result;
