@@ -60,3 +60,10 @@ FROM devices d
 LEFT JOIN device_pairing_codes dpc ON d.id = dpc.device_id
 WHERE d.user_id IS NOT NULL
 ORDER BY d.created_at DESC;
+
+SELECT 'Users table' as step;
+
+-- Show users for reference
+SELECT id, email, first_name, last_name, created_at
+FROM users
+ORDER BY created_at DESC;

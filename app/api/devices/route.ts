@@ -6,12 +6,15 @@ const sql = neon(process.env.DATABASE_URL!)
 
 export async function GET(request: NextRequest) {
   try {
+    console.log("📱 [DEVICES API] Starting GET request")
+
     const user = await getCurrentUser(request)
     if (!user) {
+      console.log("❌ [DEVICES API] No user found - unauthorized")
       return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 })
     }
 
-    console.log(`📱 [DEVICES API] Fetching devices for user ${user.id}`)
+    console.log(`📱 [DEVICES API] Fetching devices for user ${user.id} (${user.email})`)
 
     // Get devices with playlist information
     const devices = await sql`
@@ -41,7 +44,7 @@ export async function GET(request: NextRequest) {
       ORDER BY d.created_at DESC
     `
 
-    console.log(`📱 [DEVICES API] Raw devices query result:`, devices)
+    console.log(`📱 [DEVICES API] Raw devices query result (${devices.length} devices):`, devices)
 
     // Calculate statistics
     const stats = {
@@ -73,7 +76,8 @@ export async function GET(request: NextRequest) {
         : null,
     }))
 
-    console.log(`✅ [DEVICES API] Formatted ${formattedDevices.length} devices:`, formattedDevices)
+    console.log(`✅ [DEVICES API] Returning ${formattedDevices.length} formatted devices:`, formattedDevices)
+    console.log(`📊 [DEVICES API] Stats:`, stats)
 
     return NextResponse.json({
       success: true,

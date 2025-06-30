@@ -44,10 +44,21 @@ export function extractTokenFromRequest(request: Request): string | null {
   return authHeader.substring(7)
 }
 
-export async function getCurrentUser(): Promise<User | null> {
+export async function getCurrentUser(request?: Request): Promise<User | null> {
   try {
-    const cookieStore = await cookies()
-    const token = cookieStore.get("auth-token")?.value
+    let token: string | null = null
+
+    if (request) {
+      // For API routes - get token from Authorization header
+      const authHeader = request.headers.get("authorization")
+      if (authHeader?.startsWith("Bearer ")) {
+        token = authHeader.substring(7)
+      }
+    } else {
+      // For server components - get token from cookies
+      const cookieStore = await cookies()
+      token = cookieStore.get("auth-token")?.value
+    }
 
     if (!token) {
       console.log("No auth token found")
@@ -84,8 +95,8 @@ export async function getCurrentUser(): Promise<User | null> {
   }
 }
 
-export async function requireAuth(): Promise<User> {
-  const user = await getCurrentUser()
+export async function requireAuth(request?: Request): Promise<User> {
+  const user = await getCurrentUser(request)
   if (!user) {
     throw new Error("Authentication required")
   }
