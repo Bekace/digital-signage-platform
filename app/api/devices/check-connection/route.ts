@@ -7,49 +7,83 @@ const sql = neon(process.env.DATABASE_URL!)
 
 export async function POST(request: NextRequest) {
   try {
-    const { pairingCode } = await request.json()
+    console.log("🔗 [CHECK CONNECTION] Starting connection check...")
+
+    const body = await request.json()
+    const { pairingCode } = body
+
+    console.log("🔗 [CHECK CONNECTION] Checking code:", pairingCode)
 
     if (!pairingCode) {
-      return NextResponse.json({ success: false, error: "Pairing code is required" }, { status: 400 })
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Pairing code is required",
+        },
+        { status: 400 },
+      )
     }
 
-    console.log("🔍 [CHECK CONNECTION] Checking for code:", pairingCode)
-
-    // Check if device has been registered with this pairing code
-    const devices = await sql`
-      SELECT d.*, dpc.screen_name, dpc.device_type as pairing_device_type
-      FROM devices d
-      JOIN device_pairing_codes dpc ON d.pairing_code_id = dpc.id
-      WHERE dpc.code = ${pairingCode.toUpperCase()}
+    // Check if a device has registered with this pairing code
+    const deviceCheck = await sql`
+      SELECT 
+        dpc.id as pairing_id,
+        dpc.code,
+        dpc.screen_name,
+        dpc.device_type,
+        dpc.used_at,
+        dpc.completed_at,
+        d.id as device_id,
+        d.name as device_name,
+        d.status
+      FROM device_pairing_codes dpc
+      LEFT JOIN devices d ON d.id = dpc.device_id
+      WHERE dpc.code = ${pairingCode}
       AND dpc.expires_at > NOW()
-      ORDER BY d.created_at DESC
+      ORDER BY dpc.created_at DESC
       LIMIT 1
     `
 
-    if (devices.length > 0) {
-      const device = devices[0]
-      console.log("🔍 [CHECK CONNECTION] Found connected device:", device.id)
+    console.log("🔗 [CHECK CONNECTION] Device check result:", deviceCheck)
 
+    if (deviceCheck.length === 0) {
       return NextResponse.json({
-        success: true,
-        connected: true,
-        device: {
-          id: device.id,
-          name: device.screen_name,
-          deviceType: device.pairing_device_type,
-          status: device.status,
-          connectedAt: device.created_at,
-        },
+        success: false,
+        error: "Invalid or expired pairing code",
       })
     }
 
-    console.log("🔍 [CHECK CONNECTION] No device found for code:", pairingCode)
+    const pairingData = deviceCheck[0]
+
+    // Check if device is connected (has used_at but not completed_at)
+    const isConnected = pairingData.used_at && !pairingData.completed_at
+    const isCompleted = pairingData.completed_at
+
+    console.log("🔗 [CHECK CONNECTION] Status:", {
+      isConnected,
+      isCompleted,
+      used_at: pairingData.used_at,
+      completed_at: pairingData.completed_at,
+      device_id: pairingData.device_id,
+    })
+
     return NextResponse.json({
       success: true,
-      connected: false,
+      isConnected,
+      isCompleted,
+      deviceInfo: pairingData.device_id
+        ? {
+            id: pairingData.device_id,
+            name: pairingData.device_name,
+            type: pairingData.device_type,
+            status: pairingData.status,
+          }
+        : null,
+      screenName: pairingData.screen_name,
+      deviceType: pairingData.device_type,
     })
   } catch (error) {
-    console.error("🔍 [CHECK CONNECTION] Error:", error)
+    console.error("🔗 [CHECK CONNECTION] Error:", error)
     return NextResponse.json(
       {
         success: false,

@@ -1,6 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server"
-import { getCurrentUser } from "@/lib/auth"
 import { neon } from "@neondatabase/serverless"
+import { getCurrentUser } from "@/lib/auth"
 
 export const dynamic = "force-dynamic"
 
@@ -8,18 +8,18 @@ const sql = neon(process.env.DATABASE_URL!)
 
 export async function POST(request: NextRequest) {
   try {
-    console.log("📱 [CREATE SCREEN] Starting screen creation...")
+    console.log("🔗 [CREATE SCREEN] Starting screen creation...")
 
     const user = await getCurrentUser(request)
     if (!user) {
-      console.log("📱 [CREATE SCREEN] No authenticated user found")
+      console.log("🔗 [CREATE SCREEN] No authenticated user found")
       return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 })
     }
 
     const body = await request.json()
     const { pairingCode, screenName } = body
 
-    console.log("📱 [CREATE SCREEN] Request data:", { pairingCode, screenName, userId: user.id })
+    console.log("🔗 [CREATE SCREEN] Request:", { pairingCode, screenName, userId: user.id })
 
     if (!pairingCode || !screenName) {
       return NextResponse.json(
@@ -31,65 +31,84 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Find the device that was registered with this pairing code
-    const devices = await sql`
-      SELECT d.*, dpc.screen_name as original_screen_name, dpc.device_type
-      FROM devices d
-      JOIN device_pairing_codes dpc ON d.pairing_code_id = dpc.id
-      WHERE dpc.code = ${pairingCode.toUpperCase()}
-      AND dpc.user_id = ${user.id}
+    // Find the pairing code and associated device
+    const pairingData = await sql`
+      SELECT 
+        dpc.id as pairing_id,
+        dpc.code,
+        dpc.device_id,
+        dpc.user_id as pairing_user_id,
+        dpc.used_at,
+        dpc.completed_at,
+        d.id as device_id,
+        d.name as device_name,
+        d.device_type,
+        d.user_id as device_user_id
+      FROM device_pairing_codes dpc
+      LEFT JOIN devices d ON d.id = dpc.device_id
+      WHERE dpc.code = ${pairingCode}
       AND dpc.expires_at > NOW()
-      ORDER BY d.created_at DESC
+      ORDER BY dpc.created_at DESC
       LIMIT 1
     `
 
-    if (devices.length === 0) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: "No device found with this pairing code or code has expired",
-        },
-        { status: 404 },
-      )
+    if (pairingData.length === 0) {
+      return NextResponse.json({
+        success: false,
+        error: "Invalid or expired pairing code",
+      })
     }
 
-    const device = devices[0]
+    const pairing = pairingData[0]
 
-    // Update the device with the final screen name and link to user
+    if (!pairing.device_id) {
+      return NextResponse.json({
+        success: false,
+        error: "No device connected with this pairing code",
+      })
+    }
+
+    if (pairing.completed_at) {
+      return NextResponse.json({
+        success: false,
+        error: "This pairing code has already been used",
+      })
+    }
+
+    // Update the device to assign it to the current user and set the screen name
     const updatedDevice = await sql`
       UPDATE devices 
       SET 
-        name = ${screenName},
         user_id = ${user.id},
-        status = 'active',
-        updated_at = NOW()
-      WHERE id = ${device.id}
-      RETURNING *
+        name = ${screenName},
+        status = 'idle'
+      WHERE id = ${pairing.device_id}
+      RETURNING id, name, device_type, status, created_at
     `
 
-    // Mark the pairing code as completed
+    // Mark the pairing as completed
     await sql`
       UPDATE device_pairing_codes 
-      SET completed_at = NOW()
-      WHERE code = ${pairingCode.toUpperCase()}
-      AND user_id = ${user.id}
+      SET 
+        completed_at = NOW(),
+        user_id = ${user.id}
+      WHERE id = ${pairing.pairing_id}
     `
 
-    console.log("📱 [CREATE SCREEN] Screen created successfully:", updatedDevice[0])
+    console.log("🔗 [CREATE SCREEN] Screen created successfully:", updatedDevice[0])
 
     return NextResponse.json({
       success: true,
       screen: {
         id: updatedDevice[0].id,
         name: updatedDevice[0].name,
-        deviceType: device.device_type,
+        type: updatedDevice[0].device_type,
         status: updatedDevice[0].status,
         createdAt: updatedDevice[0].created_at,
-        lastSeen: updatedDevice[0].last_heartbeat,
       },
     })
   } catch (error) {
-    console.error("📱 [CREATE SCREEN] Error:", error)
+    console.error("🔗 [CREATE SCREEN] Error:", error)
     return NextResponse.json(
       {
         success: false,
