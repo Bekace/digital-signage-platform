@@ -6,7 +6,7 @@ BEGIN
     -- Add assigned_playlist_id column if it doesn't exist
     IF NOT EXISTS (SELECT 1 FROM information_schema.columns 
                    WHERE table_name = 'devices' AND column_name = 'assigned_playlist_id') THEN
-        ALTER TABLE devices ADD COLUMN assigned_playlist_id INTEGER;
+        ALTER TABLE devices ADD COLUMN assigned_playlist_id INTEGER REFERENCES playlists(id) ON DELETE SET NULL;
         RAISE NOTICE 'Added assigned_playlist_id column to devices table';
     ELSE
         RAISE NOTICE 'assigned_playlist_id column already exists in devices table';
@@ -15,7 +15,7 @@ BEGIN
     -- Add playlist_status column if it doesn't exist
     IF NOT EXISTS (SELECT 1 FROM information_schema.columns 
                    WHERE table_name = 'devices' AND column_name = 'playlist_status') THEN
-        ALTER TABLE devices ADD COLUMN playlist_status VARCHAR(20) DEFAULT 'none';
+        ALTER TABLE devices ADD COLUMN playlist_status VARCHAR(50) DEFAULT 'none';
         RAISE NOTICE 'Added playlist_status column to devices table';
     ELSE
         RAISE NOTICE 'playlist_status column already exists in devices table';
@@ -24,7 +24,7 @@ BEGIN
     -- Add last_control_action column if it doesn't exist
     IF NOT EXISTS (SELECT 1 FROM information_schema.columns 
                    WHERE table_name = 'devices' AND column_name = 'last_control_action') THEN
-        ALTER TABLE devices ADD COLUMN last_control_action VARCHAR(20);
+        ALTER TABLE devices ADD COLUMN last_control_action VARCHAR(100);
         RAISE NOTICE 'Added last_control_action column to devices table';
     ELSE
         RAISE NOTICE 'last_control_action column already exists in devices table';
@@ -48,16 +48,6 @@ BEGIN
         RAISE NOTICE 'updated_at column already exists in devices table';
     END IF;
 
-    -- Add foreign key constraint if it doesn't exist
-    IF NOT EXISTS (SELECT 1 FROM information_schema.table_constraints 
-                   WHERE table_name = 'devices' AND constraint_name = 'fk_devices_playlist') THEN
-        ALTER TABLE devices ADD CONSTRAINT fk_devices_playlist 
-        FOREIGN KEY (assigned_playlist_id) REFERENCES playlists(id) ON DELETE SET NULL;
-        RAISE NOTICE 'Added foreign key constraint fk_devices_playlist';
-    ELSE
-        RAISE NOTICE 'Foreign key constraint fk_devices_playlist already exists';
-    END IF;
-
     -- Create index on assigned_playlist_id if it doesn't exist
     IF NOT EXISTS (SELECT 1 FROM pg_indexes 
                    WHERE tablename = 'devices' AND indexname = 'idx_devices_assigned_playlist') THEN
@@ -76,9 +66,24 @@ BEGIN
         RAISE NOTICE 'Index idx_devices_playlist_status already exists';
     END IF;
 
-    -- Update existing devices to have default playlist_status
+    -- Update existing devices to have default playlist status
     UPDATE devices SET playlist_status = 'none' WHERE playlist_status IS NULL;
     RAISE NOTICE 'Updated existing devices with default playlist_status';
+
+    -- Add some sample data if devices table is empty
+    IF NOT EXISTS (SELECT 1 FROM devices) THEN
+        INSERT INTO devices (name, device_type, user_id, status, playlist_status, created_at, updated_at)
+        SELECT 'Sample Screen 1', 'web_browser', u.id, 'offline', 'none', NOW(), NOW()
+        FROM users u
+        WHERE NOT EXISTS (SELECT 1 FROM devices WHERE user_id = u.id)
+        LIMIT 1;
+
+        INSERT INTO devices (name, device_type, user_id, status, playlist_status, created_at, updated_at)
+        SELECT 'Sample Screen 2', 'fire_tv', u.id, 'offline', 'none', NOW(), NOW()
+        FROM users u
+        WHERE NOT EXISTS (SELECT 1 FROM devices WHERE user_id = u.id AND name != 'Sample Screen 1')
+        LIMIT 1;
+    END IF;
 
 END $$;
 

@@ -6,7 +6,7 @@ const sql = neon(process.env.DATABASE_URL!)
 
 export async function GET(request: NextRequest) {
   try {
-    console.log("🔍 [DEBUG SCREENS FLOW] Starting comprehensive debug...")
+    console.log("🔍 [DEBUG SCREENS] Starting debug flow...")
 
     // Environment check
     const environment = {
@@ -16,30 +16,23 @@ export async function GET(request: NextRequest) {
     }
 
     // Request analysis
-    const allHeaders: Record<string, string> = {}
-    request.headers.forEach((value, key) => {
-      allHeaders[key] = value
-    })
-
+    const headers = Object.fromEntries(request.headers.entries())
+    const authHeader = request.headers.get("authorization")
     const requestInfo = {
-      hasAuthHeader: !!request.headers.get("authorization"),
-      authHeaderPreview: request.headers.get("authorization")?.substring(0, 30) || null,
-      allHeaders,
+      hasAuthHeader: !!authHeader,
+      authHeaderPreview: authHeader ? `${authHeader.substring(0, 30)}...` : null,
+      allHeaders: headers,
     }
 
     // Authentication test
     let authResult = "Failed"
-    let userInfo = null
+    let user = null
     try {
-      const user = await getCurrentUser(request)
+      user = await getCurrentUser(request)
       if (user) {
         authResult = `Success: ${user.email}`
-        userInfo = {
-          id: user.id,
-          email: user.email,
-          name: `${user.first_name} ${user.last_name}`,
-          plan: user.plan,
-        }
+      } else {
+        authResult = "Failed: No user returned"
       }
     } catch (error) {
       authResult = `Error: ${error instanceof Error ? error.message : "Unknown"}`
@@ -49,8 +42,8 @@ export async function GET(request: NextRequest) {
     let dbResult = "Failed"
     let userCount = "Unknown"
     try {
-      const users = await sql`SELECT COUNT(*) as count FROM users`
-      userCount = `${users[0].count} users in database`
+      const result = await sql`SELECT COUNT(*) as count FROM users`
+      userCount = `${result[0].count} users in database`
       dbResult = "Success"
     } catch (error) {
       dbResult = `Error: ${error instanceof Error ? error.message : "Unknown"}`
@@ -63,7 +56,14 @@ export async function GET(request: NextRequest) {
         request: requestInfo,
         authentication: {
           result: authResult,
-          user: userInfo,
+          user: user
+            ? {
+                id: user.id,
+                email: user.email,
+                name: user.name,
+                plan: user.plan,
+              }
+            : null,
         },
         database: {
           connectionTest: dbResult,
@@ -73,7 +73,7 @@ export async function GET(request: NextRequest) {
       },
     })
   } catch (error) {
-    console.error("❌ [DEBUG SCREENS FLOW] Error:", error)
+    console.error("🔍 [DEBUG SCREENS] Error:", error)
     return NextResponse.json({
       success: false,
       error: error instanceof Error ? error.message : "Unknown error",

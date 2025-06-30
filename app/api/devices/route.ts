@@ -24,56 +24,39 @@ export async function GET(request: NextRequest) {
 
     console.log(`✅ [DEVICES API] Authenticated user: ${user.email} (ID: ${user.id})`)
 
-    // Get devices for this user
+    // Get devices for this user with simplified query first
     console.log("📱 [DEVICES API] Fetching devices from database...")
     const devices = await sql`
       SELECT 
         d.id,
         d.name,
-        d.device_type as "deviceType",
+        d.device_type,
         d.status,
-        d.last_seen as "lastSeen",
-        d.assigned_playlist_id as "assignedPlaylistId",
-        d.playlist_status as "playlistStatus",
-        d.last_control_action as "lastControlAction",
-        d.last_control_time as "lastControlTime",
-        d.created_at as "createdAt",
-        d.updated_at as "updatedAt",
-        p.id as "playlist_id",
-        p.name as "playlist_name",
-        (
-          SELECT COUNT(*) 
-          FROM playlist_items pi 
-          WHERE pi.playlist_id = p.id
-        ) as "playlist_item_count"
+        d.last_seen,
+        d.user_id,
+        d.created_at,
+        d.updated_at
       FROM devices d
-      LEFT JOIN playlists p ON d.assigned_playlist_id = p.id
       WHERE d.user_id = ${user.id}
       ORDER BY d.created_at DESC
     `
 
     console.log(`📱 [DEVICES API] Found ${devices.length} devices`)
 
-    // Format devices with playlist info
+    // Format devices for response
     const formattedDevices = devices.map((device: any) => ({
       id: device.id,
-      name: device.name,
-      deviceType: device.deviceType,
-      status: device.status,
-      lastSeen: device.lastSeen,
-      assignedPlaylistId: device.assignedPlaylistId,
-      playlistStatus: device.playlistStatus || "none",
-      lastControlAction: device.lastControlAction,
-      lastControlTime: device.lastControlTime,
-      createdAt: device.createdAt,
-      updatedAt: device.updatedAt,
-      playlist: device.playlist_id
-        ? {
-            id: device.playlist_id,
-            name: device.playlist_name,
-            itemCount: Number.parseInt(device.playlist_item_count) || 0,
-          }
-        : null,
+      name: device.name || `Device ${device.id}`,
+      deviceType: device.device_type || "unknown",
+      status: device.status || "offline",
+      lastSeen: device.last_seen || device.updated_at || device.created_at,
+      assignedPlaylistId: null, // Will be added later when we fix the schema
+      playlistStatus: "none",
+      lastControlAction: null,
+      lastControlTime: null,
+      createdAt: device.created_at,
+      updatedAt: device.updated_at,
+      playlist: null,
     }))
 
     // Calculate stats
@@ -81,7 +64,7 @@ export async function GET(request: NextRequest) {
       total: devices.length,
       online: devices.filter((d: any) => d.status === "online").length,
       offline: devices.filter((d: any) => d.status === "offline").length,
-      playing: devices.filter((d: any) => d.playlist_status === "playing").length,
+      playing: 0, // Will be calculated when we have playlist status
     }
 
     console.log("📱 [DEVICES API] Stats:", stats)
