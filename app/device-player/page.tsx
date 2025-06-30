@@ -7,13 +7,15 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
-import { Loader2, Wifi, WifiOff, Play, Pause, SkipForward, SkipBack } from "lucide-react"
+import { Loader2, Wifi, WifiOff, Play, Pause, SkipForward, SkipBack, Monitor } from "lucide-react"
 
 interface DeviceInfo {
   name: string
+  type: string
   platform: string
   capabilities: string[]
   screenResolution: string
+  userAgent: string
 }
 
 interface PlaylistItem {
@@ -44,7 +46,7 @@ interface Playlist {
 
 export default function DevicePlayerPage() {
   const searchParams = useSearchParams()
-  const [pairingCode, setPairingCode] = useState(searchParams?.get("code") || "")
+  const [deviceCode, setDeviceCode] = useState(searchParams?.get("code") || "")
   const [status, setStatus] = useState<"idle" | "connecting" | "connected" | "playing" | "error">("idle")
   const [message, setMessage] = useState("")
   const [deviceInfo, setDeviceInfo] = useState<DeviceInfo | null>(null)
@@ -60,28 +62,35 @@ export default function DevicePlayerPage() {
     if (typeof window === "undefined") {
       return {
         name: "Server Device",
+        type: "web_browser",
         platform: "server",
         capabilities: [],
         screenResolution: "0x0",
+        userAgent: "server",
       }
     }
 
-    const capabilities = []
+    const capabilities = ["video", "image", "audio", "web"]
 
-    // Check for various capabilities
+    // Check for additional capabilities
     if ("serviceWorker" in navigator) capabilities.push("service-worker")
     if ("webkitRequestFullscreen" in document.documentElement) capabilities.push("fullscreen")
     if (window.DeviceOrientationEvent) capabilities.push("orientation")
     if (navigator.onLine !== undefined) capabilities.push("online-detection")
 
-    const screenWidth = window.screen?.width || window.innerWidth || 0
-    const screenHeight = window.screen?.height || window.innerHeight || 0
+    const screenWidth = window.screen?.width || window.innerWidth || 1920
+    const screenHeight = window.screen?.height || window.innerHeight || 1080
+
+    // Generate a unique device name
+    const deviceId = `Device Player ${Math.random().toString(36).substr(2, 9)}`
 
     return {
-      name: `Web Browser - ${navigator.userAgent.split(" ")[0]}`,
+      name: deviceId,
+      type: "web_browser",
       platform: navigator.platform || "unknown",
       capabilities,
       screenResolution: `${screenWidth}x${screenHeight}`,
+      userAgent: navigator.userAgent || "unknown",
     }
   }, [])
 
@@ -101,16 +110,16 @@ export default function DevicePlayerPage() {
     }
   }, [])
 
-  // Auto-connect if pairing code is provided
+  // Auto-connect if device code is provided
   useEffect(() => {
-    if (pairingCode && status === "idle") {
+    if (deviceCode && status === "idle") {
       handleConnect()
     }
-  }, [pairingCode])
+  }, [deviceCode])
 
   const handleConnect = async () => {
-    if (!pairingCode.trim()) {
-      setMessage("Please enter a pairing code")
+    if (!deviceCode.trim()) {
+      setMessage("Please enter a device code")
       return
     }
 
@@ -122,17 +131,28 @@ export default function DevicePlayerPage() {
       const deviceInfo = getDeviceInfo()
       setDeviceInfo(deviceInfo)
 
+      console.log("[DEVICE PLAYER] Connecting with:", {
+        deviceCode: deviceCode.trim().toUpperCase(),
+        ...deviceInfo,
+      })
+
       // Register device
       const registerResponse = await fetch("/api/devices/register", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          pairingCode: pairingCode.trim().toUpperCase(),
-          deviceInfo,
+          deviceCode: deviceCode.trim().toUpperCase(),
+          name: deviceInfo.name,
+          type: deviceInfo.type,
+          platform: deviceInfo.platform,
+          userAgent: deviceInfo.userAgent,
+          capabilities: deviceInfo.capabilities,
+          screenResolution: deviceInfo.screenResolution,
         }),
       })
 
       const registerData = await registerResponse.json()
+      console.log("[DEVICE PLAYER] Registration response:", registerData)
 
       if (!registerData.success) {
         throw new Error(registerData.error || "Failed to register device")
@@ -140,7 +160,7 @@ export default function DevicePlayerPage() {
 
       setDeviceId(registerData.device.id)
       setStatus("connected")
-      setMessage(`Connected as: ${registerData.pairingInfo.screenName}`)
+      setMessage(`Connected as: ${registerData.pairingInfo?.screenName || registerData.device.name}`)
 
       // Start heartbeat
       startHeartbeat(registerData.device.id)
@@ -227,8 +247,12 @@ export default function DevicePlayerPage() {
   const renderMediaContent = () => {
     if (!playlist || !playlist.items[currentItemIndex]) {
       return (
-        <div className="flex items-center justify-center h-64 bg-gray-100 rounded-lg">
-          <p className="text-gray-500">No content to display</p>
+        <div className="flex items-center justify-center h-64 bg-gray-900 rounded-lg">
+          <div className="text-center text-gray-400">
+            <Monitor className="h-16 w-16 mx-auto mb-4 opacity-50" />
+            <p>No content to display</p>
+            <p className="text-sm mt-2">Waiting for playlist assignment...</p>
+          </div>
         </div>
       )
     }
@@ -269,10 +293,10 @@ export default function DevicePlayerPage() {
         )
       default:
         return (
-          <div className="flex items-center justify-center h-64 bg-gray-100 rounded-lg">
-            <div className="text-center">
-              <p className="text-gray-700 font-medium">{media.original_filename}</p>
-              <p className="text-gray-500 text-sm">{media.file_type}</p>
+          <div className="flex items-center justify-center h-64 bg-gray-900 rounded-lg">
+            <div className="text-center text-gray-400">
+              <p className="font-medium">{media.original_filename}</p>
+              <p className="text-sm">{media.file_type}</p>
             </div>
           </div>
         )
@@ -288,22 +312,18 @@ export default function DevicePlayerPage() {
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="pairing-code">Pairing Code</Label>
+              <Label htmlFor="device-code">Device Code</Label>
               <Input
-                id="pairing-code"
-                value={pairingCode}
-                onChange={(e) => setPairingCode(e.target.value.toUpperCase())}
+                id="device-code"
+                value={deviceCode}
+                onChange={(e) => setDeviceCode(e.target.value.toUpperCase())}
                 placeholder="Enter 6-digit code"
                 maxLength={6}
                 className="text-center text-lg font-mono"
               />
             </div>
 
-            <Button
-              onClick={handleConnect}
-              disabled={status === "connecting" || !pairingCode.trim()}
-              className="w-full"
-            >
+            <Button onClick={handleConnect} disabled={status === "connecting" || !deviceCode.trim()} className="w-full">
               {status === "connecting" ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -358,7 +378,7 @@ export default function DevicePlayerPage() {
               onClick={() => {
                 setStatus("idle")
                 setMessage("")
-                setPairingCode("")
+                setDeviceCode("")
               }}
               className="w-full"
             >
@@ -375,7 +395,7 @@ export default function DevicePlayerPage() {
       {/* Status Bar */}
       <div className="bg-gray-900 p-2 flex items-center justify-between">
         <div className="flex items-center space-x-2">
-          {status === "connected" ? (
+          {status === "connected" || status === "playing" ? (
             <Wifi className="h-4 w-4 text-green-500" />
           ) : (
             <WifiOff className="h-4 w-4 text-red-500" />

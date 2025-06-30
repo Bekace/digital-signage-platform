@@ -7,25 +7,17 @@ const sql = neon(process.env.DATABASE_URL!)
 
 export async function POST(request: NextRequest) {
   try {
-    console.log("🔗 [CHECK CONNECTION] Starting connection check...")
-
     const body = await request.json()
     const { pairingCode } = body
 
-    console.log("🔗 [CHECK CONNECTION] Checking code:", pairingCode)
+    console.log("[CHECK CONNECTION] Checking connection for code:", pairingCode)
 
     if (!pairingCode) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: "Pairing code is required",
-        },
-        { status: 400 },
-      )
+      return NextResponse.json({ success: false, error: "Pairing code is required" }, { status: 400 })
     }
 
-    // Check if a device has registered with this pairing code
-    const deviceCheck = await sql`
+    // Check if device is connected for this pairing code
+    const result = await sql`
       SELECT 
         dpc.id as pairing_id,
         dpc.code,
@@ -35,7 +27,9 @@ export async function POST(request: NextRequest) {
         dpc.completed_at,
         d.id as device_id,
         d.name as device_name,
-        d.status
+        d.status as device_status,
+        d.last_seen,
+        d.created_at as device_created
       FROM device_pairing_codes dpc
       LEFT JOIN devices d ON d.id = dpc.device_id
       WHERE dpc.code = ${pairingCode}
@@ -44,49 +38,48 @@ export async function POST(request: NextRequest) {
       LIMIT 1
     `
 
-    console.log("🔗 [CHECK CONNECTION] Device check result:", deviceCheck)
-
-    if (deviceCheck.length === 0) {
+    if (result.length === 0) {
       return NextResponse.json({
         success: false,
+        connected: false,
         error: "Invalid or expired pairing code",
       })
     }
 
-    const pairingData = deviceCheck[0]
+    const record = result[0]
 
-    // Check if device is connected (has used_at but not completed_at)
-    const isConnected = pairingData.used_at && !pairingData.completed_at
-    const isCompleted = pairingData.completed_at
+    // Check if device is connected
+    const isConnected = record.device_id && record.completed_at && record.device_status !== "offline"
 
-    console.log("🔗 [CHECK CONNECTION] Status:", {
+    console.log("[CHECK CONNECTION] Connection status:", {
+      pairingCode,
       isConnected,
-      isCompleted,
-      used_at: pairingData.used_at,
-      completed_at: pairingData.completed_at,
-      device_id: pairingData.device_id,
+      deviceId: record.device_id,
+      deviceStatus: record.device_status,
     })
 
     return NextResponse.json({
       success: true,
-      isConnected,
-      isCompleted,
-      deviceInfo: pairingData.device_id
+      connected: isConnected,
+      pairingCode: record.code,
+      screenName: record.screen_name,
+      deviceType: record.device_type,
+      device: isConnected
         ? {
-            id: pairingData.device_id,
-            name: pairingData.device_name,
-            type: pairingData.device_type,
-            status: pairingData.status,
+            id: record.device_id,
+            name: record.device_name,
+            status: record.device_status,
+            lastSeen: record.last_seen,
+            createdAt: record.device_created,
           }
         : null,
-      screenName: pairingData.screen_name,
-      deviceType: pairingData.device_type,
     })
   } catch (error) {
-    console.error("🔗 [CHECK CONNECTION] Error:", error)
+    console.error("[CHECK CONNECTION] Error:", error)
     return NextResponse.json(
       {
         success: false,
+        connected: false,
         error: "Failed to check connection",
         details: error instanceof Error ? error.message : "Unknown error",
       },
