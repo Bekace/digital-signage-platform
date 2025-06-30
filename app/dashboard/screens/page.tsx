@@ -248,6 +248,64 @@ export default function ScreensPage() {
     }
   }
 
+  const testAuth = async () => {
+    try {
+      const token = localStorage.getItem("token")
+      if (!token) {
+        toast.error("No token found")
+        return
+      }
+
+      console.log("🧪 [SCREENS PAGE] Testing authentication...")
+      const response = await fetch("/api/test-auth", {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      })
+
+      const data = await response.json()
+      console.log("🧪 [SCREENS PAGE] Auth test response:", data)
+
+      if (data.success) {
+        toast.success(`Authentication successful for ${data.user.email}`)
+      } else {
+        toast.error(`Authentication failed: ${data.error}`)
+      }
+    } catch (error) {
+      console.error("❌ [SCREENS PAGE] Auth test error:", error)
+      toast.error("Auth test failed")
+    }
+  }
+
+  const debugToken = async () => {
+    try {
+      const token = localStorage.getItem("token")
+      if (!token) {
+        toast.error("No token found")
+        return
+      }
+
+      console.log("🔍 [SCREENS PAGE] Debugging token...")
+      const response = await fetch("/api/debug-auth-token", {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      })
+
+      const data = await response.json()
+      console.log("🔍 [SCREENS PAGE] Token debug response:", data)
+
+      if (data.success) {
+        toast.success("Token is valid")
+      } else {
+        toast.error(`Token issue: ${data.error}`)
+      }
+    } catch (error) {
+      console.error("❌ [SCREENS PAGE] Token debug error:", error)
+      toast.error("Token debug failed")
+    }
+  }
+
   useEffect(() => {
     console.log("📱 [SCREENS PAGE] Component mounted, starting data load...")
     const loadData = async () => {
@@ -377,6 +435,12 @@ export default function ScreensPage() {
                   variant="outline"
                 >
                   Re-login
+                </Button>
+                <Button onClick={testAuth} variant="outline">
+                  Test Auth
+                </Button>
+                <Button onClick={debugToken} variant="outline">
+                  Debug Token
                 </Button>
                 <Button onClick={() => window.open("/api/debug-screens-flow", "_blank")} variant="outline">
                   Debug Info

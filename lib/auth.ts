@@ -25,16 +25,47 @@ export interface User {
 
 export function verifyToken(token: string): DecodedToken | null {
   try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET!) as DecodedToken
+    console.log("🔐 [AUTH] Starting token verification...")
+    console.log("🔐 [AUTH] Token length:", token.length)
+    console.log("🔐 [AUTH] Token preview:", `${token.substring(0, 20)}...${token.substring(token.length - 20)}`)
+
+    const jwtSecret = process.env.JWT_SECRET
+    console.log("🔐 [AUTH] JWT_SECRET exists:", !!jwtSecret)
+    console.log("🔐 [AUTH] JWT_SECRET length:", jwtSecret?.length || 0)
+
+    if (!jwtSecret) {
+      console.error("❌ [AUTH] JWT_SECRET is not configured!")
+      return null
+    }
+
+    // First try to decode without verification to see token structure
+    let decodedWithoutVerification
+    try {
+      decodedWithoutVerification = jwt.decode(token)
+      console.log("🔐 [AUTH] Token decoded without verification:", decodedWithoutVerification)
+    } catch (decodeError) {
+      console.error("❌ [AUTH] Failed to decode token:", decodeError)
+      return null
+    }
+
+    // Now verify the token
+    const decoded = jwt.verify(token, jwtSecret) as DecodedToken
+    console.log("✅ [AUTH] Token verified successfully:", decoded)
     return decoded
   } catch (error) {
-    console.error("🔐 [AUTH] Token verification failed:", error)
+    console.error("❌ [AUTH] Token verification failed:", error)
+    console.error("❌ [AUTH] Error name:", error instanceof Error ? error.name : "Unknown")
+    console.error("❌ [AUTH] Error message:", error instanceof Error ? error.message : "Unknown")
     return null
   }
 }
 
 export function generateToken(payload: { userId: number; email: string }): string {
-  return jwt.sign(payload, process.env.JWT_SECRET!, { expiresIn: "7d" })
+  const jwtSecret = process.env.JWT_SECRET
+  if (!jwtSecret) {
+    throw new Error("JWT_SECRET is not configured")
+  }
+  return jwt.sign(payload, jwtSecret, { expiresIn: "7d" })
 }
 
 export function extractTokenFromRequest(request: Request): string | null {
@@ -55,7 +86,7 @@ export async function getCurrentUser(request?: NextRequest): Promise<User | null
       // For API routes - check Authorization header first
       const authHeader = request.headers.get("authorization")
       console.log("🔐 [AUTH] Authorization header exists:", !!authHeader)
-      console.log("🔐 [AUTH] Authorization header value:", authHeader ? `${authHeader.substring(0, 20)}...` : "none")
+      console.log("🔐 [AUTH] Authorization header value:", authHeader ? `${authHeader.substring(0, 30)}...` : "none")
 
       if (authHeader?.startsWith("Bearer ")) {
         token = authHeader.substring(7)
@@ -84,8 +115,6 @@ export async function getCurrentUser(request?: NextRequest): Promise<User | null
     }
 
     console.log("🔐 [AUTH] Token found, verifying...")
-    console.log("🔐 [AUTH] Token preview:", `${token.substring(0, 20)}...${token.substring(token.length - 10)}`)
-
     const decoded = verifyToken(token)
     if (!decoded) {
       console.log("❌ [AUTH] Token verification failed")

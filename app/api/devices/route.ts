@@ -18,7 +18,7 @@ export async function GET(request: NextRequest) {
     const authHeader = request.headers.get("authorization")
     console.log(
       "📱 [DEVICES API] Authorization header:",
-      authHeader ? `${authHeader.substring(0, 20)}...` : "NOT FOUND",
+      authHeader ? `${authHeader.substring(0, 30)}...` : "NOT FOUND",
     )
 
     console.log("📱 [DEVICES API] Calling getCurrentUser...")
