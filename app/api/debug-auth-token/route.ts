@@ -1,79 +1,59 @@
 import { type NextRequest, NextResponse } from "next/server"
-import jwt from "jsonwebtoken"
+import { getCurrentUser } from "@/lib/auth"
 
 export async function GET(request: NextRequest) {
   try {
-    console.log("🔍 [DEBUG AUTH] Starting token debug...")
+    console.log("🔍 [DEBUG AUTH TOKEN] Starting token debug...")
 
-    // Get token from Authorization header
+    // Check for token in Authorization header
     const authHeader = request.headers.get("authorization")
-    console.log("🔍 [DEBUG AUTH] Authorization header:", authHeader ? `${authHeader.substring(0, 30)}...` : "NOT FOUND")
+    console.log("🔍 [DEBUG AUTH TOKEN] Authorization header:", authHeader ? "Present" : "Missing")
 
-    if (!authHeader?.startsWith("Bearer ")) {
-      return NextResponse.json({
-        success: false,
-        error: "No Bearer token found",
-        authHeader: authHeader || "null",
-      })
+    // Check for token in cookies
+    const cookieToken = request.cookies.get("auth-token")?.value
+    console.log("🔍 [DEBUG AUTH TOKEN] Cookie token:", cookieToken ? "Present" : "Missing")
+
+    if (cookieToken) {
+      console.log("🔍 [DEBUG AUTH TOKEN] Cookie token length:", cookieToken.length)
+      console.log("🔍 [DEBUG AUTH TOKEN] Cookie token preview:", `${cookieToken.substring(0, 20)}...`)
     }
 
-    const token = authHeader.substring(7)
-    console.log("🔍 [DEBUG AUTH] Token extracted, length:", token.length)
-    console.log("🔍 [DEBUG AUTH] Token preview:", `${token.substring(0, 20)}...${token.substring(token.length - 20)}`)
+    // Try to get current user
+    const user = await getCurrentUser(request)
+    console.log("🔍 [DEBUG AUTH TOKEN] getCurrentUser result:", user ? "Success" : "Failed")
 
-    // Check if JWT_SECRET exists
-    const jwtSecret = process.env.JWT_SECRET
-    console.log("🔍 [DEBUG AUTH] JWT_SECRET exists:", !!jwtSecret)
-    console.log("🔍 [DEBUG AUTH] JWT_SECRET length:", jwtSecret?.length || 0)
-
-    if (!jwtSecret) {
+    if (user) {
+      return NextResponse.json({
+        success: true,
+        message: "Token is valid",
+        user: {
+          id: user.id,
+          email: user.email,
+          name: `${user.first_name} ${user.last_name}`,
+          plan: user.plan,
+        },
+        debug: {
+          hasAuthHeader: !!authHeader,
+          hasCookieToken: !!cookieToken,
+          tokenSource: cookieToken ? "cookie" : authHeader ? "header" : "none",
+        },
+      })
+    } else {
       return NextResponse.json({
         success: false,
-        error: "JWT_SECRET not configured",
+        error: "Token validation failed",
+        debug: {
+          hasAuthHeader: !!authHeader,
+          hasCookieToken: !!cookieToken,
+          tokenSource: "none",
+        },
       })
     }
-
-    // Try to decode without verification first
-    let decodedWithoutVerification
-    try {
-      decodedWithoutVerification = jwt.decode(token)
-      console.log("🔍 [DEBUG AUTH] Decoded without verification:", decodedWithoutVerification)
-    } catch (error) {
-      console.log("🔍 [DEBUG AUTH] Failed to decode token:", error)
-      return NextResponse.json({
-        success: false,
-        error: "Token is not valid JWT format",
-        details: error instanceof Error ? error.message : "Unknown error",
-      })
-    }
-
-    // Try to verify token
-    let verified
-    try {
-      verified = jwt.verify(token, jwtSecret)
-      console.log("🔍 [DEBUG AUTH] Token verified successfully:", verified)
-    } catch (error) {
-      console.log("🔍 [DEBUG AUTH] Token verification failed:", error)
-      return NextResponse.json({
-        success: false,
-        error: "Token verification failed",
-        details: error instanceof Error ? error.message : "Unknown error",
-        decodedWithoutVerification,
-      })
-    }
-
-    return NextResponse.json({
-      success: true,
-      tokenValid: true,
-      decoded: verified,
-      decodedWithoutVerification,
-    })
   } catch (error) {
-    console.error("🔍 [DEBUG AUTH] Critical error:", error)
+    console.error("❌ [DEBUG AUTH TOKEN] Error:", error)
     return NextResponse.json({
       success: false,
-      error: "Debug failed",
-      details: error instanceof Error ? error.message : "Unknown error",
+      error: error instanceof Error ? error.message : "Unknown error",
     })
   }
 }

@@ -5,18 +5,13 @@ export async function GET(request: NextRequest) {
   try {
     console.log("🧪 [TEST AUTH] Starting authentication test...")
 
-    // Log all headers
-    const headers = Object.fromEntries(request.headers.entries())
-    console.log("🧪 [TEST AUTH] Request headers:", headers)
-
-    // Test getCurrentUser
     const user = await getCurrentUser(request)
 
     if (user) {
       console.log("✅ [TEST AUTH] Authentication successful")
       return NextResponse.json({
         success: true,
-        authenticated: true,
+        message: "Authentication successful",
         user: {
           id: user.id,
           email: user.email,
@@ -29,8 +24,8 @@ export async function GET(request: NextRequest) {
       return NextResponse.json(
         {
           success: false,
-          authenticated: false,
-          error: "No user found",
+          error: "Authentication failed",
+          debug: "No user found in getCurrentUser()",
         },
         { status: 401 },
       )
@@ -40,8 +35,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(
       {
         success: false,
-        error: "Authentication test failed",
-        details: error instanceof Error ? error.message : "Unknown error",
+        error: error instanceof Error ? error.message : "Unknown error",
       },
       { status: 500 },
     )
