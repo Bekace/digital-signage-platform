@@ -15,7 +15,7 @@ BEGIN
     -- Add playlist_status column if it doesn't exist
     IF NOT EXISTS (SELECT 1 FROM information_schema.columns 
                    WHERE table_name = 'devices' AND column_name = 'playlist_status') THEN
-        ALTER TABLE devices ADD COLUMN playlist_status VARCHAR(50) DEFAULT 'none';
+        ALTER TABLE devices ADD COLUMN playlist_status VARCHAR(20) DEFAULT 'none';
         RAISE NOTICE 'Added playlist_status column to devices table';
     ELSE
         RAISE NOTICE 'playlist_status column already exists in devices table';
@@ -42,7 +42,7 @@ BEGIN
     -- Add updated_at column if it doesn't exist
     IF NOT EXISTS (SELECT 1 FROM information_schema.columns 
                    WHERE table_name = 'devices' AND column_name = 'updated_at') THEN
-        ALTER TABLE devices ADD COLUMN updated_at TIMESTAMP DEFAULT NOW();
+        ALTER TABLE devices ADD COLUMN updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;
         RAISE NOTICE 'Added updated_at column to devices table';
     ELSE
         RAISE NOTICE 'updated_at column already exists in devices table';
@@ -66,32 +66,24 @@ BEGIN
         RAISE NOTICE 'Index idx_devices_playlist_status already exists';
     END IF;
 
-    -- Create index on user_id and assigned_playlist_id if it doesn't exist
+    -- Create index on updated_at if it doesn't exist
     IF NOT EXISTS (SELECT 1 FROM pg_indexes 
-                   WHERE tablename = 'devices' AND indexname = 'idx_devices_user_playlist') THEN
-        CREATE INDEX idx_devices_user_playlist ON devices(user_id, assigned_playlist_id);
-        RAISE NOTICE 'Created index idx_devices_user_playlist';
+                   WHERE tablename = 'devices' AND indexname = 'idx_devices_updated_at') THEN
+        CREATE INDEX idx_devices_updated_at ON devices(updated_at);
+        RAISE NOTICE 'Created index idx_devices_updated_at';
     ELSE
-        RAISE NOTICE 'Index idx_devices_user_playlist already exists';
+        RAISE NOTICE 'Index idx_devices_updated_at already exists';
     END IF;
 
     -- Update existing devices to have default playlist status
-    UPDATE devices SET playlist_status = 'none' WHERE playlist_status IS NULL;
+    UPDATE devices SET playlist_status = 'none', updated_at = CURRENT_TIMESTAMP WHERE playlist_status IS NULL;
     RAISE NOTICE 'Updated existing devices with default playlist_status';
 
     -- Add some sample data if devices table is empty
     IF NOT EXISTS (SELECT 1 FROM devices) THEN
-        INSERT INTO devices (name, device_type, user_id, status, playlist_status, created_at, updated_at)
-        SELECT 'Sample Screen 1', 'web_browser', u.id, 'offline', 'none', NOW(), NOW()
-        FROM users u
-        WHERE NOT EXISTS (SELECT 1 FROM devices WHERE user_id = u.id)
-        LIMIT 1;
-
-        INSERT INTO devices (name, device_type, user_id, status, playlist_status, created_at, updated_at)
-        SELECT 'Sample Screen 2', 'fire_tv', u.id, 'offline', 'none', NOW(), NOW()
-        FROM users u
-        WHERE NOT EXISTS (SELECT 1 FROM devices WHERE user_id = u.id AND name != 'Sample Screen 1')
-        LIMIT 1;
+        INSERT INTO devices (name, device_type, user_id, status, created_at, updated_at)
+        SELECT 'Sample Device', 'web', 1, 'offline', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+        WHERE NOT EXISTS (SELECT 1 FROM devices LIMIT 1);
         
         RAISE NOTICE 'Added sample devices';
     END IF;
