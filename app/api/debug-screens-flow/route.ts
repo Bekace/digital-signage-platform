@@ -6,13 +6,14 @@ const sql = neon(process.env.DATABASE_URL!)
 
 export async function GET(request: NextRequest) {
   try {
-    console.log("🔍 [DEBUG SCREENS] Starting comprehensive debug...")
+    console.log("🔍 [DEBUG] Starting debug screens flow...")
 
-    // Step 1: Check authentication
+    // Test authentication
+    console.log("🔍 [DEBUG] Testing authentication...")
     const user = await getCurrentUser(request)
-    console.log("🔍 [DEBUG SCREENS] Current user:", user)
 
-    // Step 2: Get all devices
+    // Get all devices (regardless of user)
+    console.log("🔍 [DEBUG] Fetching all devices...")
     const allDevices = await sql`
       SELECT 
         d.id,
@@ -28,10 +29,10 @@ export async function GET(request: NextRequest) {
       ORDER BY d.created_at DESC
     `
 
-    // Step 3: Get user devices (if user exists)
+    // Get user devices if authenticated
     let userDevices = []
-    let dashboardQuery = []
     if (user) {
+      console.log(`🔍 [DEBUG] Fetching devices for user ${user.id}...`)
       userDevices = await sql`
         SELECT 
           d.id,
@@ -45,25 +46,10 @@ export async function GET(request: NextRequest) {
         WHERE d.user_id = ${user.id}
         ORDER BY d.created_at DESC
       `
-
-      // Step 4: Exact same query as dashboard
-      dashboardQuery = await sql`
-        SELECT 
-          d.id,
-          d.name,
-          d.device_type,
-          d.status,
-          d.last_seen,
-          d.user_id,
-          d.created_at,
-          d.updated_at
-        FROM devices d
-        WHERE d.user_id = ${user.id}
-        ORDER BY d.created_at DESC
-      `
     }
 
-    // Step 5: Get pairing codes
+    // Get pairing codes
+    console.log("🔍 [DEBUG] Fetching pairing codes...")
     const pairingCodes = await sql`
       SELECT 
         dpc.id,
@@ -80,24 +66,35 @@ export async function GET(request: NextRequest) {
       ORDER BY dpc.created_at DESC
     `
 
-    // Step 6: Get all users
+    // Get all users
+    console.log("🔍 [DEBUG] Fetching users...")
     const users = await sql`
       SELECT id, email, first_name, last_name, created_at
       FROM users
       ORDER BY created_at DESC
     `
 
-    // Step 7: Summary statistics
-    const summary = {
-      totalDevices: allDevices.length,
-      devicesWithUsers: allDevices.filter((d) => d.user_id !== null).length,
-      userDeviceCount: userDevices.length,
-      completedPairings: pairingCodes.filter((pc) => pc.completed_at !== null).length,
+    // Test the exact same query that the dashboard uses
+    let dashboardQuery = []
+    if (user) {
+      console.log(`🔍 [DEBUG] Testing dashboard query for user ${user.id}...`)
+      dashboardQuery = await sql`
+        SELECT 
+          d.id,
+          d.name,
+          d.device_type,
+          d.status,
+          d.last_seen,
+          d.user_id,
+          d.created_at,
+          d.updated_at
+        FROM devices d
+        WHERE d.user_id = ${user.id}
+        ORDER BY d.created_at DESC
+      `
     }
 
-    console.log("🔍 [DEBUG SCREENS] Summary:", summary)
-
-    return NextResponse.json({
+    const response = {
       success: true,
       debug: {
         currentUser: user,
@@ -106,11 +103,19 @@ export async function GET(request: NextRequest) {
         pairingCodes,
         users,
         dashboardQuery,
-        summary,
+        summary: {
+          totalDevices: allDevices.length,
+          devicesWithUsers: allDevices.filter((d) => d.user_id !== null).length,
+          userDeviceCount: userDevices.length,
+          completedPairings: pairingCodes.filter((pc) => pc.completed_at !== null).length,
+        },
       },
-    })
+    }
+
+    console.log("🔍 [DEBUG] Debug response prepared")
+    return NextResponse.json(response)
   } catch (error) {
-    console.error("❌ [DEBUG SCREENS] Error:", error)
+    console.error("❌ [DEBUG] Error:", error)
     return NextResponse.json(
       {
         success: false,

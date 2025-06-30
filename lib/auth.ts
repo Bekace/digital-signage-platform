@@ -47,52 +47,64 @@ export function extractTokenFromRequest(request: Request): string | null {
 
 export async function getCurrentUser(request?: NextRequest): Promise<User | null> {
   try {
-    console.log("🔐 [AUTH] Starting getCurrentUser...")
+    console.log("🔐 [AUTH] ===== STARTING getCurrentUser =====")
 
     let token: string | null = null
 
     if (request) {
       // For API routes - check Authorization header first
       const authHeader = request.headers.get("authorization")
-      console.log("🔐 [AUTH] Authorization header:", authHeader ? "Bearer ***" : "not found")
+      console.log("🔐 [AUTH] Authorization header exists:", !!authHeader)
+      console.log("🔐 [AUTH] Authorization header value:", authHeader ? `${authHeader.substring(0, 20)}...` : "none")
 
       if (authHeader?.startsWith("Bearer ")) {
         token = authHeader.substring(7)
-        console.log("🔐 [AUTH] Extracted Bearer token from header")
+        console.log("🔐 [AUTH] Extracted Bearer token from header, length:", token.length)
       } else {
+        console.log("🔐 [AUTH] No Bearer token in Authorization header, checking cookies...")
         // Fallback to cookies for API routes
         const cookieStore = request.cookies
         token = cookieStore.get("auth-token")?.value || null
         console.log("🔐 [AUTH] Cookie token found:", !!token)
+        if (token) {
+          console.log("🔐 [AUTH] Cookie token length:", token.length)
+        }
       }
     } else {
       // For server components - use cookies
+      console.log("🔐 [AUTH] Server component mode, checking cookies...")
       const cookieStore = await cookies()
       token = cookieStore.get("auth-token")?.value || null
       console.log("🔐 [AUTH] Server component cookie token found:", !!token)
     }
 
     if (!token) {
-      console.log("❌ [AUTH] No token found")
+      console.log("❌ [AUTH] No token found anywhere")
       return null
     }
 
-    console.log("🔐 [AUTH] Verifying token...")
+    console.log("🔐 [AUTH] Token found, verifying...")
+    console.log("🔐 [AUTH] Token preview:", `${token.substring(0, 20)}...${token.substring(token.length - 10)}`)
+
     const decoded = verifyToken(token)
     if (!decoded) {
       console.log("❌ [AUTH] Token verification failed")
       return null
     }
 
-    console.log(`🔐 [AUTH] Token verified for user ID: ${decoded.userId}`)
+    console.log(`🔐 [AUTH] Token verified successfully for user ID: ${decoded.userId}`)
+    console.log(`🔐 [AUTH] Token email: ${decoded.email}`)
 
     // Get user from database
+    console.log("🔐 [AUTH] Fetching user from database...")
     const users = await sql`
       SELECT id, email, first_name, last_name, company, plan, created_at, is_admin
       FROM users 
       WHERE id = ${decoded.userId}
       LIMIT 1
     `
+
+    console.log(`🔐 [AUTH] Database query returned ${users.length} users`)
 
     if (users.length === 0) {
       console.log(`❌ [AUTH] User ${decoded.userId} not found in database`)
@@ -101,9 +113,11 @@ export async function getCurrentUser(request?: NextRequest): Promise<User | null
 
     const user = users[0] as User
     console.log(`✅ [AUTH] User found: ${user.email} (ID: ${user.id})`)
+    console.log("🔐 [AUTH] ===== getCurrentUser COMPLETE =====")
     return user
   } catch (error) {
-    console.error("❌ [AUTH] Error:", error)
+    console.error("❌ [AUTH] Critical error in getCurrentUser:", error)
+    console.error("❌ [AUTH] Error stack:", error instanceof Error ? error.stack : "No stack")
     return null
   }
 }
