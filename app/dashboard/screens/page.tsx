@@ -56,32 +56,69 @@ export default function ScreensPage() {
 
   const fetchDevices = async () => {
     try {
-      console.log("📱 [SCREENS PAGE] Starting fetchDevices...")
+      console.log("📱 [SCREENS PAGE] ===== STARTING fetchDevices =====")
 
+      // Check if we're in the browser
+      if (typeof window === "undefined") {
+        console.log("❌ [SCREENS PAGE] Not in browser environment")
+        setError("Not in browser environment")
+        return
+      }
+
+      // Get token from localStorage
       const token = localStorage.getItem("token")
-      console.log("📱 [SCREENS PAGE] Token from localStorage:", !!token)
+      console.log("📱 [SCREENS PAGE] Token from localStorage exists:", !!token)
+
+      if (token) {
+        console.log("📱 [SCREENS PAGE] Token length:", token.length)
+        console.log(
+          "📱 [SCREENS PAGE] Token preview:",
+          `${token.substring(0, 20)}...${token.substring(token.length - 10)}`,
+        )
+      }
 
       if (!token) {
+        console.log("❌ [SCREENS PAGE] No token found in localStorage")
         setError("No authentication token found. Please log in again.")
         toast.error("Please log in to view devices")
+        // Redirect to login
+        window.location.href = "/login"
         return
       }
 
       console.log("📱 [SCREENS PAGE] Making API request to /api/devices...")
+
+      const headers = {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      }
+
+      console.log("📱 [SCREENS PAGE] Request headers:", {
+        "Content-Type": headers["Content-Type"],
+        Authorization: `Bearer ${token.substring(0, 20)}...`,
+      })
+
       const response = await fetch("/api/devices", {
         method: "GET",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
+        headers: headers,
       })
 
       console.log("📱 [SCREENS PAGE] API response status:", response.status)
+      console.log("📱 [SCREENS PAGE] API response ok:", response.ok)
       console.log("📱 [SCREENS PAGE] API response headers:", Object.fromEntries(response.headers.entries()))
 
       if (!response.ok) {
         const errorText = await response.text()
         console.error("📱 [SCREENS PAGE] API error response:", errorText)
+
+        if (response.status === 401) {
+          console.log("📱 [SCREENS PAGE] 401 Unauthorized - clearing token and redirecting")
+          localStorage.removeItem("token")
+          toast.error("Session expired. Please log in again.")
+          window.location.href = "/login"
+          return
+        }
+
         throw new Error(`HTTP ${response.status}: ${errorText}`)
       }
 
@@ -114,6 +151,7 @@ export default function ScreensPage() {
       console.log("🎬 [SCREENS PAGE] Fetching playlists...")
       const response = await fetch("/api/playlists", {
         headers: {
+          "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
       })
@@ -327,9 +365,23 @@ export default function ScreensPage() {
             </CardHeader>
             <CardContent>
               <p className="text-red-700 mb-4">{error}</p>
-              <Button onClick={fetchDevices} variant="outline">
-                Try Again
-              </Button>
+              <div className="space-x-2">
+                <Button onClick={fetchDevices} variant="outline">
+                  Try Again
+                </Button>
+                <Button
+                  onClick={() => {
+                    localStorage.removeItem("token")
+                    window.location.href = "/login"
+                  }}
+                  variant="outline"
+                >
+                  Re-login
+                </Button>
+                <Button onClick={() => window.open("/api/debug-screens-flow", "_blank")} variant="outline">
+                  Debug Info
+                </Button>
+              </div>
             </CardContent>
           </Card>
         )}
