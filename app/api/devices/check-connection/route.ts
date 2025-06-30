@@ -32,20 +32,28 @@ export async function POST(request: NextRequest) {
     // Check if pairing code exists and is valid
     const pairingCodeRecord = await sql`
       SELECT 
-        id,
-        code,
-        screen_name,
-        device_type,
-        expires_at,
-        completed_at,
-        user_id
-      FROM device_pairing_codes 
-      WHERE code = ${pairingCode} 
-      AND user_id = ${user.id}
-      AND expires_at > CURRENT_TIMESTAMP
-      ORDER BY created_at DESC
+        dpc.id,
+        dpc.code,
+        dpc.screen_name,
+        dpc.device_type,
+        dpc.expires_at,
+        dpc.used_at,
+        dpc.device_id,
+        dpc.completed_at,
+        dpc.user_id,
+        d.id as device_exists,
+        d.name as device_name,
+        d.status as device_status
+      FROM device_pairing_codes dpc
+      LEFT JOIN devices d ON dpc.device_id = d.id
+      WHERE dpc.code = ${pairingCode} 
+      AND dpc.user_id = ${user.id}
+      AND dpc.expires_at > CURRENT_TIMESTAMP
+      ORDER BY dpc.created_at DESC
       LIMIT 1
     `
+
+    console.log("🔍 [CHECK CONNECTION] Pairing code lookup result:", pairingCodeRecord)
 
     if (pairingCodeRecord.length === 0) {
       console.log("🔍 [CHECK CONNECTION] Pairing code not found or expired")
@@ -58,24 +66,73 @@ export async function POST(request: NextRequest) {
 
     const record = pairingCodeRecord[0]
 
-    // Check if already completed (device connected)
-    if (record.completed_at) {
-      console.log("🔍 [CHECK CONNECTION] Device already connected")
+    // Check if device has been registered with this pairing code
+    if (record.device_id && record.device_exists) {
+      console.log("🔍 [CHECK CONNECTION] Device found and connected:", {
+        deviceId: record.device_id,
+        deviceName: record.device_name,
+        status: record.device_status,
+      })
 
-      // Find the connected device
-      const device = await sql`
-        SELECT id, name, device_type, status
-        FROM devices
-        WHERE user_id = ${user.id}
-        AND name = ${record.screen_name}
-        ORDER BY created_at DESC
-        LIMIT 1
+      // Mark as completed if not already done
+      if (!record.completed_at) {
+        await sql`
+          UPDATE device_pairing_codes 
+          SET completed_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
+          WHERE id = ${record.id}
+        `
+        console.log("🔍 [CHECK CONNECTION] Marked pairing code as completed")
+      }
+
+      return NextResponse.json({
+        success: true,
+        connected: true,
+        device: {
+          id: record.device_id,
+          name: record.device_name || record.screen_name,
+          type: record.device_type,
+          status: record.device_status || "online",
+        },
+        message: "Device is connected",
+      })
+    }
+
+    // Also check if any device was recently registered that matches this pairing code
+    // (in case the device_id wasn't properly linked)
+    const recentDevices = await sql`
+      SELECT id, name, device_type, status, created_at
+      FROM devices
+      WHERE user_id = ${user.id}
+      AND name = ${record.screen_name}
+      AND created_at > (CURRENT_TIMESTAMP - INTERVAL '10 minutes')
+      ORDER BY created_at DESC
+      LIMIT 1
+    `
+
+    if (recentDevices.length > 0) {
+      const device = recentDevices[0]
+      console.log("🔍 [CHECK CONNECTION] Found matching recent device:", device)
+
+      // Link the device to the pairing code
+      await sql`
+        UPDATE device_pairing_codes 
+        SET 
+          device_id = ${device.id}, 
+          used_at = CURRENT_TIMESTAMP,
+          completed_at = CURRENT_TIMESTAMP,
+          updated_at = CURRENT_TIMESTAMP
+        WHERE id = ${record.id}
       `
 
       return NextResponse.json({
         success: true,
         connected: true,
-        device: device[0] || null,
+        device: {
+          id: device.id,
+          name: device.name,
+          type: device.device_type,
+          status: device.status,
+        },
         message: "Device is connected",
       })
     }
