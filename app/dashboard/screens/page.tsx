@@ -56,97 +56,54 @@ export default function ScreensPage() {
 
   const fetchDevices = async () => {
     try {
-      console.log("📱 [SCREENS PAGE] ===== STARTING fetchDevices =====")
-
-      // Check if we're in the browser
-      if (typeof window === "undefined") {
-        console.log("❌ [SCREENS PAGE] Not in browser environment")
-        setError("Not in browser environment")
-        return
-      }
-
-      console.log("📱 [SCREENS PAGE] Making API request to /api/devices...")
-      console.log("📱 [SCREENS PAGE] Using cookie-based authentication")
-
-      // Make request without Authorization header - rely on cookies
       const response = await fetch("/api/devices", {
         method: "GET",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        credentials: "include", // Important: include cookies
+        credentials: "include",
       })
 
-      console.log("📱 [SCREENS PAGE] API response status:", response.status)
-      console.log("📱 [SCREENS PAGE] API response ok:", response.ok)
-      console.log("📱 [SCREENS PAGE] API response headers:", Object.fromEntries(response.headers.entries()))
-
       if (!response.ok) {
-        const errorText = await response.text()
-        console.error("📱 [SCREENS PAGE] API error response:", errorText)
-
         if (response.status === 401) {
-          console.log("📱 [SCREENS PAGE] 401 Unauthorized - redirecting to login")
-          toast.error("Session expired. Please log in again.")
           window.location.href = "/login"
           return
         }
-
-        throw new Error(`HTTP ${response.status}: ${errorText}`)
+        throw new Error(`HTTP ${response.status}`)
       }
 
       const data = await response.json()
-      console.log("📱 [SCREENS PAGE] API response data:", data)
 
       if (data.success) {
-        console.log(`📱 [SCREENS PAGE] Successfully loaded ${data.devices.length} devices`)
         setDevices(data.devices || [])
         setStats(data.stats || { total: 0, online: 0, offline: 0, playing: 0 })
         setError(null)
       } else {
-        console.error("📱 [SCREENS PAGE] API returned error:", data.error)
         setError(data.error || "Failed to fetch devices")
-        toast.error(data.error || "Failed to load devices")
       }
     } catch (err) {
-      console.error("📱 [SCREENS PAGE] Error fetching devices:", err)
       const errorMessage = err instanceof Error ? err.message : "Unknown error occurred"
       setError(errorMessage)
-      toast.error("Failed to load devices")
     }
   }
 
   const fetchPlaylists = async () => {
     try {
-      console.log("🎬 [SCREENS PAGE] Fetching playlists...")
       const response = await fetch("/api/playlists", {
-        headers: {
-          "Content-Type": "application/json",
-        },
         credentials: "include",
       })
 
-      if (!response.ok) {
-        console.error("🎬 [SCREENS PAGE] Failed to fetch playlists:", response.status)
-        return
-      }
-
-      const data = await response.json()
-      console.log("🎬 [SCREENS PAGE] Playlists response:", data)
-
-      if (data.success) {
-        setPlaylists(data.playlists || [])
+      if (response.ok) {
+        const data = await response.json()
+        if (data.success) {
+          setPlaylists(data.playlists || [])
+        }
       }
     } catch (error) {
-      console.error("❌ [SCREENS PAGE] Error fetching playlists:", error)
+      console.error("Error fetching playlists:", error)
     }
   }
 
   const assignPlaylist = async (deviceId: number, playlistId: string) => {
     try {
       setAssignLoading(deviceId)
-
-      console.log("🎬 [SCREENS PAGE] Assigning playlist", playlistId, "to device", deviceId)
 
       const response = await fetch(`/api/devices/${deviceId}/assign-playlist`, {
         method: "POST",
@@ -160,16 +117,14 @@ export default function ScreensPage() {
       })
 
       const data = await response.json()
-      console.log("🎬 [SCREENS PAGE] Assign playlist response:", data)
 
       if (data.success) {
         toast.success(data.message)
-        await fetchDevices() // Refresh devices list
+        await fetchDevices()
       } else {
         toast.error(data.error || "Failed to assign playlist")
       }
     } catch (error) {
-      console.error("❌ [SCREENS PAGE] Error assigning playlist:", error)
       toast.error("Failed to assign playlist")
     } finally {
       setAssignLoading(null)
@@ -179,8 +134,6 @@ export default function ScreensPage() {
   const controlDevice = async (deviceId: number, action: string) => {
     try {
       setControlLoading(deviceId)
-
-      console.log("🎮 [SCREENS PAGE] Sending control action", action, "to device", deviceId)
 
       const response = await fetch(`/api/devices/${deviceId}/control`, {
         method: "POST",
@@ -192,66 +145,21 @@ export default function ScreensPage() {
       })
 
       const data = await response.json()
-      console.log("🎮 [SCREENS PAGE] Control response:", data)
 
       if (data.success) {
         toast.success(data.message)
-        await fetchDevices() // Refresh devices list
+        await fetchDevices()
       } else {
         toast.error(data.error || "Failed to control device")
       }
     } catch (error) {
-      console.error("❌ [SCREENS PAGE] Error controlling device:", error)
       toast.error("Failed to control device")
     } finally {
       setControlLoading(null)
     }
   }
 
-  const testAuth = async () => {
-    try {
-      console.log("🧪 [SCREENS PAGE] Testing authentication...")
-      const response = await fetch("/api/test-auth", {
-        credentials: "include",
-      })
-
-      const data = await response.json()
-      console.log("🧪 [SCREENS PAGE] Auth test response:", data)
-
-      if (data.success) {
-        toast.success(`Authentication successful for ${data.user.email}`)
-      } else {
-        toast.error(`Authentication failed: ${data.error}`)
-      }
-    } catch (error) {
-      console.error("❌ [SCREENS PAGE] Auth test error:", error)
-      toast.error("Auth test failed")
-    }
-  }
-
-  const debugToken = async () => {
-    try {
-      console.log("🔍 [SCREENS PAGE] Debugging token...")
-      const response = await fetch("/api/debug-auth-token", {
-        credentials: "include",
-      })
-
-      const data = await response.json()
-      console.log("🔍 [SCREENS PAGE] Token debug response:", data)
-
-      if (data.success) {
-        toast.success("Token is valid")
-      } else {
-        toast.error(`Token issue: ${data.error}`)
-      }
-    } catch (error) {
-      console.error("❌ [SCREENS PAGE] Token debug error:", error)
-      toast.error("Token debug failed")
-    }
-  }
-
   useEffect(() => {
-    console.log("📱 [SCREENS PAGE] Component mounted, starting data load...")
     const loadData = async () => {
       setLoading(true)
       await Promise.all([fetchDevices(), fetchPlaylists()])
@@ -367,23 +275,9 @@ export default function ScreensPage() {
             </CardHeader>
             <CardContent>
               <p className="text-red-700 mb-4">{error}</p>
-              <div className="space-x-2">
-                <Button onClick={fetchDevices} variant="outline">
-                  Try Again
-                </Button>
-                <Button onClick={() => (window.location.href = "/login")} variant="outline">
-                  Re-login
-                </Button>
-                <Button onClick={testAuth} variant="outline">
-                  Test Auth
-                </Button>
-                <Button onClick={debugToken} variant="outline">
-                  Debug Token
-                </Button>
-                <Button onClick={() => window.open("/api/debug-screens-flow", "_blank")} variant="outline">
-                  Debug Info
-                </Button>
-              </div>
+              <Button onClick={fetchDevices} variant="outline">
+                Try Again
+              </Button>
             </CardContent>
           </Card>
         )}

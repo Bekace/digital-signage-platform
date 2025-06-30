@@ -15,7 +15,7 @@ BEGIN
     -- Add playlist_status column if it doesn't exist
     IF NOT EXISTS (SELECT 1 FROM information_schema.columns 
                    WHERE table_name = 'devices' AND column_name = 'playlist_status') THEN
-        ALTER TABLE devices ADD COLUMN playlist_status VARCHAR(50) DEFAULT 'none';
+        ALTER TABLE devices ADD COLUMN playlist_status VARCHAR(20) DEFAULT 'none';
         RAISE NOTICE 'Added playlist_status column to devices table';
     ELSE
         RAISE NOTICE 'playlist_status column already exists in devices table';
@@ -24,7 +24,7 @@ BEGIN
     -- Add last_control_action column if it doesn't exist
     IF NOT EXISTS (SELECT 1 FROM information_schema.columns 
                    WHERE table_name = 'devices' AND column_name = 'last_control_action') THEN
-        ALTER TABLE devices ADD COLUMN last_control_action VARCHAR(100);
+        ALTER TABLE devices ADD COLUMN last_control_action VARCHAR(50);
         RAISE NOTICE 'Added last_control_action column to devices table';
     ELSE
         RAISE NOTICE 'last_control_action column already exists in devices table';
@@ -64,6 +64,15 @@ BEGIN
         RAISE NOTICE 'Created index idx_devices_playlist_status';
     ELSE
         RAISE NOTICE 'Index idx_devices_playlist_status already exists';
+    END IF;
+
+    -- Create index on user_id if it doesn't exist
+    IF NOT EXISTS (SELECT 1 FROM pg_indexes 
+                   WHERE tablename = 'devices' AND indexname = 'idx_devices_user_id') THEN
+        CREATE INDEX idx_devices_user_id ON devices(user_id);
+        RAISE NOTICE 'Created index idx_devices_user_id';
+    ELSE
+        RAISE NOTICE 'Index idx_devices_user_id already exists';
     END IF;
 
     -- Update existing devices to have default playlist status

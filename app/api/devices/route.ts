@@ -1,31 +1,23 @@
 import { type NextRequest, NextResponse } from "next/server"
-import { getCurrentUser } from "@/lib/auth"
 import { neon } from "@neondatabase/serverless"
+import { getCurrentUser } from "@/lib/auth"
 
 const sql = neon(process.env.DATABASE_URL!)
 
 export async function GET(request: NextRequest) {
   try {
-    console.log("📱 [DEVICES API] ===== STARTING GET /api/devices =====")
-
-    // Get current user
     const user = await getCurrentUser(request)
     if (!user) {
-      console.log("❌ [DEVICES API] No authenticated user found")
       return NextResponse.json(
         {
           success: false,
           error: "Unauthorized",
-          debug: "No user found in getCurrentUser()",
         },
         { status: 401 },
       )
     }
 
-    console.log(`✅ [DEVICES API] Authenticated user: ${user.email} (ID: ${user.id})`)
-
-    // Get devices for this user with simplified query first
-    console.log("📱 [DEVICES API] Fetching devices from database...")
+    // Get devices for this user
     const devices = await sql`
       SELECT 
         d.id,
@@ -35,40 +27,39 @@ export async function GET(request: NextRequest) {
         d.last_seen,
         d.user_id,
         d.created_at,
-        d.updated_at
+        d.updated_at,
+        d.assigned_playlist_id,
+        d.playlist_status,
+        d.last_control_action,
+        d.last_control_time
       FROM devices d
       WHERE d.user_id = ${user.id}
       ORDER BY d.created_at DESC
     `
 
-    console.log(`📱 [DEVICES API] Found ${devices.length} devices`)
-
     // Format devices for response
-    const formattedDevices = devices.map((device: any) => ({
+    const formattedDevices = devices.map((device) => ({
       id: device.id,
       name: device.name || `Device ${device.id}`,
       deviceType: device.device_type || "unknown",
-      status: device.status || "offline",
+      status: device.status === "online" ? "online" : "offline",
       lastSeen: device.last_seen || device.updated_at || device.created_at,
-      assignedPlaylistId: null, // Will be added later when we fix the schema
-      playlistStatus: "none",
-      lastControlAction: null,
-      lastControlTime: null,
+      assignedPlaylistId: device.assigned_playlist_id,
+      playlistStatus: device.playlist_status || "none",
+      lastControlAction: device.last_control_action,
+      lastControlTime: device.last_control_time,
       createdAt: device.created_at,
       updatedAt: device.updated_at,
       playlist: null,
     }))
 
-    // Calculate stats
+    // Calculate statistics
     const stats = {
       total: devices.length,
-      online: devices.filter((d: any) => d.status === "online").length,
-      offline: devices.filter((d: any) => d.status === "offline").length,
-      playing: 0, // Will be calculated when we have playlist status
+      online: devices.filter((d) => d.status === "online").length,
+      offline: devices.filter((d) => d.status === "offline").length,
+      playing: devices.filter((d) => d.playlist_status === "playing").length,
     }
-
-    console.log("📱 [DEVICES API] Stats:", stats)
-    console.log("📱 [DEVICES API] ===== GET /api/devices COMPLETE =====")
 
     return NextResponse.json({
       success: true,
@@ -80,7 +71,8 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(
       {
         success: false,
-        error: error instanceof Error ? error.message : "Unknown error",
+        error: "Failed to fetch devices",
+        details: error instanceof Error ? error.message : "Unknown error",
       },
       { status: 500 },
     )
@@ -89,93 +81,52 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    console.log("📱 [DEVICES API] ===== STARTING POST /api/devices =====")
-
     const user = await getCurrentUser(request)
     if (!user) {
-      console.log("❌ [DEVICES API] No authenticated user found")
-      return NextResponse.json(
-        {
-          success: false,
-          error: "Unauthorized",
-        },
-        { status: 401 },
-      )
+      return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 })
     }
 
     const body = await request.json()
-    console.log("📱 [DEVICES API] Request body:", body)
+    const { name, location, description } = body
 
-    const { name, deviceType, pairingCode } = body
+    // Generate a pairing code for the new device
+    const pairingCode = Math.random().toString(36).substring(2, 8).toUpperCase()
+    const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000) // 24 hours
 
-    if (!name || !deviceType) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: "Name and device type are required",
-        },
-        { status: 400 },
-      )
-    }
-
-    // If pairing code is provided, validate it
-    if (pairingCode) {
-      console.log("📱 [DEVICES API] Validating pairing code:", pairingCode)
-      const pairingCodes = await sql`
-        SELECT * FROM device_pairing_codes 
-        WHERE code = ${pairingCode} 
-        AND expires_at > NOW()
-        AND completed_at IS NULL
-        LIMIT 1
-      `
-
-      if (pairingCodes.length === 0) {
-        return NextResponse.json(
-          {
-            success: false,
-            error: "Invalid or expired pairing code",
-          },
-          { status: 400 },
-        )
-      }
-
-      // Mark pairing code as used
-      await sql`
-        UPDATE device_pairing_codes 
-        SET completed_at = NOW()
-        WHERE code = ${pairingCode}
-      `
-    }
-
-    // Create device
-    console.log("📱 [DEVICES API] Creating device...")
-    const devices = await sql`
-      INSERT INTO devices (name, device_type, user_id, status, last_seen)
-      VALUES (${name}, ${deviceType}, ${user.id}, 'offline', NOW())
+    // Create the device
+    const deviceResult = await sql`
+      INSERT INTO devices (user_id, name, device_type, status, created_at, updated_at)
+      VALUES (${user.id}, ${name}, 'unknown', 'offline', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
       RETURNING *
     `
 
-    const device = devices[0]
-    console.log("📱 [DEVICES API] Device created:", device)
+    if (deviceResult.length === 0) {
+      throw new Error("Failed to create device")
+    }
+
+    const device = deviceResult[0]
+
+    // Create pairing code
+    await sql`
+      INSERT INTO device_pairing_codes (code, expires_at, device_id, user_id, screen_name, created_at)
+      VALUES (${pairingCode}, ${expiresAt.toISOString()}, ${device.id}, ${user.id}, ${name}, CURRENT_TIMESTAMP)
+    `
 
     return NextResponse.json({
       success: true,
-      message: "Device added successfully",
       device: {
-        id: device.id,
-        name: device.name,
-        deviceType: device.device_type,
-        status: device.status,
-        lastSeen: device.last_seen,
-        createdAt: device.created_at,
+        ...device,
+        pairingCode: pairingCode,
+        pairingExpiresAt: expiresAt.toISOString(),
       },
     })
   } catch (error) {
-    console.error("❌ [DEVICES API] Error:", error)
+    console.error("❌ [DEVICES API] Error creating device:", error)
     return NextResponse.json(
       {
         success: false,
-        error: error instanceof Error ? error.message : "Unknown error",
+        error: "Failed to create device",
+        details: error instanceof Error ? error.message : "Unknown error",
       },
       { status: 500 },
     )
