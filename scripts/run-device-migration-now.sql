@@ -1,177 +1,164 @@
+-- Migration script to add missing columns and fix device tables
+-- Run this to fix the devices table structure
+
+BEGIN;
+
+-- First, let's check what columns exist in the devices table
+DO $$
+BEGIN
+    RAISE NOTICE 'Starting device table migration...';
+END $$;
+
 -- Add missing columns to devices table if they don't exist
-DO $$ 
-BEGIN
-    -- Add assigned_playlist_id column
-    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'devices' AND column_name = 'assigned_playlist_id') THEN
-        ALTER TABLE devices ADD COLUMN assigned_playlist_id INTEGER REFERENCES playlists(id);
-        RAISE NOTICE 'Added assigned_playlist_id column to devices table';
-    ELSE
-        RAISE NOTICE 'assigned_playlist_id column already exists in devices table';
-    END IF;
-    
-    -- Add playlist_status column
-    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'devices' AND column_name = 'playlist_status') THEN
-        ALTER TABLE devices ADD COLUMN playlist_status VARCHAR(50) DEFAULT 'none';
-        RAISE NOTICE 'Added playlist_status column to devices table';
-    ELSE
-        RAISE NOTICE 'playlist_status column already exists in devices table';
-    END IF;
-    
-    -- Add last_control_action column
-    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'devices' AND column_name = 'last_control_action') THEN
-        ALTER TABLE devices ADD COLUMN last_control_action VARCHAR(50);
-        RAISE NOTICE 'Added last_control_action column to devices table';
-    ELSE
-        RAISE NOTICE 'last_control_action column already exists in devices table';
-    END IF;
-    
-    -- Add last_control_time column
-    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'devices' AND column_name = 'last_control_time') THEN
-        ALTER TABLE devices ADD COLUMN last_control_time TIMESTAMP;
-        RAISE NOTICE 'Added last_control_time column to devices table';
-    ELSE
-        RAISE NOTICE 'last_control_time column already exists in devices table';
-    END IF;
-    
-    -- Add updated_at column if it doesn't exist
-    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'devices' AND column_name = 'updated_at') THEN
-        ALTER TABLE devices ADD COLUMN updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;
-        RAISE NOTICE 'Added updated_at column to devices table';
-    ELSE
-        RAISE NOTICE 'updated_at column already exists in devices table';
-    END IF;
-    
-    -- Update existing devices to have default values
-    UPDATE devices SET 
-        playlist_status = 'none' 
-    WHERE playlist_status IS NULL;
-    
-    UPDATE devices SET 
-        updated_at = CURRENT_TIMESTAMP 
-    WHERE updated_at IS NULL;
-    
-    -- Create indexes for better performance
-    CREATE INDEX IF NOT EXISTS idx_devices_user_id ON devices(user_id);
-    CREATE INDEX IF NOT EXISTS idx_devices_assigned_playlist ON devices(assigned_playlist_id);
-    CREATE INDEX IF NOT EXISTS idx_devices_status ON devices(status);
-    
-    RAISE NOTICE 'Device table migration completed successfully';
-END $$;
+ALTER TABLE devices 
+ADD COLUMN IF NOT EXISTS assigned_playlist_id INTEGER REFERENCES playlists(id),
+ADD COLUMN IF NOT EXISTS playlist_status VARCHAR(20) DEFAULT 'none',
+ADD COLUMN IF NOT EXISTS last_control_action VARCHAR(50),
+ADD COLUMN IF NOT EXISTS last_control_time TIMESTAMP,
+ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;
 
--- Ensure device_pairing_codes table has correct structure
+-- Create or update device_pairing_codes table
+CREATE TABLE IF NOT EXISTS device_pairing_codes (
+    id SERIAL PRIMARY KEY,
+    code VARCHAR(10) UNIQUE NOT NULL,
+    screen_name VARCHAR(255) NOT NULL,
+    device_type VARCHAR(50) NOT NULL,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    expires_at TIMESTAMP NOT NULL,
+    completed_at TIMESTAMP,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Add missing columns to device_pairing_codes if they don't exist
+ALTER TABLE device_pairing_codes 
+ADD COLUMN IF NOT EXISTS completed_at TIMESTAMP,
+ADD COLUMN IF NOT EXISTS user_id INTEGER;
+
+-- Add foreign key constraint if it doesn't exist
 DO $$
 BEGIN
-    -- Check if device_pairing_codes table exists, if not create it
-    IF NOT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'device_pairing_codes') THEN
-        CREATE TABLE device_pairing_codes (
-            id SERIAL PRIMARY KEY,
-            user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-            screen_name VARCHAR(255) NOT NULL,
-            device_type VARCHAR(50) NOT NULL,
-            code VARCHAR(10) NOT NULL UNIQUE,
-            expires_at TIMESTAMP NOT NULL,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            completed_at TIMESTAMP,
-            used_at TIMESTAMP,
-            device_id INTEGER REFERENCES devices(id) ON DELETE SET NULL
-        );
-        RAISE NOTICE 'Created device_pairing_codes table';
-    ELSE
-        RAISE NOTICE 'device_pairing_codes table already exists';
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.table_constraints 
+        WHERE constraint_name = 'device_pairing_codes_user_id_fkey'
+    ) THEN
+        ALTER TABLE device_pairing_codes 
+        ADD CONSTRAINT device_pairing_codes_user_id_fkey 
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE;
     END IF;
-    
-    -- Add missing columns to device_pairing_codes if they don't exist
-    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'device_pairing_codes' AND column_name = 'code') THEN
-        ALTER TABLE device_pairing_codes ADD COLUMN code VARCHAR(10) NOT NULL;
-        RAISE NOTICE 'Added code column to device_pairing_codes table';
-    END IF;
-    
-    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'device_pairing_codes' AND column_name = 'device_type') THEN
-        ALTER TABLE device_pairing_codes ADD COLUMN device_type VARCHAR(50);
-        RAISE NOTICE 'Added device_type column to device_pairing_codes table';
-    END IF;
-    
-    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'device_pairing_codes' AND column_name = 'screen_name') THEN
-        ALTER TABLE device_pairing_codes ADD COLUMN screen_name VARCHAR(255);
-        RAISE NOTICE 'Added screen_name column to device_pairing_codes table';
-    END IF;
-    
-    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'device_pairing_codes' AND column_name = 'completed_at') THEN
-        ALTER TABLE device_pairing_codes ADD COLUMN completed_at TIMESTAMP;
-        RAISE NOTICE 'Added completed_at column to device_pairing_codes table';
-    END IF;
-    
-    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'device_pairing_codes' AND column_name = 'used_at') THEN
-        ALTER TABLE device_pairing_codes ADD COLUMN used_at TIMESTAMP;
-        RAISE NOTICE 'Added used_at column to device_pairing_codes table';
-    END IF;
-    
-    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'device_pairing_codes' AND column_name = 'device_id') THEN
-        ALTER TABLE device_pairing_codes ADD COLUMN device_id INTEGER REFERENCES devices(id) ON DELETE SET NULL;
-        RAISE NOTICE 'Added device_id column to device_pairing_codes table';
-    END IF;
-    
-    -- Create indexes for device_pairing_codes
-    CREATE INDEX IF NOT EXISTS idx_device_pairing_codes_user_id ON device_pairing_codes(user_id);
-    CREATE INDEX IF NOT EXISTS idx_device_pairing_codes_code ON device_pairing_codes(code);
-    CREATE INDEX IF NOT EXISTS idx_device_pairing_codes_expires_at ON device_pairing_codes(expires_at);
-    
-    RAISE NOTICE 'Device pairing codes table migration completed successfully';
 END $$;
 
--- Insert sample devices if table is empty (for testing)
+-- Create device_heartbeats table if it doesn't exist
+CREATE TABLE IF NOT EXISTS device_heartbeats (
+    id SERIAL PRIMARY KEY,
+    device_id INTEGER NOT NULL REFERENCES devices(id) ON DELETE CASCADE,
+    status JSONB NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Add indexes for better performance
+CREATE INDEX IF NOT EXISTS idx_devices_user_id ON devices(user_id);
+CREATE INDEX IF NOT EXISTS idx_devices_status ON devices(status);
+CREATE INDEX IF NOT EXISTS idx_devices_assigned_playlist ON devices(assigned_playlist_id);
+CREATE INDEX IF NOT EXISTS idx_device_pairing_codes_code ON device_pairing_codes(code);
+CREATE INDEX IF NOT EXISTS idx_device_pairing_codes_user_id ON device_pairing_codes(user_id);
+CREATE INDEX IF NOT EXISTS idx_device_pairing_codes_expires_at ON device_pairing_codes(expires_at);
+CREATE INDEX IF NOT EXISTS idx_device_heartbeats_device_id ON device_heartbeats(device_id);
+CREATE INDEX IF NOT EXISTS idx_device_heartbeats_created_at ON device_heartbeats(created_at);
+
+-- Update existing devices to have default values
+UPDATE devices 
+SET 
+    playlist_status = COALESCE(playlist_status, 'none'),
+    updated_at = COALESCE(updated_at, created_at)
+WHERE playlist_status IS NULL OR updated_at IS NULL;
+
+-- Create trigger to automatically update updated_at column
+CREATE OR REPLACE FUNCTION update_updated_at_column()
+RETURNS TRIGGER AS $$
+BEGIN
+    NEW.updated_at = CURRENT_TIMESTAMP;
+    RETURN NEW;
+END;
+$$ language 'plpgsql';
+
+-- Drop trigger if it exists and recreate it
+DROP TRIGGER IF EXISTS update_devices_updated_at ON devices;
+CREATE TRIGGER update_devices_updated_at
+    BEFORE UPDATE ON devices
+    FOR EACH ROW
+    EXECUTE FUNCTION update_updated_at_column();
+
+-- Clean up expired pairing codes
+DELETE FROM device_pairing_codes 
+WHERE expires_at < CURRENT_TIMESTAMP AND completed_at IS NULL;
+
+-- Show current table structures
 DO $$
 BEGIN
-    IF NOT EXISTS (SELECT 1 FROM devices LIMIT 1) THEN
-        -- Insert sample devices for the first user
-        INSERT INTO devices (user_id, name, device_type, status, playlist_status, created_at, updated_at)
-        SELECT 
-            u.id, 
-            'Sample Fire TV', 
-            'fire_tv', 
-            'offline', 
-            'none', 
-            CURRENT_TIMESTAMP, 
-            CURRENT_TIMESTAMP
-        FROM users u 
-        LIMIT 1;
-        
-        INSERT INTO devices (user_id, name, device_type, status, playlist_status, created_at, updated_at)
-        SELECT 
-            u.id, 
-            'Sample Web Browser', 
-            'web_browser', 
-            'offline', 
-            'none', 
-            CURRENT_TIMESTAMP, 
-            CURRENT_TIMESTAMP
-        FROM users u 
-        LIMIT 1;
-        
-        RAISE NOTICE 'Added sample devices for testing';
-    ELSE
-        RAISE NOTICE 'Devices table already has data, skipping sample data insertion';
-    END IF;
+    RAISE NOTICE 'Migration completed successfully!';
+    RAISE NOTICE 'Checking table structures...';
 END $$;
 
--- Show final table structures
-SELECT 'Device table structure after migration:' as info;
-SELECT column_name, data_type, is_nullable, column_default
+-- Display devices table structure
+SELECT 
+    column_name, 
+    data_type, 
+    is_nullable, 
+    column_default
 FROM information_schema.columns 
 WHERE table_name = 'devices' 
 ORDER BY ordinal_position;
 
-SELECT 'Device pairing codes table structure:' as info;
-SELECT column_name, data_type, is_nullable, column_default
+-- Display device_pairing_codes table structure  
+SELECT 
+    column_name, 
+    data_type, 
+    is_nullable, 
+    column_default
 FROM information_schema.columns 
 WHERE table_name = 'device_pairing_codes' 
 ORDER BY ordinal_position;
 
--- Show sample data
-SELECT 'Current devices in database:' as info;
-SELECT id, name, device_type, status, playlist_status, user_id, created_at
-FROM devices 
-ORDER BY created_at DESC
-LIMIT 10;
+-- Show current data counts
+SELECT 
+    'devices' as table_name, 
+    COUNT(*) as record_count 
+FROM devices
+UNION ALL
+SELECT 
+    'device_pairing_codes' as table_name, 
+    COUNT(*) as record_count 
+FROM device_pairing_codes
+UNION ALL
+SELECT 
+    'device_heartbeats' as table_name, 
+    COUNT(*) as record_count 
+FROM device_heartbeats;
 
-SELECT 'Migration completed successfully! All required columns and tables are now in place.' as result;
+-- Show sample devices data
+SELECT 
+    id,
+    name,
+    device_type,
+    status,
+    assigned_playlist_id,
+    playlist_status,
+    last_control_action,
+    last_control_time,
+    created_at,
+    updated_at
+FROM devices 
+ORDER BY created_at DESC 
+LIMIT 5;
+
+COMMIT;
+
+-- Final success message
+DO $$
+BEGIN
+    RAISE NOTICE '✅ Device migration completed successfully!';
+    RAISE NOTICE '✅ All missing columns have been added';
+    RAISE NOTICE '✅ Indexes have been created for better performance';
+    RAISE NOTICE '✅ Triggers have been set up for automatic timestamps';
+    RAISE NOTICE '✅ You can now test the pairing code generation';
+END $$;
