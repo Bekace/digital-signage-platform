@@ -1,7 +1,6 @@
 "use client"
 
 import type React from "react"
-
 import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -50,38 +49,59 @@ export default function ScreensPage() {
   const [playlists, setPlaylists] = useState<Playlist[]>([])
   const [stats, setStats] = useState<DeviceStats>({ total: 0, online: 0, offline: 0, playing: 0 })
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
   const [controlLoading, setControlLoading] = useState<number | null>(null)
   const [assignLoading, setAssignLoading] = useState<number | null>(null)
   const [showAddDialog, setShowAddDialog] = useState(false)
 
   const fetchDevices = async () => {
     try {
+      console.log("📱 [SCREENS PAGE] Starting fetchDevices...")
+
       const token = localStorage.getItem("token")
+      console.log("📱 [SCREENS PAGE] Token from localStorage:", !!token)
+
       if (!token) {
+        setError("No authentication token found. Please log in again.")
         toast.error("Please log in to view devices")
         return
       }
 
-      console.log("📱 [SCREENS PAGE] Fetching devices...")
+      console.log("📱 [SCREENS PAGE] Making API request to /api/devices...")
       const response = await fetch("/api/devices", {
+        method: "GET",
         headers: {
+          "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
       })
 
+      console.log("📱 [SCREENS PAGE] API response status:", response.status)
+      console.log("📱 [SCREENS PAGE] API response headers:", Object.fromEntries(response.headers.entries()))
+
       if (!response.ok) {
-        throw new Error("Failed to fetch devices")
+        const errorText = await response.text()
+        console.error("📱 [SCREENS PAGE] API error response:", errorText)
+        throw new Error(`HTTP ${response.status}: ${errorText}`)
       }
 
       const data = await response.json()
-      console.log("📱 [SCREENS PAGE] Devices response:", data)
+      console.log("📱 [SCREENS PAGE] API response data:", data)
 
       if (data.success) {
+        console.log(`📱 [SCREENS PAGE] Successfully loaded ${data.devices.length} devices`)
         setDevices(data.devices || [])
         setStats(data.stats || { total: 0, online: 0, offline: 0, playing: 0 })
+        setError(null)
+      } else {
+        console.error("📱 [SCREENS PAGE] API returned error:", data.error)
+        setError(data.error || "Failed to fetch devices")
+        toast.error(data.error || "Failed to load devices")
       }
-    } catch (error) {
-      console.error("❌ [SCREENS PAGE] Error fetching devices:", error)
+    } catch (err) {
+      console.error("📱 [SCREENS PAGE] Error fetching devices:", err)
+      const errorMessage = err instanceof Error ? err.message : "Unknown error occurred"
+      setError(errorMessage)
       toast.error("Failed to load devices")
     }
   }
@@ -99,7 +119,8 @@ export default function ScreensPage() {
       })
 
       if (!response.ok) {
-        throw new Error("Failed to fetch playlists")
+        console.error("🎬 [SCREENS PAGE] Failed to fetch playlists:", response.status)
+        return
       }
 
       const data = await response.json()
@@ -190,6 +211,7 @@ export default function ScreensPage() {
   }
 
   useEffect(() => {
+    console.log("📱 [SCREENS PAGE] Component mounted, starting data load...")
     const loadData = async () => {
       setLoading(true)
       await Promise.all([fetchDevices(), fetchPlaylists()])
@@ -207,6 +229,7 @@ export default function ScreensPage() {
       case "ios":
         return <Smartphone className="h-4 w-4" />
       case "web":
+      case "web_browser":
         return <Globe className="h-4 w-4" />
       default:
         return <Monitor className="h-4 w-4" />
@@ -296,6 +319,21 @@ export default function ScreensPage() {
           </Button>
         </div>
 
+        {/* Error Display */}
+        {error && (
+          <Card className="border-red-200 bg-red-50">
+            <CardHeader>
+              <CardTitle className="text-red-800">Error Loading Screens</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-red-700 mb-4">{error}</p>
+              <Button onClick={fetchDevices} variant="outline">
+                Try Again
+              </Button>
+            </CardContent>
+          </Card>
+        )}
+
         {/* Statistics Cards */}
         <div className="grid gap-4 md:grid-cols-4">
           <Card>
@@ -338,7 +376,7 @@ export default function ScreensPage() {
 
         {/* Devices List */}
         <div className="space-y-4">
-          {devices.length === 0 ? (
+          {devices.length === 0 && !error ? (
             <Card>
               <CardContent className="flex flex-col items-center justify-center py-12">
                 <Monitor className="h-12 w-12 text-muted-foreground mb-4" />

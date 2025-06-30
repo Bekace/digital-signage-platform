@@ -6,14 +6,12 @@ const sql = neon(process.env.DATABASE_URL!)
 
 export async function GET(request: NextRequest) {
   try {
-    console.log("📱 [DEVICES API] ===== STARTING GET REQUEST =====")
+    console.log("📱 [DEVICES API] Starting GET request")
+    console.log("📱 [DEVICES API] Request headers:", Object.fromEntries(request.headers.entries()))
 
-    // Step 1: Authentication
-    console.log("📱 [DEVICES API] Step 1: Checking authentication...")
     const user = await getCurrentUser(request)
-
     if (!user) {
-      console.log("❌ [DEVICES API] Authentication failed - no user found")
+      console.log("❌ [DEVICES API] No user found - unauthorized")
       return NextResponse.json(
         {
           success: false,
@@ -24,12 +22,9 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    console.log(`✅ [DEVICES API] User authenticated: ${user.email} (ID: ${user.id})`)
+    console.log(`📱 [DEVICES API] User authenticated: ${user.email} (ID: ${user.id})`)
 
-    // Step 2: Database Query
-    console.log("📱 [DEVICES API] Step 2: Querying database...")
-    console.log(`📱 [DEVICES API] Query: SELECT devices WHERE user_id = ${user.id}`)
-
+    // Get devices for this user
     const devices = await sql`
       SELECT 
         d.id,
@@ -45,58 +40,47 @@ export async function GET(request: NextRequest) {
       ORDER BY d.created_at DESC
     `
 
-    console.log(`📱 [DEVICES API] Raw query result: Found ${devices.length} devices`)
-    console.log("📱 [DEVICES API] Raw devices data:", JSON.stringify(devices, null, 2))
+    console.log(`📱 [DEVICES API] Found ${devices.length} devices for user ${user.id}`)
+    console.log("📱 [DEVICES API] Raw devices:", devices)
 
-    // Step 3: Statistics
+    // Calculate statistics
     const stats = {
       total: devices.length,
       online: devices.filter((d) => d.status === "online").length,
       offline: devices.filter((d) => d.status === "offline").length,
       playing: devices.filter((d) => d.status === "playing").length,
     }
-    console.log("📱 [DEVICES API] Statistics:", stats)
 
-    // Step 4: Format Response
-    const formattedDevices = devices.map((device) => {
-      const formatted = {
-        id: device.id,
-        name: device.name || `Device ${device.id}`,
-        deviceType: device.device_type || "unknown",
-        status: device.status === "online" ? "online" : "offline",
-        lastSeen: device.last_seen || device.updated_at || device.created_at,
-        assignedPlaylistId: null,
-        playlistStatus: "none",
-        lastControlAction: null,
-        lastControlTime: null,
-        createdAt: device.created_at,
-        updatedAt: device.updated_at,
-        playlist: null,
-      }
-      console.log(`📱 [DEVICES API] Formatted device ${device.id}:`, formatted)
-      return formatted
-    })
+    // Format devices for response
+    const formattedDevices = devices.map((device) => ({
+      id: device.id,
+      name: device.name || `Device ${device.id}`,
+      deviceType: device.device_type || "unknown",
+      status: device.status === "online" ? "online" : "offline",
+      lastSeen: device.last_seen || device.updated_at || device.created_at,
+      assignedPlaylistId: null,
+      playlistStatus: "none",
+      lastControlAction: null,
+      lastControlTime: null,
+      createdAt: device.created_at,
+      updatedAt: device.updated_at,
+      playlist: null,
+    }))
 
-    const response = {
+    console.log(`✅ [DEVICES API] Returning ${formattedDevices.length} formatted devices`)
+
+    return NextResponse.json({
       success: true,
       devices: formattedDevices,
       stats,
-    }
-
-    console.log("✅ [DEVICES API] Final response:", JSON.stringify(response, null, 2))
-    console.log("📱 [DEVICES API] ===== REQUEST COMPLETE =====")
-
-    return NextResponse.json(response)
+    })
   } catch (error) {
-    console.error("❌ [DEVICES API] CRITICAL ERROR:", error)
-    console.error("❌ [DEVICES API] Error stack:", error instanceof Error ? error.stack : "No stack")
-
+    console.error("❌ [DEVICES API] Error:", error)
     return NextResponse.json(
       {
         success: false,
         error: "Failed to fetch devices",
         details: error instanceof Error ? error.message : "Unknown error",
-        debug: "Check server logs for full error details",
       },
       { status: 500 },
     )
@@ -105,8 +89,6 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    console.log("📱 [DEVICES API] POST request received")
-
     const user = await getCurrentUser(request)
     if (!user) {
       return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 })
