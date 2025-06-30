@@ -25,3 +25,13 @@ CREATE INDEX IF NOT EXISTS idx_device_pairing_codes_user_id ON device_pairing_co
 
 -- Clean up any expired codes
 DELETE FROM device_pairing_codes WHERE expires_at < CURRENT_TIMESTAMP;
+
+-- Insert some test codes for immediate testing
+INSERT INTO device_pairing_codes (code, expires_at, created_at) 
+VALUES 
+  ('TEST01', CURRENT_TIMESTAMP + INTERVAL '1 hour', CURRENT_TIMESTAMP),
+  ('TEST02', CURRENT_TIMESTAMP + INTERVAL '1 hour', CURRENT_TIMESTAMP),
+  ('DEMO01', CURRENT_TIMESTAMP + INTERVAL '1 hour', CURRENT_TIMESTAMP)
+ON CONFLICT (code) DO UPDATE SET
+  expires_at = EXCLUDED.expires_at,
+  created_at = EXCLUDED.created_at;
