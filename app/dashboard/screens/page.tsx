@@ -169,6 +169,9 @@ export default function ScreensPage() {
   }, [])
 
   const getDeviceIcon = (deviceType: string) => {
+    // Add null check to prevent toLowerCase error
+    if (!deviceType) return <Monitor className="h-4 w-4" />
+
     switch (deviceType.toLowerCase()) {
       case "fire_tv":
       case "android_tv":
@@ -228,6 +231,8 @@ export default function ScreensPage() {
   }
 
   const formatLastSeen = (lastSeen: string) => {
+    if (!lastSeen) return "Never"
+
     const date = new Date(lastSeen)
     const now = new Date()
     const diffMs = now.getTime() - date.getTime()
@@ -348,8 +353,8 @@ export default function ScreensPage() {
                       <div>
                         <CardTitle className="text-lg">{device.name}</CardTitle>
                         <CardDescription>
-                          {device.deviceType.replace("_", " ").toUpperCase()} • Last seen{" "}
-                          {formatLastSeen(device.lastSeen)}
+                          {device.deviceType ? device.deviceType.replace("_", " ").toUpperCase() : "UNKNOWN"} • Last
+                          seen {formatLastSeen(device.lastSeen)}
                         </CardDescription>
                       </div>
                     </div>
