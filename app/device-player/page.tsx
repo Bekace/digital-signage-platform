@@ -39,6 +39,7 @@ export default function DevicePlayerPage() {
   const [isPlaying, setIsPlaying] = useState(false)
   const [loading, setLoading] = useState(false)
   const [connectionStatus, setConnectionStatus] = useState<"disconnected" | "connecting" | "connected">("disconnected")
+  const [screenInfo, setScreenInfo] = useState({ width: 1920, height: 1080 })
 
   // Generate a unique device identifier
   const [deviceId] = useState(() => {
@@ -52,6 +53,16 @@ export default function DevicePlayerPage() {
     }
     return `device-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
   })
+
+  // Get screen info safely on client side
+  useEffect(() => {
+    if (typeof window !== "undefined" && window.screen) {
+      setScreenInfo({
+        width: window.screen.width,
+        height: window.screen.height,
+      })
+    }
+  }, [])
 
   // Connect to dashboard with pairing code
   const connectToDashboard = async () => {
@@ -77,7 +88,7 @@ export default function DevicePlayerPage() {
             userAgent: navigator.userAgent,
             platform: navigator.platform,
             language: navigator.language,
-            screenResolution: `${screen.width}x${screen.height}`,
+            screenResolution: `${screenInfo.width}x${screenInfo.height}`,
             timestamp: new Date().toISOString(),
           },
         }),
@@ -248,10 +259,10 @@ export default function DevicePlayerPage() {
                 <strong>Device ID:</strong> {deviceId}
               </p>
               <p>
-                <strong>Screen:</strong> {screen.width}x{screen.height}
+                <strong>Screen:</strong> {screenInfo.width}x{screenInfo.height}
               </p>
               <p>
-                <strong>Platform:</strong> {navigator.platform}
+                <strong>Platform:</strong> {typeof navigator !== "undefined" ? navigator.platform : "Unknown"}
               </p>
             </div>
           </CardContent>

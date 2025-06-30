@@ -1,85 +1,52 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { neon } from "@neondatabase/serverless"
-import { getCurrentUser } from "@/lib/auth"
+
+export const dynamic = "force-dynamic"
 
 const sql = neon(process.env.DATABASE_URL!)
 
 export async function POST(request: NextRequest) {
   try {
-    console.log("🔍 [CHECK CONNECTION] Starting connection check...")
-
-    const user = await getCurrentUser(request)
-    if (!user) {
-      console.log("🔍 [CHECK CONNECTION] No authenticated user found")
-      return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 })
-    }
-
-    const body = await request.json()
-    const { pairingCode } = body
-
-    console.log("🔍 [CHECK CONNECTION] Checking code:", pairingCode)
+    const { pairingCode } = await request.json()
 
     if (!pairingCode) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: "Pairing code is required",
-        },
-        { status: 400 },
-      )
+      return NextResponse.json({ success: false, error: "Pairing code is required" }, { status: 400 })
     }
 
-    // Check if the pairing code exists and is valid
-    const pairingRecord = await sql`
-      SELECT 
-        dpc.id,
-        dpc.code,
-        dpc.screen_name,
-        dpc.device_type,
-        dpc.expires_at,
-        dpc.used_at,
-        d.id as device_id,
-        d.name as device_name,
-        d.status as device_status
-      FROM device_pairing_codes dpc
-      LEFT JOIN devices d ON d.pairing_code = dpc.code
-      WHERE dpc.code = ${pairingCode}
-      AND dpc.user_id = ${user.id}
+    console.log("🔍 [CHECK CONNECTION] Checking for code:", pairingCode)
+
+    // Check if device has been registered with this pairing code
+    const devices = await sql`
+      SELECT d.*, dpc.screen_name, dpc.device_type as pairing_device_type
+      FROM devices d
+      JOIN device_pairing_codes dpc ON d.pairing_code_id = dpc.id
+      WHERE dpc.code = ${pairingCode.toUpperCase()}
       AND dpc.expires_at > NOW()
+      ORDER BY d.created_at DESC
+      LIMIT 1
     `
 
-    if (pairingRecord.length === 0) {
-      console.log("🔍 [CHECK CONNECTION] Pairing code not found or expired")
+    if (devices.length > 0) {
+      const device = devices[0]
+      console.log("🔍 [CHECK CONNECTION] Found connected device:", device.id)
+
       return NextResponse.json({
         success: true,
-        connected: false,
-        message: "Pairing code not found or expired",
+        connected: true,
+        device: {
+          id: device.id,
+          name: device.screen_name,
+          deviceType: device.pairing_device_type,
+          status: device.status,
+          connectedAt: device.created_at,
+        },
       })
     }
 
-    const record = pairingRecord[0]
-    const isConnected = !!record.device_id
-
-    console.log("🔍 [CHECK CONNECTION] Connection status:", {
-      code: record.code,
-      connected: isConnected,
-      deviceId: record.device_id,
-      deviceName: record.device_name,
-    })
-
+    console.log("🔍 [CHECK CONNECTION] No device found for code:", pairingCode)
     return NextResponse.json({
       success: true,
-      connected: isConnected,
-      device: isConnected
-        ? {
-            id: record.device_id,
-            name: record.device_name,
-            status: record.device_status,
-          }
-        : null,
-      pairingCode: record.code,
-      screenName: record.screen_name,
-      deviceType: record.device_type,
+      connected: false,
     })
   } catch (error) {
     console.error("🔍 [CHECK CONNECTION] Error:", error)
