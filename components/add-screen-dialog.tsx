@@ -57,15 +57,12 @@ export function AddScreenDialog({ open, onOpenChange, onScreenAdded }: AddScreen
         try {
           setConnectionStatus((prev) => ({ ...prev, checking: true }))
 
-          const token = localStorage.getItem("token")
-          if (!token) return
-
           const response = await fetch("/api/devices/check-connection", {
             method: "POST",
             headers: {
               "Content-Type": "application/json",
-              Authorization: `Bearer ${token}`,
             },
+            credentials: "include",
             body: JSON.stringify({ pairingCode }),
           })
 
@@ -103,18 +100,12 @@ export function AddScreenDialog({ open, onOpenChange, onScreenAdded }: AddScreen
       setLoading(true)
       console.log("🔗 [ADD SCREEN] Generating pairing code for:", { screenName, deviceType })
 
-      const token = localStorage.getItem("token")
-      if (!token) {
-        toast.error("Please log in to add screens")
-        return
-      }
-
       const response = await fetch("/api/devices/generate-code", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
         },
+        credentials: "include",
         body: JSON.stringify({
           screenName,
           deviceType,
@@ -145,18 +136,12 @@ export function AddScreenDialog({ open, onOpenChange, onScreenAdded }: AddScreen
       setLoading(true)
       console.log("📺 [ADD SCREEN] Creating screen with code:", pairingCode)
 
-      const token = localStorage.getItem("token")
-      if (!token) {
-        toast.error("Please log in to create screens")
-        return
-      }
-
       const response = await fetch("/api/devices/create-screen", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
         },
+        credentials: "include",
         body: JSON.stringify({ pairingCode }),
       })
 

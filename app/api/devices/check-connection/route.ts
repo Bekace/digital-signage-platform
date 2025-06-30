@@ -6,82 +6,93 @@ const sql = neon(process.env.DATABASE_URL!)
 
 export async function POST(request: NextRequest) {
   try {
+    console.log("🔍 [CHECK CONNECTION] Starting connection check...")
+
     const user = await getCurrentUser(request)
     if (!user) {
+      console.log("🔍 [CHECK CONNECTION] No authenticated user found")
       return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 })
     }
 
     const body = await request.json()
     const { pairingCode } = body
 
-    console.log("🔍 [CHECK CONNECTION] Checking code:", pairingCode)
+    console.log("🔍 [CHECK CONNECTION] Checking pairing code:", pairingCode)
 
     if (!pairingCode) {
-      return NextResponse.json({ success: false, error: "Pairing code is required" }, { status: 400 })
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Pairing code is required",
+        },
+        { status: 400 },
+      )
     }
 
-    // Check if device has connected with this pairing code
-    const result = await sql`
+    // Check if pairing code exists and is valid
+    const pairingCodeRecord = await sql`
       SELECT 
-        dpc.id as pairing_id,
-        dpc.code,
-        dpc.screen_name,
-        dpc.device_type,
-        dpc.used_at,
-        dpc.device_id,
-        d.id as device_id,
-        d.name as device_name,
-        d.status as device_status,
-        d.last_seen
-      FROM device_pairing_codes dpc
-      LEFT JOIN devices d ON dpc.device_id = d.id
-      WHERE dpc.code = ${pairingCode} 
-      AND dpc.user_id = ${user.id}
-      AND dpc.expires_at > CURRENT_TIMESTAMP
+        id,
+        code,
+        screen_name,
+        device_type,
+        expires_at,
+        completed_at,
+        user_id
+      FROM device_pairing_codes 
+      WHERE code = ${pairingCode} 
+      AND user_id = ${user.id}
+      AND expires_at > CURRENT_TIMESTAMP
+      ORDER BY created_at DESC
+      LIMIT 1
     `
 
-    console.log("🔍 [CHECK CONNECTION] Query result:", result)
-
-    if (result.length === 0) {
+    if (pairingCodeRecord.length === 0) {
+      console.log("🔍 [CHECK CONNECTION] Pairing code not found or expired")
       return NextResponse.json({
-        success: false,
+        success: true,
         connected: false,
-        error: "Invalid or expired pairing code",
+        message: "Pairing code not found or expired",
       })
     }
 
-    const pairingRecord = result[0]
+    const record = pairingCodeRecord[0]
 
-    // Check if device is connected
-    const isConnected = !!(pairingRecord.device_id && pairingRecord.used_at)
-    const deviceInfo = isConnected
-      ? {
-          id: pairingRecord.device_id,
-          name: pairingRecord.device_name,
-          status: pairingRecord.device_status,
-          lastSeen: pairingRecord.last_seen,
-        }
-      : null
+    // Check if already completed (device connected)
+    if (record.completed_at) {
+      console.log("🔍 [CHECK CONNECTION] Device already connected")
 
-    console.log("🔍 [CHECK CONNECTION] Connection status:", { isConnected, deviceInfo })
+      // Find the connected device
+      const device = await sql`
+        SELECT id, name, device_type, status
+        FROM devices
+        WHERE user_id = ${user.id}
+        AND name = ${record.screen_name}
+        ORDER BY created_at DESC
+        LIMIT 1
+      `
 
+      return NextResponse.json({
+        success: true,
+        connected: true,
+        device: device[0] || null,
+        message: "Device is connected",
+      })
+    }
+
+    console.log("🔍 [CHECK CONNECTION] Device not yet connected")
     return NextResponse.json({
       success: true,
-      connected: isConnected,
-      pairingCode: pairingRecord.code,
-      screenName: pairingRecord.screen_name,
-      deviceType: pairingRecord.device_type,
-      device: deviceInfo,
-      message: isConnected ? "Device connected successfully" : "Waiting for device connection",
+      connected: false,
+      message: "Waiting for device connection",
     })
   } catch (error) {
-    console.error("❌ [CHECK CONNECTION] Error:", error)
+    console.error("🔍 [CHECK CONNECTION] Error:", error)
     return NextResponse.json(
       {
         success: false,
-        connected: false,
         error: "Failed to check connection",
-        message: error instanceof Error ? error.message : "Unknown error",
+        details: error instanceof Error ? error.message : "Unknown error",
       },
       { status: 500 },
     )
