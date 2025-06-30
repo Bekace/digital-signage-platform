@@ -1,90 +1,63 @@
-import { type NextRequest, NextResponse } from "next/server"
+import { NextResponse } from "next/server"
 import { neon } from "@neondatabase/serverless"
-import { getCurrentUser } from "@/lib/auth"
 
 const sql = neon(process.env.DATABASE_URL!)
 
-export async function GET(request: NextRequest) {
+export async function GET() {
   try {
-    console.log("🔍 [DEBUG DEVICES] Starting debug request")
+    console.log("🔍 [DEBUG DEVICES] Starting debug query...")
 
-    const user = await getCurrentUser(request)
-    console.log("🔍 [DEBUG DEVICES] Current user:", user ? { id: user.id, email: user.email } : "No user")
-
-    // Get all devices (not filtered by user for debugging)
-    const allDevices = await sql`
+    // Get all devices with pairing information
+    const devices = await sql`
       SELECT 
-        d.id,
-        d.name,
+        d.id as device_id,
+        d.name as device_name,
         d.device_type,
         d.status,
         d.user_id,
-        d.created_at,
-        d.updated_at,
+        d.created_at as device_created,
+        d.updated_at as device_updated,
         u.email as user_email,
-        u.first_name,
-        u.last_name
+        dpc.code as pairing_code,
+        dpc.screen_name,
+        dpc.used_at,
+        dpc.completed_at,
+        dpc.created_at as pairing_created
       FROM devices d
       LEFT JOIN users u ON d.user_id = u.id
+      LEFT JOIN device_pairing_codes dpc ON d.id = dpc.device_id
       ORDER BY d.created_at DESC
     `
 
-    // Get all pairing codes
-    const allPairingCodes = await sql`
-      SELECT 
-        dpc.id,
-        dpc.code,
-        dpc.screen_name,
-        dpc.device_type,
-        dpc.device_id,
-        dpc.user_id,
-        dpc.used_at,
-        dpc.completed_at,
-        dpc.created_at,
-        dpc.expires_at,
-        u.email as user_email
-      FROM device_pairing_codes dpc
-      LEFT JOIN users u ON dpc.user_id = u.id
-      ORDER BY dpc.created_at DESC
+    // Get table structure
+    const tableStructure = await sql`
+      SELECT column_name, data_type, is_nullable, column_default
+      FROM information_schema.columns 
+      WHERE table_name = 'devices' 
+      ORDER BY ordinal_position
     `
 
-    // Get devices for current user if authenticated
-    let userDevices = []
-    if (user) {
-      userDevices = await sql`
-        SELECT 
-          d.id,
-          d.name,
-          d.device_type,
-          d.status,
-          d.user_id,
-          d.created_at,
-          d.updated_at
-        FROM devices d
-        WHERE d.user_id = ${user.id}
-        ORDER BY d.created_at DESC
-      `
+    // Get user count
+    const userCountResult = await sql`SELECT COUNT(*) as count FROM users`
+    const userCount = userCountResult[0]?.count || 0
+
+    // Summary statistics
+    const summary = {
+      totalDevices: devices.length,
+      devicesWithUsers: devices.filter((d) => d.user_id !== null).length,
+      devicesWithPairing: devices.filter((d) => d.pairing_code !== null).length,
+      completedPairings: devices.filter((d) => d.completed_at !== null).length,
     }
 
-    console.log("🔍 [DEBUG DEVICES] Results:", {
-      totalDevices: allDevices.length,
-      totalPairingCodes: allPairingCodes.length,
-      userDevices: userDevices.length,
-      currentUserId: user?.id,
-    })
+    console.log("🔍 [DEBUG DEVICES] Results:", { devices, summary })
 
     return NextResponse.json({
       success: true,
-      debug: {
-        currentUser: user ? { id: user.id, email: user.email } : null,
-        allDevices,
-        allPairingCodes,
-        userDevices,
-        stats: {
-          totalDevices: allDevices.length,
-          totalPairingCodes: allPairingCodes.length,
-          userDevicesCount: userDevices.length,
-        },
+      data: {
+        devices,
+        tableStructure,
+        userCount,
+        summary,
       },
     })
   } catch (error) {
@@ -92,7 +65,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(
       {
         success: false,
-        error: "Debug failed",
+        error: "Failed to debug devices",
         details: error instanceof Error ? error.message : "Unknown error",
       },
       { status: 500 },
