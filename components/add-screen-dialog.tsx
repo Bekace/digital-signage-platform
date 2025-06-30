@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -17,7 +17,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
 import { toast } from "sonner"
-import { Copy, Check, Monitor, Smartphone, Tv, Globe, Plus } from "lucide-react"
+import { Copy, Check, Monitor, Smartphone, Tv, Globe, Plus, Wifi, WifiOff, Loader2 } from "lucide-react"
 
 interface AddScreenDialogProps {
   open: boolean
@@ -32,6 +32,14 @@ export function AddScreenDialog({ open, onOpenChange, onScreenAdded }: AddScreen
   const [pairingCode, setPairingCode] = useState("")
   const [loading, setLoading] = useState(false)
   const [copied, setCopied] = useState(false)
+  const [connectionStatus, setConnectionStatus] = useState<{
+    connected: boolean
+    device?: any
+    checking: boolean
+  }>({
+    connected: false,
+    checking: false,
+  })
 
   const deviceTypes = [
     { value: "fire_tv", label: "Fire TV Stick", icon: Tv },
@@ -41,6 +49,54 @@ export function AddScreenDialog({ open, onOpenChange, onScreenAdded }: AddScreen
     { value: "web", label: "Web Browser", icon: Globe },
     { value: "other", label: "Other Device", icon: Monitor },
   ]
+
+  // Check connection status periodically
+  useEffect(() => {
+    if (step === "pairing" && pairingCode && !connectionStatus.connected) {
+      const checkConnection = async () => {
+        try {
+          setConnectionStatus((prev) => ({ ...prev, checking: true }))
+
+          const token = localStorage.getItem("token")
+          if (!token) return
+
+          const response = await fetch("/api/devices/check-connection", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify({ pairingCode }),
+          })
+
+          const data = await response.json()
+          console.log("🔍 [ADD SCREEN] Connection check:", data)
+
+          if (data.success) {
+            setConnectionStatus({
+              connected: data.connected,
+              device: data.device,
+              checking: false,
+            })
+
+            if (data.connected && !connectionStatus.connected) {
+              toast.success("Device connected successfully!")
+            }
+          }
+        } catch (error) {
+          console.error("❌ [ADD SCREEN] Connection check error:", error)
+          setConnectionStatus((prev) => ({ ...prev, checking: false }))
+        }
+      }
+
+      // Check immediately
+      checkConnection()
+
+      // Then check every 3 seconds
+      const interval = setInterval(checkConnection, 3000)
+      return () => clearInterval(interval)
+    }
+  }, [step, pairingCode, connectionStatus.connected])
 
   const generatePairingCode = async () => {
     try {
@@ -71,6 +127,7 @@ export function AddScreenDialog({ open, onOpenChange, onScreenAdded }: AddScreen
       if (data.success) {
         setPairingCode(data.pairingCode || data.code)
         setStep("pairing")
+        setConnectionStatus({ connected: false, checking: false })
         toast.success("Pairing code generated successfully")
       } else {
         toast.error(data.error || "Failed to generate pairing code")
@@ -78,6 +135,44 @@ export function AddScreenDialog({ open, onOpenChange, onScreenAdded }: AddScreen
     } catch (error) {
       console.error("❌ [ADD SCREEN] Error generating code:", error)
       toast.error("Failed to generate pairing code")
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const createScreen = async () => {
+    try {
+      setLoading(true)
+      console.log("📺 [ADD SCREEN] Creating screen with code:", pairingCode)
+
+      const token = localStorage.getItem("token")
+      if (!token) {
+        toast.error("Please log in to create screens")
+        return
+      }
+
+      const response = await fetch("/api/devices/create-screen", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ pairingCode }),
+      })
+
+      const data = await response.json()
+      console.log("📺 [ADD SCREEN] Create screen response:", data)
+
+      if (data.success) {
+        toast.success("Screen created successfully!")
+        handleClose()
+        onScreenAdded()
+      } else {
+        toast.error(data.error || "Failed to create screen")
+      }
+    } catch (error) {
+      console.error("❌ [ADD SCREEN] Error creating screen:", error)
+      toast.error("Failed to create screen")
     } finally {
       setLoading(false)
     }
@@ -100,13 +195,8 @@ export function AddScreenDialog({ open, onOpenChange, onScreenAdded }: AddScreen
     setDeviceType("")
     setPairingCode("")
     setCopied(false)
+    setConnectionStatus({ connected: false, checking: false })
     onOpenChange(false)
-  }
-
-  const handleScreenAdded = () => {
-    handleClose()
-    onScreenAdded()
-    toast.success("Screen added successfully!")
   }
 
   const getDeviceInstructions = (type: string) => {
@@ -117,7 +207,7 @@ export function AddScreenDialog({ open, onOpenChange, onScreenAdded }: AddScreen
           "Open the app on your Fire TV",
           "Select 'Connect to Dashboard'",
           "Enter the pairing code when prompted",
-          "Your screen will appear in the dashboard once connected",
+          "Wait for connection confirmation",
         ]
       case "android_tv":
         return [
@@ -125,7 +215,7 @@ export function AddScreenDialog({ open, onOpenChange, onScreenAdded }: AddScreen
           "Open the app on your Android TV",
           "Select 'Connect to Dashboard'",
           "Enter the pairing code when prompted",
-          "Your screen will appear in the dashboard once connected",
+          "Wait for connection confirmation",
         ]
       case "android":
         return [
@@ -133,7 +223,7 @@ export function AddScreenDialog({ open, onOpenChange, onScreenAdded }: AddScreen
           "Open the app on your Android device",
           "Tap 'Connect to Dashboard'",
           "Enter the pairing code when prompted",
-          "Your device will appear in the dashboard once connected",
+          "Wait for connection confirmation",
         ]
       case "ios":
         return [
@@ -141,7 +231,7 @@ export function AddScreenDialog({ open, onOpenChange, onScreenAdded }: AddScreen
           "Open the app on your iOS device",
           "Tap 'Connect to Dashboard'",
           "Enter the pairing code when prompted",
-          "Your device will appear in the dashboard once connected",
+          "Wait for connection confirmation",
         ]
       case "web":
         return [
@@ -149,14 +239,14 @@ export function AddScreenDialog({ open, onOpenChange, onScreenAdded }: AddScreen
           "Navigate to your SignageCloud player URL",
           "Click 'Connect to Dashboard'",
           "Enter the pairing code when prompted",
-          "Your browser will appear in the dashboard once connected",
+          "Wait for connection confirmation",
         ]
       default:
         return [
           "Install or open your SignageCloud compatible app",
           "Look for 'Connect to Dashboard' or 'Pair Device' option",
           "Enter the pairing code when prompted",
-          "Your device will appear in the dashboard once connected",
+          "Wait for connection confirmation",
         ]
     }
   }
@@ -217,7 +307,14 @@ export function AddScreenDialog({ open, onOpenChange, onScreenAdded }: AddScreen
                 Cancel
               </Button>
               <Button onClick={generatePairingCode} disabled={!screenName || !deviceType || loading}>
-                {loading ? "Generating..." : "Generate Pairing Code"}
+                {loading ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Generating...
+                  </>
+                ) : (
+                  "Generate Pairing Code"
+                )}
               </Button>
             </DialogFooter>
           </>
@@ -232,6 +329,47 @@ export function AddScreenDialog({ open, onOpenChange, onScreenAdded }: AddScreen
             </DialogHeader>
 
             <div className="space-y-6">
+              {/* Connection Status */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-lg flex items-center gap-2">
+                    {connectionStatus.connected ? (
+                      <>
+                        <Wifi className="h-5 w-5 text-green-500" />
+                        Device Connected
+                      </>
+                    ) : connectionStatus.checking ? (
+                      <>
+                        <Loader2 className="h-5 w-5 animate-spin" />
+                        Checking Connection...
+                      </>
+                    ) : (
+                      <>
+                        <WifiOff className="h-5 w-5 text-orange-500" />
+                        Waiting for Connection
+                      </>
+                    )}
+                  </CardTitle>
+                  <CardDescription>
+                    {connectionStatus.connected
+                      ? "Your device is connected and ready to be added"
+                      : "Enter the pairing code in your device to connect"}
+                  </CardDescription>
+                </CardHeader>
+                {connectionStatus.device && (
+                  <CardContent>
+                    <div className="text-sm text-muted-foreground">
+                      <p>
+                        <strong>Device:</strong> {connectionStatus.device.name}
+                      </p>
+                      <p>
+                        <strong>Status:</strong> {connectionStatus.device.status}
+                      </p>
+                    </div>
+                  </CardContent>
+                )}
+              </Card>
+
               {/* Pairing Code */}
               <Card>
                 <CardHeader>
@@ -275,15 +413,30 @@ export function AddScreenDialog({ open, onOpenChange, onScreenAdded }: AddScreen
 
               <div className="text-center text-sm text-muted-foreground">
                 <p>The pairing code will expire in 10 minutes.</p>
-                <p>Your screen will appear in the dashboard once connected.</p>
+                <p>The "Done" button will be enabled once your device connects.</p>
               </div>
             </div>
 
             <DialogFooter>
               <Button variant="outline" onClick={handleClose}>
-                Close
+                Cancel
               </Button>
-              <Button onClick={handleScreenAdded}>Done</Button>
+              <Button
+                onClick={createScreen}
+                disabled={!connectionStatus.connected || loading}
+                className={connectionStatus.connected ? "bg-green-600 hover:bg-green-700" : ""}
+              >
+                {loading ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Creating Screen...
+                  </>
+                ) : connectionStatus.connected ? (
+                  "Done - Create Screen"
+                ) : (
+                  "Waiting for Connection..."
+                )}
+              </Button>
             </DialogFooter>
           </>
         )}

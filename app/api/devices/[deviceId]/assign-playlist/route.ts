@@ -9,19 +9,41 @@ export async function POST(request: NextRequest, { params }: { params: { deviceI
     const body = await request.json()
     const { playlistId } = body
 
-    console.log(`Assigning playlist ${playlistId} to device ${deviceId}`)
+    console.log(`🎬 [ASSIGN PLAYLIST] Assigning playlist ${playlistId} to device ${deviceId}`)
 
-    if (!playlistId) {
-      return NextResponse.json({ success: false, message: "Playlist ID is required" }, { status: 400 })
+    // Validate device exists
+    const [device] = await sql`
+      SELECT id, name FROM devices WHERE id = ${Number.parseInt(deviceId)}
+    `
+
+    if (!device) {
+      return NextResponse.json({ success: false, error: "Device not found" }, { status: 404 })
     }
 
-    // Verify playlist exists
+    if (playlistId === null || playlistId === "none") {
+      // Remove playlist assignment
+      await sql`
+        UPDATE devices 
+        SET 
+          assigned_playlist_id = NULL,
+          playlist_status = 'none',
+          updated_at = CURRENT_TIMESTAMP
+        WHERE id = ${Number.parseInt(deviceId)}
+      `
+
+      return NextResponse.json({
+        success: true,
+        message: "Playlist removed from device",
+      })
+    }
+
+    // Validate playlist exists
     const [playlist] = await sql`
       SELECT id, name FROM playlists WHERE id = ${Number.parseInt(playlistId)}
     `
 
     if (!playlist) {
-      return NextResponse.json({ success: false, message: "Playlist not found" }, { status: 404 })
+      return NextResponse.json({ success: false, error: "Playlist not found" }, { status: 404 })
     }
 
     // Assign playlist to device
@@ -34,6 +56,8 @@ export async function POST(request: NextRequest, { params }: { params: { deviceI
       WHERE id = ${Number.parseInt(deviceId)}
     `
 
+    console.log(`✅ [ASSIGN PLAYLIST] Successfully assigned "${playlist.name}" to device ${deviceId}`)
+
     return NextResponse.json({
       success: true,
       message: `Playlist "${playlist.name}" assigned to device`,
@@ -43,7 +67,14 @@ export async function POST(request: NextRequest, { params }: { params: { deviceI
       },
     })
   } catch (error) {
-    console.error("Assign playlist error:", error)
-    return NextResponse.json({ success: false, message: "Failed to assign playlist" }, { status: 500 })
+    console.error("❌ [ASSIGN PLAYLIST] Error:", error)
+    return NextResponse.json(
+      {
+        success: false,
+        error: "Failed to assign playlist",
+        details: error instanceof Error ? error.message : "Unknown error",
+      },
+      { status: 500 },
+    )
   }
 }
