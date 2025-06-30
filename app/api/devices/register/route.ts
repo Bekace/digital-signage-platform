@@ -15,22 +15,28 @@ export async function POST(request: NextRequest) {
     }
 
     // Check if pairing code exists and is valid
-    const [pairingCode] = await sql`
-      SELECT * FROM device_pairing_codes 
+    const pairingCodeResult = await sql`
+      SELECT id, user_id, expires_at, used_at, device_id
+      FROM device_pairing_codes 
       WHERE code = ${deviceCode} 
       AND expires_at > CURRENT_TIMESTAMP 
       AND used_at IS NULL
     `
 
-    if (!pairingCode) {
+    if (pairingCodeResult.length === 0) {
+      console.log("Invalid or expired device code:", deviceCode)
       return NextResponse.json({ success: false, message: "Invalid or expired device code" }, { status: 400 })
     }
 
-    // Check if device already exists for this pairing code
+    const pairingCode = pairingCodeResult[0]
+    console.log("Found pairing code:", pairingCode)
+
     let device
+
+    // Check if device already exists for this pairing code
     if (pairingCode.device_id) {
       // Update existing device
-      const [existingDevice] = await sql`
+      const existingDeviceResult = await sql`
         UPDATE devices 
         SET 
           name = ${deviceName || "Web Browser Device"},
@@ -42,19 +48,25 @@ export async function POST(request: NextRequest) {
           last_seen = CURRENT_TIMESTAMP,
           updated_at = CURRENT_TIMESTAMP
         WHERE id = ${pairingCode.device_id}
-        RETURNING *
+        RETURNING id, name, device_type, status, capabilities, created_at
       `
-      device = existingDevice
-    } else {
-      // Create new device - we need a user_id, so we'll create a temporary one or use a default
-      // For testing purposes, we'll create a device without a specific user
-      const [newDevice] = await sql`
+
+      if (existingDeviceResult.length > 0) {
+        device = existingDeviceResult[0]
+        console.log("Updated existing device:", device.id)
+      }
+    }
+
+    // If no existing device or update failed, create new device
+    if (!device) {
+      const newDeviceResult = await sql`
         INSERT INTO devices (
           name, 
           device_type, 
           platform, 
           capabilities, 
           screen_resolution, 
+          user_id,
           status, 
           last_seen, 
           created_at, 
@@ -66,14 +78,22 @@ export async function POST(request: NextRequest) {
           ${userAgent || "Unknown"},
           ${JSON.stringify(capabilities)},
           ${screenResolution || ""},
+          ${pairingCode.user_id || null},
           'online',
           CURRENT_TIMESTAMP,
           CURRENT_TIMESTAMP,
           CURRENT_TIMESTAMP
         )
-        RETURNING *
+        RETURNING id, name, device_type, status, capabilities, created_at
       `
-      device = newDevice
+
+      if (newDeviceResult.length === 0) {
+        console.error("Failed to create device")
+        return NextResponse.json({ success: false, message: "Failed to create device" }, { status: 500 })
+      }
+
+      device = newDeviceResult[0]
+      console.log("Created new device:", device.id)
 
       // Link the pairing code to the device
       await sql`
@@ -81,6 +101,21 @@ export async function POST(request: NextRequest) {
         SET device_id = ${device.id}, used_at = CURRENT_TIMESTAMP
         WHERE code = ${deviceCode}
       `
+    }
+
+    // Create initial heartbeat entry
+    try {
+      await sql`
+        INSERT INTO device_heartbeats (device_id, status, performance_metrics, created_at)
+        VALUES (${device.id}, 'online', '{"connected": true}', CURRENT_TIMESTAMP)
+        ON CONFLICT (device_id) DO UPDATE SET
+          status = 'online',
+          performance_metrics = '{"connected": true}',
+          updated_at = CURRENT_TIMESTAMP
+      `
+    } catch (heartbeatError) {
+      console.warn("Failed to create heartbeat entry:", heartbeatError)
+      // Don't fail the registration if heartbeat creation fails
     }
 
     console.log("Device registered successfully:", device.id)
@@ -92,12 +127,23 @@ export async function POST(request: NextRequest) {
         name: device.name,
         type: device.device_type,
         status: device.status,
-        capabilities: device.capabilities,
+        capabilities: typeof device.capabilities === "string" ? JSON.parse(device.capabilities) : device.capabilities,
+        createdAt: device.created_at,
       },
       message: "Device registered successfully",
     })
   } catch (error) {
     console.error("Device registration error:", error)
-    return NextResponse.json({ success: false, message: "Failed to register device" }, { status: 500 })
+
+    // Return more detailed error information for debugging
+    return NextResponse.json(
+      {
+        success: false,
+        message: "Failed to register device",
+        error: error instanceof Error ? error.message : "Unknown error",
+        details: process.env.NODE_ENV === "development" ? error : undefined,
+      },
+      { status: 500 },
+    )
   }
 }
