@@ -7,7 +7,7 @@ export async function GET() {
   try {
     console.log("🔍 [DEBUG DEVICES] Starting debug query...")
 
-    // Get all devices with pairing information
+    // Get all devices with user and pairing information
     const devices = await sql`
       SELECT 
         d.id as device_id,
@@ -41,7 +41,7 @@ export async function GET() {
     const userCountResult = await sql`SELECT COUNT(*) as count FROM users`
     const userCount = userCountResult[0]?.count || 0
 
-    // Summary statistics
+    // Calculate summary
     const summary = {
       totalDevices: devices.length,
       devicesWithUsers: devices.filter((d) => d.user_id !== null).length,
@@ -49,7 +49,8 @@ export async function GET() {
       completedPairings: devices.filter((d) => d.completed_at !== null).length,
     }
 
-    console.log("🔍 [DEBUG DEVICES] Results:", { devices, summary })
+    console.log("🔍 [DEBUG DEVICES] Summary:", summary)
+    console.log("🔍 [DEBUG DEVICES] Devices:", devices)
 
     return NextResponse.json({
       success: true,

@@ -16,7 +16,7 @@ export async function GET(request: NextRequest) {
 
     console.log(`📱 [DEVICES API] Fetching devices for user ${user.id} (${user.email})`)
 
-    // Get devices with playlist information - using the correct column names from debug
+    // Get devices - using the actual column names from the database
     const devices = await sql`
       SELECT 
         d.id,
@@ -26,16 +26,8 @@ export async function GET(request: NextRequest) {
         d.last_seen,
         d.user_id,
         d.created_at,
-        d.updated_at,
-        p.id as playlist_id,
-        p.name as playlist_name,
-        (
-          SELECT COUNT(*) 
-          FROM playlist_items pi 
-          WHERE pi.playlist_id = p.id
-        ) as playlist_item_count
+        d.updated_at
       FROM devices d
-      LEFT JOIN playlists p ON d.id = p.id  -- Note: This might need to be fixed based on your schema
       WHERE d.user_id = ${user.id}
       ORDER BY d.created_at DESC
     `
@@ -47,15 +39,15 @@ export async function GET(request: NextRequest) {
       total: devices.length,
       online: devices.filter((d) => d.status === "online").length,
       offline: devices.filter((d) => d.status === "offline").length,
-      playing: 0, // Will be calculated when we have proper playlist status
+      playing: devices.filter((d) => d.status === "playing").length,
     }
 
-    // Format devices for response
+    // Format devices for response - matching the expected format from the screens page
     const formattedDevices = devices.map((device) => ({
       id: device.id,
       name: device.name || `Device ${device.id}`,
       deviceType: device.device_type || "unknown",
-      status: device.status || "offline",
+      status: device.status === "online" ? "online" : "offline",
       lastSeen: device.last_seen || device.updated_at || device.created_at,
       assignedPlaylistId: null, // Will be added when playlist assignment is implemented
       playlistStatus: "none",
