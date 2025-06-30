@@ -22,10 +22,10 @@ import { Copy, Check, Monitor, Smartphone, Tv, Globe, Plus, Wifi, WifiOff, Loade
 interface AddScreenDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
-  onScreenAdded: () => void
+  onDeviceAdded: () => void
 }
 
-export function AddScreenDialog({ open, onOpenChange, onScreenAdded }: AddScreenDialogProps) {
+export function AddScreenDialog({ open, onOpenChange, onDeviceAdded }: AddScreenDialogProps) {
   const [step, setStep] = useState<"form" | "pairing">("form")
   const [screenName, setScreenName] = useState("")
   const [deviceType, setDeviceType] = useState("")
@@ -46,7 +46,7 @@ export function AddScreenDialog({ open, onOpenChange, onScreenAdded }: AddScreen
     { value: "android_tv", label: "Android TV", icon: Tv },
     { value: "android", label: "Android Device", icon: Smartphone },
     { value: "ios", label: "iOS Device", icon: Smartphone },
-    { value: "web", label: "Web Browser", icon: Globe },
+    { value: "web_browser", label: "Web Browser", icon: Globe },
     { value: "other", label: "Other Device", icon: Monitor },
   ]
 
@@ -151,7 +151,7 @@ export function AddScreenDialog({ open, onOpenChange, onScreenAdded }: AddScreen
       if (data.success) {
         toast.success("Screen created successfully!")
         handleClose()
-        onScreenAdded()
+        onDeviceAdded()
       } else {
         toast.error(data.error || "Failed to create screen")
       }
@@ -218,10 +218,10 @@ export function AddScreenDialog({ open, onOpenChange, onScreenAdded }: AddScreen
           "Enter the pairing code when prompted",
           "Wait for connection confirmation",
         ]
-      case "web":
+      case "web_browser":
         return [
           "Open a web browser on your device",
-          "Navigate to your SignageCloud player URL",
+          "Navigate to /device-player on this website",
           "Click 'Connect to Dashboard'",
           "Enter the pairing code when prompted",
           "Wait for connection confirmation",
@@ -359,7 +359,7 @@ export function AddScreenDialog({ open, onOpenChange, onScreenAdded }: AddScreen
               <Card>
                 <CardHeader>
                   <CardTitle className="text-lg">Pairing Code</CardTitle>
-                  <CardDescription>Enter this code in your SignageCloud app</CardDescription>
+                  <CardDescription>Enter this code in your SignageCloud app or device player</CardDescription>
                 </CardHeader>
                 <CardContent>
                   <div className="flex items-center justify-between p-4 bg-muted rounded-lg">

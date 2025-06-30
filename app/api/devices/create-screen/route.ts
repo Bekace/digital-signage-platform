@@ -17,7 +17,7 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
     const { pairingCode } = body
 
-    console.log("📺 [CREATE SCREEN] Request data:", { pairingCode })
+    console.log("📺 [CREATE SCREEN] Request:", { pairingCode, userId: user.id })
 
     if (!pairingCode) {
       return NextResponse.json(
@@ -29,26 +29,29 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Find the pairing code record
-    const pairingCodeRecord = await sql`
+    // Check if pairing code exists and is completed (device connected)
+    const pairingRecord = await sql`
       SELECT 
-        id,
-        code,
-        screen_name,
-        device_type,
-        expires_at,
-        completed_at,
-        user_id
-      FROM device_pairing_codes 
-      WHERE code = ${pairingCode} 
-      AND user_id = ${user.id}
-      AND expires_at > CURRENT_TIMESTAMP
-      ORDER BY created_at DESC
-      LIMIT 1
+        dpc.id,
+        dpc.code,
+        dpc.screen_name,
+        dpc.device_type,
+        dpc.user_id,
+        dpc.device_id,
+        dpc.completed_at,
+        d.id as device_exists,
+        d.name as device_name,
+        d.status as device_status
+      FROM device_pairing_codes dpc
+      LEFT JOIN devices d ON dpc.device_id = d.id
+      WHERE dpc.code = ${pairingCode}
+      AND dpc.user_id = ${user.id}
+      AND dpc.expires_at > CURRENT_TIMESTAMP
     `
 
-    if (pairingCodeRecord.length === 0) {
-      console.log("📺 [CREATE SCREEN] Invalid or expired pairing code")
+    console.log("📺 [CREATE SCREEN] Pairing record:", pairingRecord)
+
+    if (pairingRecord.length === 0) {
       return NextResponse.json(
         {
           success: false,
@@ -58,64 +61,44 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const record = pairingCodeRecord[0]
+    const record = pairingRecord[0]
 
-    // Check if already used
-    if (record.completed_at) {
-      console.log("📺 [CREATE SCREEN] Pairing code already used")
+    if (!record.device_id || !record.device_exists) {
       return NextResponse.json(
         {
           success: false,
-          error: "Pairing code has already been used",
+          error: "No device connected with this pairing code",
         },
         { status: 400 },
       )
     }
 
-    // Create the device
-    const deviceResult = await sql`
-      INSERT INTO devices (
-        user_id, 
-        name, 
-        device_type, 
-        status,
-        playlist_status,
-        created_at,
-        updated_at
-      ) VALUES (
-        ${user.id}, 
-        ${record.screen_name}, 
-        ${record.device_type}, 
-        'offline',
-        'none',
-        CURRENT_TIMESTAMP,
-        CURRENT_TIMESTAMP
-      )
-      RETURNING id, name, device_type, status, playlist_status, created_at, updated_at
-    `
-
-    const newDevice = deviceResult[0]
-    console.log("📺 [CREATE SCREEN] Device created:", newDevice.id)
-
-    // Mark pairing code as completed
+    // Mark the pairing process as fully completed
     await sql`
       UPDATE device_pairing_codes 
-      SET completed_at = CURRENT_TIMESTAMP
+      SET completed_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
       WHERE id = ${record.id}
     `
 
-    console.log("📺 [CREATE SCREEN] Pairing code marked as completed")
+    // Update device status to ensure it's active
+    await sql`
+      UPDATE devices 
+      SET 
+        status = 'online',
+        last_seen = CURRENT_TIMESTAMP,
+        updated_at = CURRENT_TIMESTAMP
+      WHERE id = ${record.device_id}
+    `
+
+    console.log("📺 [CREATE SCREEN] Screen created successfully for device:", record.device_id)
 
     return NextResponse.json({
       success: true,
-      device: {
-        id: newDevice.id,
-        name: newDevice.name,
-        deviceType: newDevice.device_type,
-        status: newDevice.status,
-        playlistStatus: newDevice.playlist_status,
-        createdAt: newDevice.created_at,
-        updatedAt: newDevice.updated_at,
+      screen: {
+        id: record.device_id,
+        name: record.device_name || record.screen_name,
+        type: record.device_type,
+        status: record.device_status || "online",
       },
       message: "Screen created successfully",
     })
