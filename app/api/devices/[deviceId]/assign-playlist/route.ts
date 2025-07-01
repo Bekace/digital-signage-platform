@@ -1,7 +1,10 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { neon } from "@neondatabase/serverless"
+import { getCurrentUser } from "@/lib/auth"
 
 const sql = neon(process.env.DATABASE_URL!)
+
+export const dynamic = "force-dynamic"
 
 export async function POST(request: NextRequest, { params }: { params: { deviceId: string } }) {
   try {
@@ -11,9 +14,15 @@ export async function POST(request: NextRequest, { params }: { params: { deviceI
 
     console.log(`🎬 [ASSIGN PLAYLIST] Assigning playlist ${playlistId} to device ${deviceId}`)
 
-    // Validate device exists
+    // Get current user
+    const user = await getCurrentUser()
+    if (!user) {
+      return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 })
+    }
+
+    // Validate device exists and belongs to user
     const [device] = await sql`
-      SELECT id, name FROM devices WHERE id = ${Number.parseInt(deviceId)}
+      SELECT id, name FROM devices WHERE id = ${Number.parseInt(deviceId)} AND user_id = ${user.id}
     `
 
     if (!device) {
@@ -27,7 +36,7 @@ export async function POST(request: NextRequest, { params }: { params: { deviceI
         SET 
           assigned_playlist_id = NULL,
           playlist_status = 'none',
-          updated_at = CURRENT_TIMESTAMP
+          updated_at = NOW()
         WHERE id = ${Number.parseInt(deviceId)}
       `
 
@@ -37,9 +46,9 @@ export async function POST(request: NextRequest, { params }: { params: { deviceI
       })
     }
 
-    // Validate playlist exists
+    // Validate playlist exists and belongs to user
     const [playlist] = await sql`
-      SELECT id, name FROM playlists WHERE id = ${Number.parseInt(playlistId)}
+      SELECT id, name FROM playlists WHERE id = ${Number.parseInt(playlistId)} AND user_id = ${user.id}
     `
 
     if (!playlist) {
@@ -52,7 +61,7 @@ export async function POST(request: NextRequest, { params }: { params: { deviceI
       SET 
         assigned_playlist_id = ${Number.parseInt(playlistId)},
         playlist_status = 'assigned',
-        updated_at = CURRENT_TIMESTAMP
+        updated_at = NOW()
       WHERE id = ${Number.parseInt(deviceId)}
     `
 

@@ -8,6 +8,7 @@ import { Plus, Monitor, Smartphone, Tv, Globe, MoreVertical, Play, Pause, Square
 import { AddScreenDialog } from "@/components/add-screen-dialog"
 import { DashboardLayout } from "@/components/dashboard-layout"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
+import { AssignPlaylistDialog } from "@/components/assign-playlist-dialog"
 
 interface Device {
   id: number
@@ -71,6 +72,14 @@ export default function ScreensPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [showAddDialog, setShowAddDialog] = useState(false)
+  const [assignPlaylistDialog, setAssignPlaylistDialog] = useState<{
+    open: boolean
+    deviceId?: number
+    deviceName?: string
+    currentPlaylistId?: number
+  }>({
+    open: false,
+  })
 
   const fetchDevices = async () => {
     try {
@@ -146,6 +155,20 @@ export default function ScreensPage() {
     } catch (error) {
       console.error(`🎮 [SCREENS] Error controlling device:`, error)
     }
+  }
+
+  const handleAssignPlaylist = (device: Device) => {
+    setAssignPlaylistDialog({
+      open: true,
+      deviceId: device.id,
+      deviceName: device.name,
+      currentPlaylistId: device.assignedPlaylistId,
+    })
+  }
+
+  const handlePlaylistAssigned = () => {
+    fetchDevices() // Refresh to show updated playlist assignment
+    setAssignPlaylistDialog({ open: false })
   }
 
   if (loading) {
@@ -230,6 +253,10 @@ export default function ScreensPage() {
                         <Square className="mr-2 h-4 w-4" />
                         Stop
                       </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => handleAssignPlaylist(device)}>
+                        <Play className="mr-2 h-4 w-4" />
+                        Assign Playlist
+                      </DropdownMenuItem>
                     </DropdownMenuContent>
                   </DropdownMenu>
                 </CardHeader>
@@ -277,6 +304,14 @@ export default function ScreensPage() {
         )}
 
         <AddScreenDialog open={showAddDialog} onOpenChange={setShowAddDialog} onDeviceAdded={handleDeviceAdded} />
+        <AssignPlaylistDialog
+          open={assignPlaylistDialog.open}
+          onOpenChange={(open) => setAssignPlaylistDialog({ ...assignPlaylistDialog, open })}
+          deviceId={assignPlaylistDialog.deviceId!}
+          deviceName={assignPlaylistDialog.deviceName!}
+          currentPlaylistId={assignPlaylistDialog.currentPlaylistId}
+          onPlaylistAssigned={handlePlaylistAssigned}
+        />
       </div>
     </DashboardLayout>
   )
