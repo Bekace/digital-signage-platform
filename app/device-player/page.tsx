@@ -1,445 +1,425 @@
 "use client"
 
-import { useEffect, useState, useCallback } from "react"
-import { useSearchParams } from "next/navigation"
-import { Button } from "@/components/ui/button"
+import { useState, useEffect, useCallback } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
-import { Loader2, Wifi, WifiOff, Play, Pause, SkipForward, SkipBack, Monitor } from "lucide-react"
+import { Alert, AlertDescription } from "@/components/ui/alert"
+import { Loader2, Monitor, Wifi, WifiOff, Play, Pause, SkipForward } from "lucide-react"
 
 interface DeviceInfo {
   name: string
   type: string
   platform: string
-  capabilities: string[]
-  screenResolution: string
   userAgent: string
+  screenResolution: string
+  capabilities: string[]
 }
 
 interface PlaylistItem {
-  id: number
-  media_id: number
+  id: string
+  type: "image" | "video" | "web" | "slides"
+  url: string
   duration: number
-  order_index: number
-  media: {
-    id: number
-    filename: string
-    original_filename: string
-    file_type: string
-    file_size: number
-    url: string
-    thumbnail_url?: string
-  }
+  name: string
 }
 
 interface Playlist {
-  id: number
+  id: string
   name: string
-  description?: string
   items: PlaylistItem[]
-  loop_playlist: boolean
-  shuffle_items: boolean
-  transition_effect: string
+  settings: {
+    loop: boolean
+    shuffle: boolean
+    transitionDuration: number
+  }
 }
 
 export default function DevicePlayerPage() {
-  const searchParams = useSearchParams()
-  const [deviceCode, setDeviceCode] = useState(searchParams?.get("code") || "")
-  const [status, setStatus] = useState<"idle" | "connecting" | "connected" | "playing" | "error">("idle")
-  const [message, setMessage] = useState("")
+  const [pairingCode, setPairingCode] = useState("")
+  const [isConnecting, setIsConnecting] = useState(false)
+  const [isConnected, setIsConnected] = useState(false)
   const [deviceInfo, setDeviceInfo] = useState<DeviceInfo | null>(null)
-  const [playlist, setPlaylist] = useState<Playlist | null>(null)
+  const [error, setError] = useState("")
+  const [currentPlaylist, setCurrentPlaylist] = useState<Playlist | null>(null)
   const [currentItemIndex, setCurrentItemIndex] = useState(0)
   const [isPlaying, setIsPlaying] = useState(false)
-  const [progress, setProgress] = useState(0)
-  const [deviceId, setDeviceId] = useState<number | null>(null)
-  const [screenDimensions, setScreenDimensions] = useState({ width: 0, height: 0 })
+  const [playbackStatus, setPlaybackStatus] = useState("idle")
 
-  // Get device info safely
-  const getDeviceInfo = useCallback((): DeviceInfo => {
-    if (typeof window === "undefined") {
-      return {
-        name: "Server Device",
-        type: "web_browser",
-        platform: "server",
-        capabilities: [],
-        screenResolution: "0x0",
-        userAgent: "server",
+  // Generate device info
+  const generateDeviceInfo = useCallback((): DeviceInfo => {
+    const deviceId = Math.random().toString(36).substring(2, 15)
+
+    // Safe access to browser APIs
+    const getScreenResolution = () => {
+      if (typeof window !== "undefined" && window.screen) {
+        return `${window.screen.width}x${window.screen.height}`
       }
+      return "1920x1080"
     }
 
-    const capabilities = ["video", "image", "audio", "web"]
+    const getPlatform = () => {
+      if (typeof navigator !== "undefined" && navigator.platform) {
+        return navigator.platform
+      }
+      return "Web"
+    }
 
-    // Check for additional capabilities
-    if ("serviceWorker" in navigator) capabilities.push("service-worker")
-    if ("webkitRequestFullscreen" in document.documentElement) capabilities.push("fullscreen")
-    if (window.DeviceOrientationEvent) capabilities.push("orientation")
-    if (navigator.onLine !== undefined) capabilities.push("online-detection")
-
-    const screenWidth = window.screen?.width || window.innerWidth || 1920
-    const screenHeight = window.screen?.height || window.innerHeight || 1080
-
-    // Generate a unique device name
-    const deviceId = `Device Player ${Math.random().toString(36).substr(2, 9)}`
+    const getUserAgent = () => {
+      if (typeof navigator !== "undefined" && navigator.userAgent) {
+        return navigator.userAgent
+      }
+      return "Unknown Browser"
+    }
 
     return {
-      name: deviceId,
+      name: `Device Player ${deviceId}`,
       type: "web_browser",
-      platform: navigator.platform || "unknown",
-      capabilities,
-      screenResolution: `${screenWidth}x${screenHeight}`,
-      userAgent: navigator.userAgent || "unknown",
+      platform: getPlatform(),
+      userAgent: getUserAgent(),
+      screenResolution: getScreenResolution(),
+      capabilities: ["video", "image", "audio", "web", "slides", "pdf", "office", "text"],
     }
   }, [])
 
-  // Update screen dimensions
+  // Initialize device info
   useEffect(() => {
-    if (typeof window !== "undefined") {
-      const updateDimensions = () => {
-        setScreenDimensions({
-          width: window.innerWidth,
-          height: window.innerHeight,
-        })
-      }
+    setDeviceInfo(generateDeviceInfo())
+  }, [generateDeviceInfo])
 
-      updateDimensions()
-      window.addEventListener("resize", updateDimensions)
-      return () => window.removeEventListener("resize", updateDimensions)
-    }
-  }, [])
-
-  // Auto-connect if device code is provided
-  useEffect(() => {
-    if (deviceCode && status === "idle") {
-      handleConnect()
-    }
-  }, [deviceCode])
-
-  const handleConnect = async () => {
-    if (!deviceCode.trim()) {
-      setMessage("Please enter a device code")
+  // Connect to pairing code
+  const connectDevice = async () => {
+    if (!pairingCode.trim() || !deviceInfo) {
+      setError("Please enter a pairing code")
       return
     }
 
-    setStatus("connecting")
-    setMessage("Connecting to server...")
+    setIsConnecting(true)
+    setError("")
 
     try {
-      // Get device info
-      const deviceInfo = getDeviceInfo()
-      setDeviceInfo(deviceInfo)
-
       console.log("[DEVICE PLAYER] Connecting with:", {
-        deviceCode: deviceCode.trim().toUpperCase(),
+        deviceCode: pairingCode.toUpperCase(),
         ...deviceInfo,
       })
 
-      // Register device
-      const registerResponse = await fetch("/api/devices/register", {
+      const response = await fetch("/api/devices/register", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+        },
         body: JSON.stringify({
-          deviceCode: deviceCode.trim().toUpperCase(),
+          deviceCode: pairingCode.toUpperCase(),
           name: deviceInfo.name,
-          type: deviceInfo.type,
+          deviceType: deviceInfo.type,
           platform: deviceInfo.platform,
           userAgent: deviceInfo.userAgent,
-          capabilities: deviceInfo.capabilities,
           screenResolution: deviceInfo.screenResolution,
+          capabilities: deviceInfo.capabilities,
         }),
       })
 
-      const registerData = await registerResponse.json()
-      console.log("[DEVICE PLAYER] Registration response:", registerData)
+      const result = await response.json()
+      console.log("[DEVICE PLAYER] Registration response:", result)
 
-      if (!registerData.success) {
-        throw new Error(registerData.error || "Failed to register device")
+      if (result.success) {
+        setIsConnected(true)
+        setError("")
+
+        // Start checking for playlist assignments
+        startPlaylistPolling()
+      } else {
+        setError(result.error || "Failed to connect device")
       }
-
-      setDeviceId(registerData.device.id)
-      setStatus("connected")
-      setMessage(`Connected as: ${registerData.pairingInfo?.screenName || registerData.device.name}`)
-
-      // Start heartbeat
-      startHeartbeat(registerData.device.id)
-
-      // Check for assigned playlist
-      await checkForPlaylist(registerData.device.id)
-    } catch (error) {
-      console.error("Connection error:", error)
-      setStatus("error")
-      setMessage(error instanceof Error ? error.message : "Connection failed")
+    } catch (err) {
+      console.error("Connection error:", err)
+      setError("Failed to connect to server")
+    } finally {
+      setIsConnecting(false)
     }
   }
 
-  const startHeartbeat = (deviceId: number) => {
-    const sendHeartbeat = async () => {
+  // Poll for playlist assignments
+  const startPlaylistPolling = useCallback(() => {
+    const pollInterval = setInterval(async () => {
       try {
-        await fetch(`/api/devices/${deviceId}/heartbeat`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            status: isPlaying ? "playing" : "idle",
-            currentItemId: playlist?.items[currentItemIndex]?.id || null,
-            progress,
-            performanceMetrics: {
-              screenWidth: screenDimensions.width,
-              screenHeight: screenDimensions.height,
-              timestamp: Date.now(),
-            },
-          }),
-        })
-      } catch (error) {
-        console.error("Heartbeat error:", error)
-      }
-    }
-
-    // Send heartbeat every 30 seconds
-    const interval = setInterval(sendHeartbeat, 30000)
-
-    // Send initial heartbeat
-    sendHeartbeat()
-
-    return () => clearInterval(interval)
-  }
-
-  const checkForPlaylist = async (deviceId: number) => {
-    try {
-      const response = await fetch(`/api/devices/${deviceId}/playlist`)
-      const data = await response.json()
-
-      if (data.success && data.playlist) {
-        setPlaylist(data.playlist)
-        setMessage(`Playlist loaded: ${data.playlist.name}`)
-
-        if (data.playlist.items.length > 0) {
-          setStatus("playing")
-          setIsPlaying(true)
+        const response = await fetch(`/api/devices/${pairingCode}/playlist`)
+        if (response.ok) {
+          const data = await response.json()
+          if (data.playlist) {
+            setCurrentPlaylist(data.playlist)
+            if (data.playlist.items.length > 0 && !isPlaying) {
+              setIsPlaying(true)
+              setPlaybackStatus("playing")
+            }
+          }
         }
+      } catch (error) {
+        console.error("Failed to check for playlist:", error)
       }
-    } catch (error) {
-      console.error("Playlist check error:", error)
-    }
+    }, 5000) // Check every 5 seconds
+
+    return () => clearInterval(pollInterval)
+  }, [pairingCode, isPlaying])
+
+  // Handle media playback
+  const playCurrentItem = () => {
+    if (!currentPlaylist || currentPlaylist.items.length === 0) return
+
+    const currentItem = currentPlaylist.items[currentItemIndex]
+    setPlaybackStatus(`playing: ${currentItem.name}`)
+
+    // Auto-advance after duration
+    setTimeout(() => {
+      nextItem()
+    }, currentItem.duration * 1000)
   }
 
-  const handlePlayPause = () => {
+  const nextItem = () => {
+    if (!currentPlaylist) return
+
+    const nextIndex = (currentItemIndex + 1) % currentPlaylist.items.length
+    setCurrentItemIndex(nextIndex)
+  }
+
+  const togglePlayback = () => {
     setIsPlaying(!isPlaying)
+    setPlaybackStatus(isPlaying ? "paused" : "playing")
   }
 
-  const handleNext = () => {
-    if (playlist && playlist.items.length > 0) {
-      const nextIndex = (currentItemIndex + 1) % playlist.items.length
-      setCurrentItemIndex(nextIndex)
-      setProgress(0)
+  // Start playback when playlist changes
+  useEffect(() => {
+    if (currentPlaylist && isPlaying) {
+      playCurrentItem()
     }
-  }
+  }, [currentPlaylist, currentItemIndex, isPlaying])
 
-  const handlePrevious = () => {
-    if (playlist && playlist.items.length > 0) {
-      const prevIndex = currentItemIndex === 0 ? playlist.items.length - 1 : currentItemIndex - 1
-      setCurrentItemIndex(prevIndex)
-      setProgress(0)
-    }
-  }
-
-  const renderMediaContent = () => {
-    if (!playlist || !playlist.items[currentItemIndex]) {
+  // Render current media
+  const renderCurrentMedia = () => {
+    if (!currentPlaylist || !isPlaying) {
       return (
-        <div className="flex items-center justify-center h-64 bg-gray-900 rounded-lg">
-          <div className="text-center text-gray-400">
-            <Monitor className="h-16 w-16 mx-auto mb-4 opacity-50" />
-            <p>No content to display</p>
-            <p className="text-sm mt-2">Waiting for playlist assignment...</p>
+        <div className="flex items-center justify-center h-64 bg-gray-100 rounded-lg">
+          <div className="text-center">
+            <Monitor className="h-16 w-16 mx-auto text-gray-400 mb-4" />
+            <p className="text-gray-600">Waiting for content...</p>
           </div>
         </div>
       )
     }
 
-    const currentItem = playlist.items[currentItemIndex]
-    const media = currentItem.media
+    const currentItem = currentPlaylist.items[currentItemIndex]
 
-    switch (media.file_type) {
+    switch (currentItem.type) {
       case "image":
         return (
-          <img
-            src={media.url || "/placeholder.svg"}
-            alt={media.original_filename}
-            className="w-full h-auto max-h-96 object-contain rounded-lg"
-            crossOrigin="anonymous"
-          />
+          <div className="relative h-64 bg-black rounded-lg overflow-hidden">
+            <img
+              src={currentItem.url || "/placeholder.svg"}
+              alt={currentItem.name}
+              className="w-full h-full object-contain"
+              onError={(e) => {
+                e.currentTarget.src = "/placeholder.svg?height=300&width=400&text=Image+Error"
+              }}
+            />
+          </div>
         )
+
       case "video":
         return (
-          <video
-            src={media.url}
-            controls={!isPlaying}
-            autoPlay={isPlaying}
-            loop={false}
-            className="w-full h-auto max-h-96 rounded-lg"
-            crossOrigin="anonymous"
-            onEnded={handleNext}
-          />
+          <div className="relative h-64 bg-black rounded-lg overflow-hidden">
+            <video
+              src={currentItem.url}
+              className="w-full h-full object-contain"
+              autoPlay
+              muted
+              controls={false}
+              onError={() => console.error("Video playback error")}
+            />
+          </div>
         )
+
+      case "web":
+        return (
+          <div className="relative h-64 bg-white rounded-lg overflow-hidden border">
+            <iframe
+              src={currentItem.url}
+              className="w-full h-full"
+              title={currentItem.name}
+              sandbox="allow-scripts allow-same-origin"
+            />
+          </div>
+        )
+
       case "slides":
         return (
-          <iframe
-            src={media.url}
-            className="w-full h-96 rounded-lg border"
-            title={media.original_filename}
-            allowFullScreen
-          />
+          <div className="relative h-64 bg-white rounded-lg overflow-hidden border">
+            <iframe
+              src={currentItem.url}
+              className="w-full h-full"
+              title={currentItem.name}
+              sandbox="allow-scripts allow-same-origin"
+            />
+          </div>
         )
+
       default:
         return (
-          <div className="flex items-center justify-center h-64 bg-gray-900 rounded-lg">
-            <div className="text-center text-gray-400">
-              <p className="font-medium">{media.original_filename}</p>
-              <p className="text-sm">{media.file_type}</p>
-            </div>
+          <div className="flex items-center justify-center h-64 bg-gray-100 rounded-lg">
+            <p className="text-gray-600">Unsupported media type: {currentItem.type}</p>
           </div>
         )
     }
   }
 
-  if (status === "idle" || status === "connecting") {
-    return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
-        <Card className="w-full max-w-md">
+  return (
+    <div className="min-h-screen bg-gray-50 p-4">
+      <div className="max-w-4xl mx-auto space-y-6">
+        {/* Header */}
+        <Card>
           <CardHeader>
-            <CardTitle className="text-center">Digital Signage Player</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="device-code">Device Code</Label>
-              <Input
-                id="device-code"
-                value={deviceCode}
-                onChange={(e) => setDeviceCode(e.target.value.toUpperCase())}
-                placeholder="Enter 6-digit code"
-                maxLength={6}
-                className="text-center text-lg font-mono"
-              />
-            </div>
-
-            <Button onClick={handleConnect} disabled={status === "connecting" || !deviceCode.trim()} className="w-full">
-              {status === "connecting" ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Connecting...
-                </>
+            <CardTitle className="flex items-center gap-2">
+              <Monitor className="h-6 w-6" />
+              Digital Signage Player
+              {isConnected ? (
+                <Badge variant="default" className="ml-auto">
+                  <Wifi className="h-3 w-3 mr-1" />
+                  Connected
+                </Badge>
               ) : (
-                "Connect"
+                <Badge variant="secondary" className="ml-auto">
+                  <WifiOff className="h-3 w-3 mr-1" />
+                  Disconnected
+                </Badge>
               )}
-            </Button>
-
-            {message && <p className="text-sm text-center text-gray-600">{message}</p>}
-
-            {deviceInfo && (
-              <div className="mt-4 p-3 bg-gray-50 rounded-lg">
-                <h3 className="font-medium text-sm mb-2">Device Info</h3>
-                <div className="space-y-1 text-xs text-gray-600">
-                  <p>
-                    <strong>Name:</strong> {deviceInfo.name}
-                  </p>
-                  <p>
-                    <strong>Platform:</strong> {deviceInfo.platform}
-                  </p>
-                  <p>
-                    <strong>Resolution:</strong> {deviceInfo.screenResolution}
-                  </p>
-                  <div className="flex flex-wrap gap-1 mt-2">
-                    {deviceInfo.capabilities.map((cap) => (
-                      <Badge key={cap} variant="secondary" className="text-xs">
-                        {cap}
-                      </Badge>
-                    ))}
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {!isConnected ? (
+              <div className="space-y-4">
+                <div className="flex gap-2">
+                  <Input
+                    placeholder="Enter pairing code (e.g., ABC123)"
+                    value={pairingCode}
+                    onChange={(e) => setPairingCode(e.target.value.toUpperCase())}
+                    className="flex-1"
+                    maxLength={6}
+                  />
+                  <Button onClick={connectDevice} disabled={isConnecting}>
+                    {isConnecting ? (
+                      <>
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        Connecting...
+                      </>
+                    ) : (
+                      "Connect"
+                    )}
+                  </Button>
+                </div>
+                {error && (
+                  <Alert variant="destructive">
+                    <AlertDescription>{error}</AlertDescription>
+                  </Alert>
+                )}
+              </div>
+            ) : (
+              <div className="space-y-4">
+                <div className="grid grid-cols-2 gap-4 text-sm">
+                  <div>
+                    <strong>Device:</strong> {deviceInfo?.name}
                   </div>
+                  <div>
+                    <strong>Type:</strong> {deviceInfo?.type}
+                  </div>
+                  <div>
+                    <strong>Platform:</strong> {deviceInfo?.platform}
+                  </div>
+                  <div>
+                    <strong>Resolution:</strong> {deviceInfo?.screenResolution}
+                  </div>
+                </div>
+                <div className="flex gap-2">
+                  <Button onClick={togglePlayback} variant="outline" size="sm">
+                    {isPlaying ? (
+                      <>
+                        <Pause className="h-4 w-4 mr-2" />
+                        Pause
+                      </>
+                    ) : (
+                      <>
+                        <Play className="h-4 w-4 mr-2" />
+                        Play
+                      </>
+                    )}
+                  </Button>
+                  <Button onClick={nextItem} variant="outline" size="sm" disabled={!currentPlaylist}>
+                    <SkipForward className="h-4 w-4 mr-2" />
+                    Next
+                  </Button>
                 </div>
               </div>
             )}
           </CardContent>
         </Card>
-      </div>
-    )
-  }
 
-  if (status === "error") {
-    return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
-        <Card className="w-full max-w-md">
+        {/* Media Display */}
+        <Card>
           <CardHeader>
-            <CardTitle className="text-center text-red-600">Connection Error</CardTitle>
+            <CardTitle>
+              Display
+              {currentPlaylist && (
+                <Badge variant="outline" className="ml-2">
+                  {currentPlaylist.name}
+                </Badge>
+              )}
+            </CardTitle>
           </CardHeader>
-          <CardContent className="space-y-4">
-            <p className="text-center text-gray-600">{message}</p>
-            <Button
-              onClick={() => {
-                setStatus("idle")
-                setMessage("")
-                setDeviceCode("")
-              }}
-              className="w-full"
-            >
-              Try Again
-            </Button>
-          </CardContent>
+          <CardContent>{renderCurrentMedia()}</CardContent>
         </Card>
+
+        {/* Playlist Info */}
+        {currentPlaylist && (
+          <Card>
+            <CardHeader>
+              <CardTitle>Current Playlist</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-2">
+                <div className="flex justify-between items-center">
+                  <span className="font-medium">{currentPlaylist.name}</span>
+                  <Badge>{currentPlaylist.items.length} items</Badge>
+                </div>
+                <div className="text-sm text-gray-600">
+                  Status: {playbackStatus} | Item {currentItemIndex + 1} of {currentPlaylist.items.length}
+                </div>
+                {currentPlaylist.items.length > 0 && (
+                  <div className="text-sm">
+                    <strong>Current:</strong> {currentPlaylist.items[currentItemIndex]?.name}
+                  </div>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Device Capabilities */}
+        {deviceInfo && (
+          <Card>
+            <CardHeader>
+              <CardTitle>Device Capabilities</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="flex flex-wrap gap-2">
+                {deviceInfo.capabilities.map((capability) => (
+                  <Badge key={capability} variant="secondary">
+                    {capability}
+                  </Badge>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        )}
       </div>
-    )
-  }
-
-  return (
-    <div className="min-h-screen bg-black text-white">
-      {/* Status Bar */}
-      <div className="bg-gray-900 p-2 flex items-center justify-between">
-        <div className="flex items-center space-x-2">
-          {status === "connected" || status === "playing" ? (
-            <Wifi className="h-4 w-4 text-green-500" />
-          ) : (
-            <WifiOff className="h-4 w-4 text-red-500" />
-          )}
-          <span className="text-sm">{message}</span>
-        </div>
-
-        <div className="flex items-center space-x-2 text-sm">
-          {playlist && (
-            <span>
-              {currentItemIndex + 1} / {playlist.items.length}
-            </span>
-          )}
-          <span>
-            {screenDimensions.width}x{screenDimensions.height}
-          </span>
-        </div>
-      </div>
-
-      {/* Main Content Area */}
-      <div className="flex-1 flex items-center justify-center p-4">{renderMediaContent()}</div>
-
-      {/* Control Bar */}
-      {playlist && playlist.items.length > 0 && (
-        <div className="bg-gray-900 p-4">
-          <div className="flex items-center justify-center space-x-4">
-            <Button variant="ghost" size="sm" onClick={handlePrevious} className="text-white hover:bg-gray-800">
-              <SkipBack className="h-4 w-4" />
-            </Button>
-
-            <Button variant="ghost" size="sm" onClick={handlePlayPause} className="text-white hover:bg-gray-800">
-              {isPlaying ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
-            </Button>
-
-            <Button variant="ghost" size="sm" onClick={handleNext} className="text-white hover:bg-gray-800">
-              <SkipForward className="h-4 w-4" />
-            </Button>
-          </div>
-
-          <div className="mt-2 text-center text-sm text-gray-400">
-            {playlist.items[currentItemIndex]?.media.original_filename}
-          </div>
-        </div>
-      )}
     </div>
   )
 }
