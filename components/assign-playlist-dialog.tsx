@@ -10,19 +10,18 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import { Card, CardContent } from "@/components/ui/card"
+import { Label } from "@/components/ui/label"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Badge } from "@/components/ui/badge"
-import { Separator } from "@/components/ui/separator"
+import { PlayCircle, Clock, FileText, X } from "lucide-react"
 import { toast } from "sonner"
-import { Loader2, PlayCircle, FileText, Trash2 } from "lucide-react"
 
 interface Playlist {
   id: number
   name: string
   description?: string
   item_count: number
-  duration_minutes: number
-  status: string
+  total_duration: number
   created_at: string
 }
 
@@ -31,8 +30,8 @@ interface AssignPlaylistDialogProps {
   onOpenChange: (open: boolean) => void
   deviceId: string
   deviceName: string
-  currentPlaylistId?: number | null
-  currentPlaylistName?: string | null
+  currentPlaylistId?: number
+  currentPlaylistName?: string
   onPlaylistAssigned: () => void
 }
 
@@ -46,16 +45,16 @@ export function AssignPlaylistDialog({
   onPlaylistAssigned,
 }: AssignPlaylistDialogProps) {
   const [playlists, setPlaylists] = useState<Playlist[]>([])
+  const [selectedPlaylistId, setSelectedPlaylistId] = useState<string>("")
   const [loading, setLoading] = useState(false)
-  const [assigning, setAssigning] = useState(false)
-  const [selectedPlaylistId, setSelectedPlaylistId] = useState<number | null>(currentPlaylistId || null)
+  const [saving, setSaving] = useState(false)
 
-  // Load playlists when dialog opens
   useEffect(() => {
     if (open) {
       loadPlaylists()
+      setSelectedPlaylistId(currentPlaylistId?.toString() || "")
     }
-  }, [open])
+  }, [open, currentPlaylistId])
 
   const loadPlaylists = async () => {
     try {
@@ -79,9 +78,9 @@ export function AssignPlaylistDialog({
     }
   }
 
-  const assignPlaylist = async (playlistId: number | null) => {
+  const handleAssignPlaylist = async () => {
     try {
-      setAssigning(true)
+      setSaving(true)
 
       const response = await fetch(`/api/devices/${deviceId}/assign-playlist`, {
         method: "POST",
@@ -90,7 +89,7 @@ export function AssignPlaylistDialog({
         },
         credentials: "include",
         body: JSON.stringify({
-          playlistId,
+          playlistId: selectedPlaylistId ? Number.parseInt(selectedPlaylistId) : null,
         }),
       })
 
@@ -107,148 +106,166 @@ export function AssignPlaylistDialog({
       console.error("Error assigning playlist:", error)
       toast.error("Failed to assign playlist")
     } finally {
-      setAssigning(false)
+      setSaving(false)
     }
   }
 
-  const handleAssign = () => {
-    assignPlaylist(selectedPlaylistId)
+  const handleRemovePlaylist = async () => {
+    try {
+      setSaving(true)
+
+      const response = await fetch(`/api/devices/${deviceId}/assign-playlist`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        credentials: "include",
+        body: JSON.stringify({
+          playlistId: null,
+        }),
+      })
+
+      const data = await response.json()
+
+      if (data.success) {
+        toast.success("Playlist removed from device")
+        onPlaylistAssigned()
+        onOpenChange(false)
+      } else {
+        toast.error(data.error || "Failed to remove playlist")
+      }
+    } catch (error) {
+      console.error("Error removing playlist:", error)
+      toast.error("Failed to remove playlist")
+    } finally {
+      setSaving(false)
+    }
   }
 
-  const handleRemove = () => {
-    assignPlaylist(null)
+  const formatDuration = (seconds: number) => {
+    const hours = Math.floor(seconds / 3600)
+    const minutes = Math.floor((seconds % 3600) / 60)
+    const secs = seconds % 60
+
+    if (hours > 0) {
+      return `${hours}h ${minutes}m ${secs}s`
+    } else if (minutes > 0) {
+      return `${minutes}m ${secs}s`
+    } else {
+      return `${secs}s`
+    }
   }
 
-  const getPlaylistIcon = (playlist: Playlist) => {
-    if (playlist.item_count === 0) return <FileText className="h-4 w-4" />
-    // You could enhance this to show different icons based on playlist content
-    return <PlayCircle className="h-4 w-4" />
-  }
+  const selectedPlaylist = playlists.find((p) => p.id.toString() === selectedPlaylistId)
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[600px] max-h-[80vh] overflow-y-auto">
+      <DialogContent className="sm:max-w-[500px]">
         <DialogHeader>
-          <DialogTitle>Assign Playlist to Screen</DialogTitle>
+          <DialogTitle>Assign Playlist</DialogTitle>
           <DialogDescription>
-            Choose a playlist to display on "{deviceName}". The selected playlist will start playing immediately.
+            Choose a playlist to assign to <strong>{deviceName}</strong>
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4">
           {/* Current Assignment */}
-          {currentPlaylistId && currentPlaylistName && (
-            <div className="space-y-2">
-              <h4 className="text-sm font-medium">Current Assignment</h4>
-              <Card className="border-blue-200 bg-blue-50">
-                <CardContent className="p-4">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <PlayCircle className="h-4 w-4 text-blue-600" />
-                      <span className="font-medium">{currentPlaylistName}</span>
-                      <Badge variant="secondary">Currently Playing</Badge>
-                    </div>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={handleRemove}
-                      disabled={assigning}
-                      className="text-red-600 hover:text-red-700 bg-transparent"
-                    >
-                      {assigning ? (
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                      ) : (
-                        <>
-                          <Trash2 className="h-4 w-4 mr-1" />
-                          Remove
-                        </>
-                      )}
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
-              <Separator />
+          {currentPlaylistId && (
+            <div className="p-3 bg-blue-50 rounded-lg border">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <PlayCircle className="h-4 w-4 text-blue-600" />
+                  <span className="text-sm font-medium">Currently assigned:</span>
+                  <span className="text-sm">{currentPlaylistName}</span>
+                </div>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleRemovePlaylist}
+                  disabled={saving}
+                  className="text-red-600 hover:text-red-700"
+                >
+                  <X className="h-4 w-4" />
+                </Button>
+              </div>
             </div>
           )}
 
-          {/* Available Playlists */}
+          {/* Playlist Selection */}
           <div className="space-y-2">
-            <h4 className="text-sm font-medium">Available Playlists</h4>
-
+            <Label htmlFor="playlist">Select Playlist</Label>
             {loading ? (
-              <div className="flex items-center justify-center py-8">
-                <Loader2 className="h-6 w-6 animate-spin" />
-                <span className="ml-2">Loading playlists...</span>
+              <div className="flex items-center justify-center py-4">
+                <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
               </div>
-            ) : playlists.length === 0 ? (
-              <Card>
-                <CardContent className="p-6 text-center">
-                  <PlayCircle className="h-12 w-12 mx-auto text-gray-400 mb-2" />
-                  <p className="text-gray-600">No playlists found</p>
-                  <p className="text-sm text-gray-500 mt-1">Create a playlist first to assign it to this screen</p>
-                </CardContent>
-              </Card>
             ) : (
-              <div className="space-y-2 max-h-[400px] overflow-y-auto">
-                {playlists.map((playlist) => (
-                  <Card
-                    key={playlist.id}
-                    className={`cursor-pointer transition-colors ${
-                      selectedPlaylistId === playlist.id
-                        ? "border-blue-500 bg-blue-50"
-                        : "hover:border-gray-300 hover:bg-gray-50"
-                    }`}
-                    onClick={() => setSelectedPlaylistId(playlist.id)}
-                  >
-                    <CardContent className="p-4">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-3">
-                          <div className="flex-shrink-0">{getPlaylistIcon(playlist)}</div>
-                          <div className="min-w-0 flex-1">
-                            <h5 className="font-medium truncate">{playlist.name}</h5>
-                            {playlist.description && (
-                              <p className="text-sm text-gray-600 truncate">{playlist.description}</p>
-                            )}
-                            <div className="flex items-center gap-4 mt-1">
-                              <span className="text-xs text-gray-500">
-                                {playlist.item_count} {playlist.item_count === 1 ? "item" : "items"}
-                              </span>
-                              <span className="text-xs text-gray-500">
-                                ~{playlist.duration_minutes} {playlist.duration_minutes === 1 ? "minute" : "minutes"}
-                              </span>
-                              <Badge variant="outline" className="text-xs">
-                                {playlist.status}
-                              </Badge>
-                            </div>
+              <Select value={selectedPlaylistId} onValueChange={setSelectedPlaylistId}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Choose a playlist..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {playlists.length === 0 ? (
+                    <div className="p-4 text-center text-gray-500">
+                      <FileText className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                      <p>No playlists available</p>
+                      <p className="text-xs">Create a playlist first</p>
+                    </div>
+                  ) : (
+                    playlists.map((playlist) => (
+                      <SelectItem key={playlist.id} value={playlist.id.toString()}>
+                        <div className="flex items-center justify-between w-full">
+                          <span>{playlist.name}</span>
+                          <div className="flex items-center gap-2 ml-2">
+                            <Badge variant="outline" className="text-xs">
+                              {playlist.item_count} items
+                            </Badge>
                           </div>
                         </div>
-                        <div className="flex-shrink-0">
-                          {selectedPlaylistId === playlist.id && (
-                            <div className="w-4 h-4 rounded-full bg-blue-500 flex items-center justify-center">
-                              <div className="w-2 h-2 rounded-full bg-white" />
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))}
-              </div>
+                      </SelectItem>
+                    ))
+                  )}
+                </SelectContent>
+              </Select>
             )}
           </div>
+
+          {/* Selected Playlist Info */}
+          {selectedPlaylist && (
+            <div className="p-3 bg-gray-50 rounded-lg">
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="font-medium">{selectedPlaylist.name}</span>
+                  <Badge variant="secondary">{selectedPlaylist.item_count} items</Badge>
+                </div>
+                {selectedPlaylist.description && (
+                  <p className="text-sm text-gray-600">{selectedPlaylist.description}</p>
+                )}
+                <div className="flex items-center gap-4 text-sm text-gray-500">
+                  <div className="flex items-center gap-1">
+                    <Clock className="h-3 w-3" />
+                    <span>{formatDuration(selectedPlaylist.total_duration)}</span>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <FileText className="h-3 w-3" />
+                    <span>Created {new Date(selectedPlaylist.created_at).toLocaleDateString()}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
 
         <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
+          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={saving}>
             Cancel
           </Button>
           <Button
-            onClick={handleAssign}
-            disabled={!selectedPlaylistId || assigning || selectedPlaylistId === currentPlaylistId}
+            onClick={handleAssignPlaylist}
+            disabled={saving || !selectedPlaylistId || selectedPlaylistId === currentPlaylistId?.toString()}
           >
-            {assigning ? (
+            {saving ? (
               <>
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
                 Assigning...
               </>
             ) : (
