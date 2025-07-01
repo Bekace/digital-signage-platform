@@ -4,23 +4,45 @@ import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { Plus, Monitor, Smartphone, Tv, Globe, MoreVertical, Play, Pause, Square } from "lucide-react"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
+import { Alert, AlertDescription } from "@/components/ui/alert"
 import { AddScreenDialog } from "@/components/add-screen-dialog"
-import { DashboardLayout } from "@/components/dashboard-layout"
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { AssignPlaylistDialog } from "@/components/assign-playlist-dialog"
+import { toast } from "sonner"
+import {
+  Plus,
+  Monitor,
+  MoreVertical,
+  Wifi,
+  WifiOff,
+  Play,
+  Settings,
+  Trash2,
+  PlayCircle,
+  RefreshCw,
+  AlertCircle,
+  Clock,
+} from "lucide-react"
 
 interface Device {
-  id: number
+  id: string
   name: string
-  deviceType: string
+  device_type: string
   status: string
-  playlistStatus?: string
-  assignedPlaylistId?: number
-  lastControlAction?: string
-  lastControlTime?: string
-  createdAt: string
-  updatedAt?: string
+  last_seen?: string
+  created_at: string
+  assigned_playlist_id?: number
+  assigned_playlist_name?: string
+  playlist_status?: string
+  platform?: string
+  screen_resolution?: string
+  capabilities?: string[]
 }
 
 const getDeviceIcon = (deviceType: string) => {
@@ -28,13 +50,13 @@ const getDeviceIcon = (deviceType: string) => {
   switch (type) {
     case "fire_tv":
     case "firetv":
-      return <Tv className="h-5 w-5" />
+      return <Monitor className="h-5 w-5" />
     case "web_browser":
     case "web":
-      return <Globe className="h-5 w-5" />
+      return <Monitor className="h-5 w-5" />
     case "android":
     case "mobile":
-      return <Smartphone className="h-5 w-5" />
+      return <Monitor className="h-5 w-5" />
     default:
       return <Monitor className="h-5 w-5" />
   }
@@ -70,168 +92,206 @@ const getPlaylistStatusColor = (status: string) => {
 export default function ScreensPage() {
   const [devices, setDevices] = useState<Device[]>([])
   const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+  const [error, setError] = useState("")
   const [showAddDialog, setShowAddDialog] = useState(false)
-  const [assignPlaylistDialog, setAssignPlaylistDialog] = useState<{
-    open: boolean
-    deviceId?: number
-    deviceName?: string
-    currentPlaylistId?: number
-  }>({
-    open: false,
-  })
+  const [showAssignDialog, setShowAssignDialog] = useState(false)
+  const [selectedDevice, setSelectedDevice] = useState<Device | null>(null)
 
-  const fetchDevices = async () => {
+  useEffect(() => {
+    loadDevices()
+  }, [])
+
+  const loadDevices = async () => {
     try {
-      console.log("🔄 [SCREENS] Fetching devices...")
       setLoading(true)
-      setError(null)
+      setError("")
 
       const response = await fetch("/api/devices", {
-        method: "GET",
-        headers: {
-          "Content-Type": "application/json",
-        },
         credentials: "include",
       })
 
-      console.log("🔄 [SCREENS] Response status:", response.status)
-
-      if (!response.ok) {
-        if (response.status === 401) {
-          window.location.href = "/login"
-          return
-        }
-        throw new Error(`HTTP error! status: ${response.status}`)
-      }
-
       const data = await response.json()
-      console.log("🔄 [SCREENS] Response data:", data)
 
-      if (data.success && Array.isArray(data.devices)) {
-        setDevices(data.devices)
-        console.log("🔄 [SCREENS] Devices loaded:", data.devices.length)
+      if (data.success) {
+        setDevices(data.devices || [])
       } else {
-        console.error("🔄 [SCREENS] Invalid response format:", data)
-        setError("Invalid response format")
+        setError(data.error || "Failed to load devices")
       }
-    } catch (error) {
-      console.error("🔄 [SCREENS] Error fetching devices:", error)
-      setError("Failed to load devices")
+    } catch (err) {
+      console.error("Error loading devices:", err)
+      setError("Failed to connect to server")
     } finally {
       setLoading(false)
     }
   }
 
-  useEffect(() => {
-    fetchDevices()
-  }, [])
-
   const handleDeviceAdded = () => {
-    console.log("🔄 [SCREENS] Device added, refreshing list...")
-    fetchDevices()
-    setShowAddDialog(false)
-  }
-
-  const handleControlDevice = async (deviceId: number, action: string) => {
-    try {
-      console.log(`🎮 [SCREENS] Controlling device ${deviceId} with action: ${action}`)
-
-      const response = await fetch(`/api/devices/${deviceId}/control`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        credentials: "include",
-        body: JSON.stringify({ action }),
-      })
-
-      if (response.ok) {
-        console.log(`🎮 [SCREENS] Control action ${action} sent successfully`)
-        fetchDevices() // Refresh to show updated status
-      } else {
-        console.error(`🎮 [SCREENS] Control action failed:`, response.status)
-      }
-    } catch (error) {
-      console.error(`🎮 [SCREENS] Error controlling device:`, error)
-    }
-  }
-
-  const handleAssignPlaylist = (device: Device) => {
-    setAssignPlaylistDialog({
-      open: true,
-      deviceId: device.id,
-      deviceName: device.name,
-      currentPlaylistId: device.assignedPlaylistId,
-    })
+    loadDevices()
+    toast.success("Screen added successfully!")
   }
 
   const handlePlaylistAssigned = () => {
-    fetchDevices() // Refresh to show updated playlist assignment
-    setAssignPlaylistDialog({ open: false })
+    loadDevices()
+    setSelectedDevice(null)
+  }
+
+  const handleAssignPlaylist = (device: Device) => {
+    setSelectedDevice(device)
+    setShowAssignDialog(true)
+  }
+
+  const handleDeleteDevice = async (deviceId: string, deviceName: string) => {
+    if (!confirm(`Are you sure you want to delete "${deviceName}"?`)) {
+      return
+    }
+
+    try {
+      const response = await fetch(`/api/devices/${deviceId}`, {
+        method: "DELETE",
+        credentials: "include",
+      })
+
+      const data = await response.json()
+
+      if (data.success) {
+        toast.success("Screen deleted successfully")
+        loadDevices()
+      } else {
+        toast.error(data.error || "Failed to delete screen")
+      }
+    } catch (error) {
+      console.error("Error deleting device:", error)
+      toast.error("Failed to delete screen")
+    }
+  }
+
+  const getStatusIcon = (device: Device) => {
+    switch (device.status) {
+      case "online":
+        return <Wifi className="h-4 w-4 text-green-500" />
+      case "offline":
+        return <WifiOff className="h-4 w-4 text-red-500" />
+      case "idle":
+        return <Clock className="h-4 w-4 text-yellow-500" />
+      default:
+        return <AlertCircle className="h-4 w-4 text-gray-500" />
+    }
+  }
+
+  const getStatusBadge = (device: Device) => {
+    const variant = device.status === "online" ? "default" : device.status === "offline" ? "destructive" : "secondary"
+
+    return (
+      <Badge variant={variant} className="capitalize">
+        {device.status}
+      </Badge>
+    )
+  }
+
+  const getPlaylistStatus = (device: Device) => {
+    if (!device.assigned_playlist_id) {
+      return (
+        <div className="flex items-center gap-2 text-gray-500">
+          <PlayCircle className="h-4 w-4" />
+          <span className="text-sm">No playlist assigned</span>
+        </div>
+      )
+    }
+
+    return (
+      <div className="flex items-center gap-2 text-green-600">
+        <Play className="h-4 w-4" />
+        <span className="text-sm font-medium">{device.assigned_playlist_name}</span>
+        <Badge variant="outline" className="text-xs">
+          {device.playlist_status}
+        </Badge>
+      </div>
+    )
+  }
+
+  const formatLastSeen = (lastSeen?: string) => {
+    if (!lastSeen) return "Never"
+
+    const date = new Date(lastSeen)
+    const now = new Date()
+    const diffMs = now.getTime() - date.getTime()
+    const diffMins = Math.floor(diffMs / (1000 * 60))
+
+    if (diffMins < 1) return "Just now"
+    if (diffMins < 60) return `${diffMins}m ago`
+    if (diffMins < 1440) return `${Math.floor(diffMins / 60)}h ago`
+    return `${Math.floor(diffMins / 1440)}d ago`
   }
 
   if (loading) {
     return (
-      <DashboardLayout>
-        <div className="flex items-center justify-center min-h-[400px]">
-          <div className="text-center">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
-            <p className="text-gray-600">Loading screens...</p>
+      <div className="space-y-6">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-3xl font-bold">Screens</h1>
+            <p className="text-gray-600">Manage your digital signage displays</p>
           </div>
         </div>
-      </DashboardLayout>
+        <div className="flex items-center justify-center py-12">
+          <RefreshCw className="h-6 w-6 animate-spin mr-2" />
+          <span>Loading screens...</span>
+        </div>
+      </div>
     )
   }
 
   if (error) {
     return (
-      <DashboardLayout>
-        <div className="flex items-center justify-center min-h-[400px]">
-          <div className="text-center">
-            <p className="text-red-600 mb-4">{error}</p>
-            <Button onClick={fetchDevices} variant="outline">
-              Try Again
-            </Button>
+      <div className="space-y-6">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-3xl font-bold">Screens</h1>
+            <p className="text-gray-600">Manage your digital signage displays</p>
           </div>
         </div>
-      </DashboardLayout>
+        <Alert variant="destructive">
+          <AlertCircle className="h-4 w-4" />
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
+      </div>
     )
   }
 
   return (
-    <DashboardLayout>
-      <div className="space-y-6">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-3xl font-bold tracking-tight">Screens</h1>
-            <p className="text-muted-foreground">Manage your digital signage displays</p>
-          </div>
-          <Button onClick={() => setShowAddDialog(true)}>
-            <Plus className="mr-2 h-4 w-4" />
-            Add Screen
-          </Button>
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold">Screens</h1>
+          <p className="text-gray-600">Manage your digital signage displays</p>
         </div>
+        <Button onClick={() => setShowAddDialog(true)}>
+          <Plus className="h-4 w-4 mr-2" />
+          Add Screen
+        </Button>
+      </div>
 
-        {devices.length === 0 ? (
-          <Card>
-            <CardContent className="flex flex-col items-center justify-center py-12">
-              <Monitor className="h-12 w-12 text-gray-400 mb-4" />
-              <h3 className="text-lg font-semibold mb-2">No screens yet</h3>
-              <p className="text-gray-600 text-center mb-4">Get started by adding your first digital signage screen</p>
-              <Button onClick={() => setShowAddDialog(true)}>
-                <Plus className="mr-2 h-4 w-4" />
-                Add Your First Screen
-              </Button>
-            </CardContent>
-          </Card>
-        ) : (
-          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-            {devices.map((device) => (
-              <Card key={device.id} className="relative">
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <div className="flex items-center space-x-2">
-                    {getDeviceIcon(device.deviceType)}
+      {/* Devices Grid */}
+      {devices.length === 0 ? (
+        <Card>
+          <CardContent className="p-12 text-center">
+            <Monitor className="h-16 w-16 mx-auto text-gray-400 mb-4" />
+            <h3 className="text-lg font-semibold mb-2">No screens found</h3>
+            <p className="text-gray-600 mb-4">Get started by adding your first digital signage display</p>
+            <Button onClick={() => setShowAddDialog(true)}>
+              <Plus className="h-4 w-4 mr-2" />
+              Add Your First Screen
+            </Button>
+          </CardContent>
+        </Card>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {devices.map((device) => (
+            <Card key={device.id} className="relative">
+              <CardHeader className="pb-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    {getDeviceIcon(device.device_type)}
                     <CardTitle className="text-lg">{device.name}</CardTitle>
                   </div>
                   <DropdownMenu>
@@ -241,78 +301,101 @@ export default function ScreensPage() {
                       </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end">
-                      <DropdownMenuItem onClick={() => handleControlDevice(device.id, "play")}>
-                        <Play className="mr-2 h-4 w-4" />
-                        Play
-                      </DropdownMenuItem>
-                      <DropdownMenuItem onClick={() => handleControlDevice(device.id, "pause")}>
-                        <Pause className="mr-2 h-4 w-4" />
-                        Pause
-                      </DropdownMenuItem>
-                      <DropdownMenuItem onClick={() => handleControlDevice(device.id, "stop")}>
-                        <Square className="mr-2 h-4 w-4" />
-                        Stop
-                      </DropdownMenuItem>
                       <DropdownMenuItem onClick={() => handleAssignPlaylist(device)}>
-                        <Play className="mr-2 h-4 w-4" />
+                        <PlayCircle className="h-4 w-4 mr-2" />
                         Assign Playlist
+                      </DropdownMenuItem>
+                      <DropdownMenuItem>
+                        <Settings className="h-4 w-4 mr-2" />
+                        Settings
+                      </DropdownMenuItem>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem
+                        onClick={() => handleDeleteDevice(device.id, device.name)}
+                        className="text-red-600"
+                      >
+                        <Trash2 className="h-4 w-4 mr-2" />
+                        Delete
                       </DropdownMenuItem>
                     </DropdownMenuContent>
                   </DropdownMenu>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-3">
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm text-gray-600">Status</span>
-                      <div className="flex items-center space-x-2">
-                        <div className={`w-2 h-2 rounded-full ${getStatusColor(device.status)}`}></div>
-                        <Badge variant="outline" className="capitalize">
-                          {device.status}
+                </div>
+                <CardDescription className="capitalize">
+                  {device.device_type.replace("_", " ")} • {device.platform || "Unknown Platform"}
+                </CardDescription>
+              </CardHeader>
+
+              <CardContent className="space-y-4">
+                {/* Status */}
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    {getStatusIcon(device)}
+                    <span className="text-sm font-medium">Status</span>
+                  </div>
+                  {getStatusBadge(device)}
+                </div>
+
+                {/* Playlist Status */}
+                <div className="space-y-2">
+                  <span className="text-sm font-medium">Playlist</span>
+                  {getPlaylistStatus(device)}
+                </div>
+
+                {/* Device Info */}
+                <div className="space-y-2 text-sm text-gray-600">
+                  <div className="flex justify-between">
+                    <span>Resolution:</span>
+                    <span>{device.screen_resolution || "Unknown"}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Last seen:</span>
+                    <span>{formatLastSeen(device.last_seen)}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Added:</span>
+                    <span>{new Date(device.created_at).toLocaleDateString()}</span>
+                  </div>
+                </div>
+
+                {/* Capabilities */}
+                {device.capabilities && device.capabilities.length > 0 && (
+                  <div className="space-y-2">
+                    <span className="text-sm font-medium">Capabilities</span>
+                    <div className="flex flex-wrap gap-1">
+                      {device.capabilities.slice(0, 4).map((capability) => (
+                        <Badge key={capability} variant="outline" className="text-xs">
+                          {capability}
                         </Badge>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm text-gray-600">Device Type</span>
-                      <Badge variant="secondary" className="capitalize">
-                        {device.deviceType?.replace("_", " ") || "Unknown"}
-                      </Badge>
-                    </div>
-
-                    {device.playlistStatus && device.playlistStatus !== "none" && (
-                      <div className="flex items-center justify-between">
-                        <span className="text-sm text-gray-600">Playlist</span>
-                        <Badge className={getPlaylistStatusColor(device.playlistStatus)}>{device.playlistStatus}</Badge>
-                      </div>
-                    )}
-
-                    <div className="pt-2 border-t">
-                      <CardDescription className="text-xs">
-                        Added {new Date(device.createdAt).toLocaleDateString()}
-                      </CardDescription>
-                      {device.updatedAt && (
-                        <CardDescription className="text-xs">
-                          Last updated {new Date(device.updatedAt).toLocaleDateString()}
-                        </CardDescription>
+                      ))}
+                      {device.capabilities.length > 4 && (
+                        <Badge variant="outline" className="text-xs">
+                          +{device.capabilities.length - 4} more
+                        </Badge>
                       )}
                     </div>
                   </div>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-        )}
+                )}
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
 
-        <AddScreenDialog open={showAddDialog} onOpenChange={setShowAddDialog} onDeviceAdded={handleDeviceAdded} />
+      {/* Add Screen Dialog */}
+      <AddScreenDialog open={showAddDialog} onOpenChange={setShowAddDialog} onDeviceAdded={handleDeviceAdded} />
+
+      {/* Assign Playlist Dialog */}
+      {selectedDevice && (
         <AssignPlaylistDialog
-          open={assignPlaylistDialog.open}
-          onOpenChange={(open) => setAssignPlaylistDialog({ ...assignPlaylistDialog, open })}
-          deviceId={assignPlaylistDialog.deviceId!}
-          deviceName={assignPlaylistDialog.deviceName!}
-          currentPlaylistId={assignPlaylistDialog.currentPlaylistId}
+          open={showAssignDialog}
+          onOpenChange={setShowAssignDialog}
+          deviceId={selectedDevice.id}
+          deviceName={selectedDevice.name}
+          currentPlaylistId={selectedDevice.assigned_playlist_id}
+          currentPlaylistName={selectedDevice.assigned_playlist_name}
           onPlaylistAssigned={handlePlaylistAssigned}
         />
-      </div>
-    </DashboardLayout>
+      )}
+    </div>
   )
 }
