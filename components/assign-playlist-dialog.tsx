@@ -13,7 +13,7 @@ import {
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Badge } from "@/components/ui/badge"
-import { PlayCircle, Clock, FileText, X } from "lucide-react"
+import { PlayCircle, Clock, FileText, X, Loader2 } from "lucide-react"
 import { toast } from "sonner"
 
 interface Playlist {
@@ -23,6 +23,7 @@ interface Playlist {
   item_count: number
   total_duration: number
   created_at: string
+  status: string
 }
 
 interface AssignPlaylistDialogProps {
@@ -51,6 +52,7 @@ export function AssignPlaylistDialog({
 
   useEffect(() => {
     if (open) {
+      console.log("🎵 [ASSIGN DIALOG] Dialog opened, loading playlists...")
       loadPlaylists()
       setSelectedPlaylistId(currentPlaylistId?.toString() || "")
     }
@@ -59,19 +61,30 @@ export function AssignPlaylistDialog({
   const loadPlaylists = async () => {
     try {
       setLoading(true)
+      console.log("🎵 [ASSIGN DIALOG] Fetching playlists...")
+
       const response = await fetch("/api/playlists", {
+        method: "GET",
         credentials: "include",
+        headers: {
+          "Content-Type": "application/json",
+        },
       })
 
+      console.log("🎵 [ASSIGN DIALOG] Playlists response status:", response.status)
+
       const data = await response.json()
+      console.log("🎵 [ASSIGN DIALOG] Playlists data:", data)
 
       if (data.success) {
         setPlaylists(data.playlists || [])
+        console.log("🎵 [ASSIGN DIALOG] Loaded playlists:", data.playlists?.length || 0)
       } else {
-        toast.error("Failed to load playlists")
+        console.error("🎵 [ASSIGN DIALOG] Failed to load playlists:", data.error)
+        toast.error(data.error || "Failed to load playlists")
       }
     } catch (error) {
-      console.error("Error loading playlists:", error)
+      console.error("🎵 [ASSIGN DIALOG] Error loading playlists:", error)
       toast.error("Failed to load playlists")
     } finally {
       setLoading(false)
@@ -79,8 +92,14 @@ export function AssignPlaylistDialog({
   }
 
   const handleAssignPlaylist = async () => {
+    if (!selectedPlaylistId) {
+      toast.error("Please select a playlist")
+      return
+    }
+
     try {
       setSaving(true)
+      console.log("🎵 [ASSIGN DIALOG] Assigning playlist:", { deviceId, selectedPlaylistId })
 
       const response = await fetch(`/api/devices/${deviceId}/assign-playlist`, {
         method: "POST",
@@ -89,21 +108,25 @@ export function AssignPlaylistDialog({
         },
         credentials: "include",
         body: JSON.stringify({
-          playlistId: selectedPlaylistId ? Number.parseInt(selectedPlaylistId) : null,
+          playlistId: Number.parseInt(selectedPlaylistId),
         }),
       })
 
+      console.log("🎵 [ASSIGN DIALOG] Assignment response status:", response.status)
+
       const data = await response.json()
+      console.log("🎵 [ASSIGN DIALOG] Assignment response data:", data)
 
       if (data.success) {
-        toast.success(data.message)
+        toast.success(data.message || "Playlist assigned successfully")
         onPlaylistAssigned()
         onOpenChange(false)
       } else {
+        console.error("🎵 [ASSIGN DIALOG] Assignment failed:", data.error)
         toast.error(data.error || "Failed to assign playlist")
       }
     } catch (error) {
-      console.error("Error assigning playlist:", error)
+      console.error("🎵 [ASSIGN DIALOG] Error assigning playlist:", error)
       toast.error("Failed to assign playlist")
     } finally {
       setSaving(false)
@@ -113,6 +136,7 @@ export function AssignPlaylistDialog({
   const handleRemovePlaylist = async () => {
     try {
       setSaving(true)
+      console.log("🎵 [ASSIGN DIALOG] Removing playlist from device:", deviceId)
 
       const response = await fetch(`/api/devices/${deviceId}/assign-playlist`, {
         method: "POST",
@@ -135,7 +159,7 @@ export function AssignPlaylistDialog({
         toast.error(data.error || "Failed to remove playlist")
       }
     } catch (error) {
-      console.error("Error removing playlist:", error)
+      console.error("🎵 [ASSIGN DIALOG] Error removing playlist:", error)
       toast.error("Failed to remove playlist")
     } finally {
       setSaving(false)
@@ -170,7 +194,7 @@ export function AssignPlaylistDialog({
 
         <div className="space-y-4">
           {/* Current Assignment */}
-          {currentPlaylistId && (
+          {currentPlaylistId && currentPlaylistName && (
             <div className="p-3 bg-blue-50 rounded-lg border">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
@@ -185,7 +209,7 @@ export function AssignPlaylistDialog({
                   disabled={saving}
                   className="text-red-600 hover:text-red-700"
                 >
-                  <X className="h-4 w-4" />
+                  {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <X className="h-4 w-4" />}
                 </Button>
               </div>
             </div>
@@ -195,8 +219,9 @@ export function AssignPlaylistDialog({
           <div className="space-y-2">
             <Label htmlFor="playlist">Select Playlist</Label>
             {loading ? (
-              <div className="flex items-center justify-center py-4">
-                <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
+              <div className="flex items-center justify-center py-8">
+                <Loader2 className="h-6 w-6 animate-spin mr-2" />
+                <span>Loading playlists...</span>
               </div>
             ) : (
               <Select value={selectedPlaylistId} onValueChange={setSelectedPlaylistId}>
@@ -218,6 +243,9 @@ export function AssignPlaylistDialog({
                           <div className="flex items-center gap-2 ml-2">
                             <Badge variant="outline" className="text-xs">
                               {playlist.item_count} items
+                            </Badge>
+                            <Badge variant="secondary" className="text-xs">
+                              {playlist.status}
                             </Badge>
                           </div>
                         </div>
@@ -265,7 +293,7 @@ export function AssignPlaylistDialog({
           >
             {saving ? (
               <>
-                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                 Assigning...
               </>
             ) : (
