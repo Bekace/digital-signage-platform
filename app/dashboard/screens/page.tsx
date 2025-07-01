@@ -321,7 +321,7 @@ export default function ScreensPage() {
                   </DropdownMenu>
                 </div>
                 <CardDescription className="capitalize">
-                  {device.device_type.replace("_", " ")} • {device.platform || "Unknown Platform"}
+                  {device.device_type?.replace("_", " ") || "Unknown Device"} • {device.platform || "Unknown Platform"}
                 </CardDescription>
               </CardHeader>
 
@@ -358,6 +358,12 @@ export default function ScreensPage() {
                 </div>
 
                 {/* Capabilities */}
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-gray-600">Type</span>
+                  <Badge variant="secondary" className="capitalize">
+                    {device.device_type?.replace("_", " ") || "Unknown"}
+                  </Badge>
+                </div>
                 {device.capabilities && device.capabilities.length > 0 && (
                   <div className="space-y-2">
                     <span className="text-sm font-medium">Capabilities</span>
