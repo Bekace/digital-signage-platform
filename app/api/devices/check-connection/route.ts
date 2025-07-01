@@ -1,5 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { neon } from "@neondatabase/serverless"
+import { getCurrentUser } from "@/lib/auth"
 
 export const dynamic = "force-dynamic"
 
@@ -7,79 +8,91 @@ const sql = neon(process.env.DATABASE_URL!)
 
 export async function POST(request: NextRequest) {
   try {
+    console.log("🔍 [CHECK CONNECTION] Starting connection check...")
+
+    const user = await getCurrentUser(request)
+    if (!user) {
+      console.log("🔍 [CHECK CONNECTION] No authenticated user found")
+      return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 })
+    }
+
     const body = await request.json()
     const { pairingCode } = body
 
-    console.log("[CHECK CONNECTION] Checking connection for code:", pairingCode)
+    console.log("🔍 [CHECK CONNECTION] Checking code:", { pairingCode, userId: user.id })
 
     if (!pairingCode) {
-      return NextResponse.json({ success: false, error: "Pairing code is required" }, { status: 400 })
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Pairing code is required",
+        },
+        { status: 400 },
+      )
     }
 
-    // Check if device is connected for this pairing code
-    const result = await sql`
+    // Check if there's a device connected to this pairing code
+    const connectionCheck = await sql`
       SELECT 
         dpc.id as pairing_id,
         dpc.code,
         dpc.screen_name,
         dpc.device_type,
-        dpc.used_at,
-        dpc.completed_at,
+        dpc.device_id,
+        dpc.expires_at,
         d.id as device_id,
         d.name as device_name,
         d.status as device_status,
-        d.last_seen,
+        d.last_heartbeat,
         d.created_at as device_created
       FROM device_pairing_codes dpc
       LEFT JOIN devices d ON d.id = dpc.device_id
       WHERE dpc.code = ${pairingCode}
+      AND dpc.user_id = ${user.id}
       AND dpc.expires_at > NOW()
       ORDER BY dpc.created_at DESC
       LIMIT 1
     `
 
-    if (result.length === 0) {
+    console.log("🔍 [CHECK CONNECTION] Connection check result:", connectionCheck)
+
+    if (connectionCheck.length === 0) {
       return NextResponse.json({
-        success: false,
+        success: true,
         connected: false,
-        error: "Invalid or expired pairing code",
+        message: "Pairing code not found or expired",
       })
     }
 
-    const record = result[0]
+    const record = connectionCheck[0]
+    const isConnected = !!record.device_id
 
-    // Check if device is connected
-    const isConnected = record.device_id && record.completed_at && record.device_status !== "offline"
-
-    console.log("[CHECK CONNECTION] Connection status:", {
-      pairingCode,
+    console.log("🔍 [CHECK CONNECTION] Connection status:", {
       isConnected,
       deviceId: record.device_id,
-      deviceStatus: record.device_status,
+      deviceName: record.device_name,
     })
 
     return NextResponse.json({
       success: true,
       connected: isConnected,
-      pairingCode: record.code,
-      screenName: record.screen_name,
-      deviceType: record.device_type,
       device: isConnected
         ? {
             id: record.device_id,
-            name: record.device_name,
-            status: record.device_status,
-            lastSeen: record.last_seen,
-            createdAt: record.device_created,
+            name: record.device_name || record.screen_name,
+            status: record.device_status || "connected",
+            type: record.device_type,
+            lastSeen: record.last_heartbeat,
+            connectedAt: record.device_created,
           }
         : null,
+      message: isConnected ? "Device connected" : "Waiting for device connection",
     })
   } catch (error) {
-    console.error("[CHECK CONNECTION] Error:", error)
+    console.error("🔍 [CHECK CONNECTION] Error:", error)
     return NextResponse.json(
       {
         success: false,
-        connected: false,
         error: "Failed to check connection",
         details: error instanceof Error ? error.message : "Unknown error",
       },

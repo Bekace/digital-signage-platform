@@ -8,98 +8,127 @@ const sql = neon(process.env.DATABASE_URL!)
 
 export async function POST(request: NextRequest) {
   try {
-    console.log("[CREATE SCREEN] Starting screen creation...")
+    console.log("📺 [CREATE SCREEN] Starting screen creation...")
 
-    const user = await getCurrentUser()
+    const user = await getCurrentUser(request)
     if (!user) {
-      return NextResponse.json({ success: false, error: "Authentication required" }, { status: 401 })
+      console.log("📺 [CREATE SCREEN] No authenticated user found")
+      return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 })
     }
 
     const body = await request.json()
-    const { pairingCode, screenName, location, description } = body
+    const { pairingCode } = body
 
-    console.log("[CREATE SCREEN] Creating screen with:", { pairingCode, screenName, location })
+    console.log("📺 [CREATE SCREEN] Request:", { pairingCode, userId: user.id })
 
     if (!pairingCode) {
-      return NextResponse.json({ success: false, error: "Pairing code is required" }, { status: 400 })
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Pairing code is required",
+        },
+        { status: 400 },
+      )
     }
 
-    // Find the pairing code and associated device
-    const pairingResult = await sql`
+    // Check if the pairing code exists and has a connected device
+    const pairingRecord = await sql`
       SELECT 
         dpc.id as pairing_id,
         dpc.code,
         dpc.screen_name,
         dpc.device_type,
+        dpc.user_id as pairing_user_id,
         dpc.device_id,
+        dpc.expires_at,
+        dpc.completed_at,
         d.id as device_id,
         d.name as device_name,
-        d.device_type as device_device_type,
-        d.status as device_status
+        d.status as device_status,
+        d.user_id as device_user_id
       FROM device_pairing_codes dpc
       LEFT JOIN devices d ON d.id = dpc.device_id
       WHERE dpc.code = ${pairingCode}
+      AND dpc.user_id = ${user.id}
       AND dpc.expires_at > NOW()
-      AND dpc.completed_at IS NOT NULL
       ORDER BY dpc.created_at DESC
       LIMIT 1
     `
 
-    if (pairingResult.length === 0) {
-      return NextResponse.json({
-        success: false,
-        error: "Invalid pairing code or device not connected",
-      })
+    console.log("📺 [CREATE SCREEN] Pairing record found:", pairingRecord)
+
+    if (pairingRecord.length === 0) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Pairing code not found or expired",
+        },
+        { status: 400 },
+      )
     }
 
-    const pairing = pairingResult[0]
+    const record = pairingRecord[0]
 
-    if (!pairing.device_id) {
-      return NextResponse.json({
-        success: false,
-        error: "Device not connected yet",
-      })
+    if (!record.device_id) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "No device connected to this pairing code",
+        },
+        { status: 400 },
+      )
     }
 
-    // Update device with screen information
+    // Update the device to assign it to the user and set the screen name
     const updatedDevice = await sql`
       UPDATE devices 
       SET 
-        name = ${screenName || pairing.screen_name},
-        location = ${location || ""},
-        description = ${description || ""},
-        status = 'online',
-        user_id = ${user.id}
-      WHERE id = ${pairing.device_id}
-      RETURNING id, name, device_type, status, location, description, created_at
+        user_id = ${user.id},
+        name = ${record.screen_name},
+        status = 'online'
+      WHERE id = ${record.device_id}
+      RETURNING id, name, device_type, status, created_at, last_heartbeat
     `
 
     if (updatedDevice.length === 0) {
-      return NextResponse.json({
-        success: false,
-        error: "Failed to update device",
-      })
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Failed to update device",
+        },
+        { status: 500 },
+      )
     }
 
-    const screen = updatedDevice[0]
+    // Mark the pairing code as used/completed
+    await sql`
+      UPDATE device_pairing_codes 
+      SET completed_at = NOW()
+      WHERE id = ${record.pairing_id}
+    `
 
-    console.log("[CREATE SCREEN] Screen created successfully:", screen)
+    const device = updatedDevice[0]
+
+    console.log("📺 [CREATE SCREEN] Screen created successfully:", {
+      deviceId: device.id,
+      screenName: device.name,
+      deviceType: device.device_type,
+    })
 
     return NextResponse.json({
       success: true,
       screen: {
-        id: screen.id,
-        name: screen.name,
-        type: screen.device_type,
-        status: screen.status,
-        location: screen.location,
-        description: screen.description,
-        createdAt: screen.created_at,
+        id: device.id,
+        name: device.name,
+        deviceType: device.device_type,
+        status: device.status,
+        createdAt: device.created_at,
+        lastSeen: device.last_heartbeat,
       },
       message: "Screen created successfully",
     })
   } catch (error) {
-    console.error("[CREATE SCREEN] Error:", error)
+    console.error("📺 [CREATE SCREEN] Error:", error)
     return NextResponse.json(
       {
         success: false,
