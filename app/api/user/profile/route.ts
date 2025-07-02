@@ -4,10 +4,38 @@ import { getDb } from "@/lib/db"
 
 export async function GET() {
   try {
+    // Check if database is configured
+    if (!process.env.DATABASE_URL) {
+      return NextResponse.json(
+        {
+          success: false,
+          message: "Database not configured",
+        },
+        { status: 500 },
+      )
+    }
+
+    // Check if JWT secret is configured
+    if (!process.env.JWT_SECRET) {
+      return NextResponse.json(
+        {
+          success: false,
+          message: "JWT secret not configured",
+        },
+        { status: 500 },
+      )
+    }
+
     const user = await getCurrentUser()
 
     if (!user) {
-      return NextResponse.json({ success: false, message: "Not authenticated" }, { status: 401 })
+      return NextResponse.json(
+        {
+          success: false,
+          message: "Not authenticated",
+        },
+        { status: 401 },
+      )
     }
 
     const sql = getDb()
@@ -23,7 +51,13 @@ export async function GET() {
     `
 
     if (users.length === 0) {
-      return NextResponse.json({ success: false, message: "User not found" }, { status: 404 })
+      return NextResponse.json(
+        {
+          success: false,
+          message: "User not found",
+        },
+        { status: 404 },
+      )
     }
 
     const userData = users[0]
@@ -44,6 +78,13 @@ export async function GET() {
     })
   } catch (error) {
     console.error("Profile fetch error:", error)
-    return NextResponse.json({ success: false, message: "Internal server error" }, { status: 500 })
+    return NextResponse.json(
+      {
+        success: false,
+        message: "Internal server error",
+        error: error instanceof Error ? error.message : "Unknown error",
+      },
+      { status: 500 },
+    )
   }
 }
