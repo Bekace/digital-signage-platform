@@ -2,108 +2,58 @@ export interface Plan {
   id: string
   name: string
   price: number
-  interval: "monthly" | "yearly"
+  maxScreens: number
+  maxStorage: number // in GB
   features: string[]
-  limits: {
-    devices: number
-    storage: number // in GB
-    bandwidth: number // in GB
-  }
 }
 
-export const PLANS: Plan[] = [
-  {
-    id: "free",
-    name: "Free",
-    price: 0,
-    interval: "monthly",
-    features: ["1 device", "1GB storage", "Basic templates", "Community support"],
-    limits: {
-      devices: 1,
-      storage: 1,
-      bandwidth: 5,
-    },
-  },
-  {
+export const PLANS: Record<string, Plan> = {
+  starter: {
     id: "starter",
     name: "Starter",
-    price: 29,
-    interval: "monthly",
-    features: ["5 devices", "10GB storage", "All templates", "Email support", "Custom branding"],
-    limits: {
-      devices: 5,
-      storage: 10,
-      bandwidth: 50,
-    },
+    price: 9,
+    maxScreens: 3,
+    maxStorage: 1,
+    features: ["Up to 3 screens", "1GB storage", "Basic templates", "Email support"],
   },
-  {
+  professional: {
     id: "professional",
     name: "Professional",
-    price: 79,
-    interval: "monthly",
-    features: [
-      "25 devices",
-      "100GB storage",
-      "All templates",
-      "Priority support",
-      "Custom branding",
-      "Advanced analytics",
-      "API access",
-    ],
-    limits: {
-      devices: 25,
-      storage: 100,
-      bandwidth: 500,
-    },
+    price: 29,
+    maxScreens: 15,
+    maxStorage: 10,
+    features: ["Up to 15 screens", "10GB storage", "Premium templates", "Advanced scheduling", "Priority support"],
   },
-  {
+  enterprise: {
     id: "enterprise",
     name: "Enterprise",
-    price: 199,
-    interval: "monthly",
-    features: [
-      "Unlimited devices",
-      "1TB storage",
-      "All templates",
-      "24/7 phone support",
-      "Custom branding",
-      "Advanced analytics",
-      "API access",
-      "White-label solution",
-      "Custom integrations",
-    ],
-    limits: {
-      devices: -1, // unlimited
-      storage: 1000,
-      bandwidth: 5000,
-    },
+    price: 99,
+    maxScreens: -1, // unlimited
+    maxStorage: 100,
+    features: ["Unlimited screens", "100GB storage", "Custom templates", "API access", "24/7 phone support"],
   },
-]
+}
 
-export function getPlanById(id: string): Plan | undefined {
-  return PLANS.find((plan) => plan.id === id)
+export function getPlan(planId: string): Plan | null {
+  return PLANS[planId] || null
 }
 
 export function getDefaultPlan(): Plan {
-  return PLANS[0] // Free plan
+  return PLANS.starter
 }
 
-export function isFeatureAvailable(planId: string, feature: string): boolean {
-  const plan = getPlanById(planId)
-  return plan ? plan.features.includes(feature) : false
-}
-
-export function canAddDevice(planId: string, currentDeviceCount: number): boolean {
-  const plan = getPlanById(planId)
+export function canUploadFile(currentUsage: number, fileSize: number, planId: string): boolean {
+  const plan = getPlan(planId)
   if (!plan) return false
 
-  return plan.limits.devices === -1 || currentDeviceCount < plan.limits.devices
+  const maxBytes = plan.maxStorage * 1024 * 1024 * 1024 // Convert GB to bytes
+  return currentUsage + fileSize <= maxBytes
 }
 
-export function canUploadMedia(planId: string, currentStorageUsed: number, fileSize: number): boolean {
-  const plan = getPlanById(planId)
+export function canAddScreen(currentScreens: number, planId: string): boolean {
+  const plan = getPlan(planId)
   if (!plan) return false
 
-  const newTotal = currentStorageUsed + fileSize / (1024 * 1024 * 1024) // Convert to GB
-  return newTotal <= plan.limits.storage
+  if (plan.maxScreens === -1) return true // unlimited
+  return currentScreens < plan.maxScreens
 }

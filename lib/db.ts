@@ -1,21 +1,17 @@
 import { neon } from "@neondatabase/serverless"
 
 if (!process.env.DATABASE_URL) {
-  console.warn("DATABASE_URL environment variable is not set")
+  throw new Error("DATABASE_URL environment variable is not set")
 }
 
-export const sql = neon(process.env.DATABASE_URL || "")
+export const sql = neon(process.env.DATABASE_URL)
 
 export async function testConnection() {
   try {
-    if (!process.env.DATABASE_URL) {
-      return { success: false, error: "DATABASE_URL not configured" }
-    }
-
     const result = await sql`SELECT 1 as test`
     return { success: true, result }
   } catch (error) {
-    console.error("Database connection test failed:", error)
+    console.error("Database connection failed:", error)
     return { success: false, error: error instanceof Error ? error.message : "Unknown error" }
   }
 }

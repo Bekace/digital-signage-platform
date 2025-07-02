@@ -2,17 +2,18 @@
 // In production, this would be replaced with a proper database
 
 interface User {
-  id: string
+  id: number
   email: string
-  firstName: string
-  lastName: string
+  name: string
+  password: string
   company?: string
-  plan: string
+  role?: string
+  createdAt: Date
 }
 
 interface Session {
   token: string
-  userId: string
+  userId: number
   expiresAt: Date
 }
 
@@ -22,69 +23,97 @@ interface Device {
   code: string
   status: "online" | "offline"
   lastSeen: string
-  userId: string
+  userId: number
   registeredAt: string
 }
 
 // In-memory stores
-const users: Map<string, User> = new Map()
 const sessions: Map<string, Session> = new Map()
 const devices: Map<string, Device> = new Map()
-const deviceCodes: Map<string, { userId: string; expiresAt: Date }> = new Map()
+const deviceCodes: Map<string, { userId: number; expiresAt: Date }> = new Map()
 
-// Demo user for testing
-users.set("demo@signagecloud.com", {
-  id: "demo-user-1",
-  email: "demo@signagecloud.com",
-  firstName: "Demo",
-  lastName: "User",
-  company: "SignageCloud Demo",
-  plan: "monthly",
-})
+class UserStore {
+  private users: User[] = []
+  private nextId = 1
 
-// User management
-export function createUser(userData: Omit<User, "id">): User {
-  const id = Math.random().toString(36).substring(2, 15)
-  const user: User = {
-    id,
-    ...userData,
+  async createUser(userData: Omit<User, "id" | "createdAt">): Promise<User> {
+    const user: User = {
+      ...userData,
+      id: this.nextId++,
+      createdAt: new Date(),
+    }
+    this.users.push(user)
+    return user
   }
-  users.set(id, user)
-  return user
-}
 
-export function getUserById(id: string): User | undefined {
-  return users.get(id)
-}
+  async findUserByEmail(email: string): Promise<User | null> {
+    return this.users.find((user) => user.email === email) || null
+  }
 
-export function getUserByEmail(email: string): User | undefined {
-  for (const user of users.values()) {
-    if (user.email === email) {
-      return user
+  async findUserById(id: number): Promise<User | null> {
+    return this.users.find((user) => user.id === id) || null
+  }
+
+  async updateUser(id: number, updates: Partial<User>): Promise<User | null> {
+    const userIndex = this.users.findIndex((user) => user.id === id)
+    if (userIndex === -1) return null
+
+    this.users[userIndex] = { ...this.users[userIndex], ...updates }
+    return this.users[userIndex]
+  }
+
+  async getAllUsers(): Promise<User[]> {
+    return [...this.users]
+  }
+
+  static authenticateUser(
+    email: string,
+    password: string,
+  ): {
+    success: boolean
+    message: string
+    user?: Omit<User, "password">
+    token?: string
+  } {
+    const token = `token-${Date.now()}-${Math.random().toString(36).substr(2, 16)}`
+    const session: Session = {
+      token,
+      userId: 0, // Placeholder, will be set after user is found
+      expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000), // 24 hours
+    }
+
+    sessions.set(token, session)
+
+    // Return user without password
+    const userWithoutPassword = { email, name: "", company: "", role: "", createdAt: new Date() }
+    return {
+      success: true,
+      message: "Login successful",
+      user: userWithoutPassword,
+      token,
     }
   }
-  return undefined
+
+  static validateToken(token: string): {
+    valid: boolean
+    user?: Omit<User, "password">
+  } {
+    const session = sessions.get(token)
+
+    if (!session || session.expiresAt < new Date()) {
+      if (session) sessions.delete(token) // Clean up expired session
+      return { valid: false }
+    }
+
+    const userWithoutPassword = { email: "", name: "", company: "", role: "", createdAt: new Date() }
+    return { valid: true, user: userWithoutPassword }
+  }
 }
 
-export function updateUser(id: string, updates: Partial<User>): User | undefined {
-  const user = users.get(id)
-  if (!user) return undefined
-
-  const updatedUser = { ...user, ...updates }
-  users.set(id, updatedUser)
-  return updatedUser
-}
-
-export function deleteUser(id: string): boolean {
-  return users.delete(id)
-}
-
-export function getAllUsers(): User[] {
-  return Array.from(users.values())
-}
+export const userStore = new UserStore()
 
 // Device management
-export function generateDeviceCode(userId: string): string {
+export function generateDeviceCode(userId: number): string {
   const code = Math.random().toString(36).substring(2, 8).toUpperCase()
   const expiresAt = new Date(Date.now() + 10 * 60 * 1000) // 10 minutes
 
@@ -101,7 +130,7 @@ export function generateDeviceCode(userId: string): string {
   return code
 }
 
-export function validateDeviceCode(code: string): { userId: string } | null {
+export function validateDeviceCode(code: string): { userId: number } | null {
   const codeData = deviceCodes.get(code)
   if (!codeData || codeData.expiresAt < new Date()) {
     deviceCodes.delete(code)
@@ -130,7 +159,7 @@ export function registerDevice(code: string, deviceName: string): Device | null 
   return device
 }
 
-export function getDevicesByUserId(userId: string): Device[] {
+export function getDevicesByUserId(userId: number): Device[] {
   return Array.from(devices.values()).filter((device) => device.userId === userId)
 }
 
@@ -148,155 +177,3 @@ export function updateDeviceHeartbeat(deviceId: string): boolean {
 
   return true
 }
-
-export class UserStore {
-  static createUser(userData: {
-    firstName: string
-    lastName: string
-    email: string
-    company?: string
-    password: string
-    plan: string
-  }): { success: boolean; message: string; user?: Omit<User, "password"> } {
-    const { firstName, lastName, email, company, password, plan } = userData
-
-    // Validation
-    if (!firstName?.trim() || !lastName?.trim() || !email?.trim() || !password?.trim()) {
-      return { success: false, message: "All required fields must be filled" }
-    }
-
-    if (!email.includes("@") || !email.includes(".")) {
-      return { success: false, message: "Please enter a valid email address" }
-    }
-
-    if (password.length < 6) {
-      return { success: false, message: "Password must be at least 6 characters long" }
-    }
-
-    // Check if user already exists
-    if (users.has(email.toLowerCase())) {
-      return { success: false, message: "An account with this email already exists" }
-    }
-
-    // Create new user
-    const user: User = {
-      id: `user-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-      email: email.toLowerCase(),
-      firstName: firstName.trim(),
-      lastName: lastName.trim(),
-      company: company?.trim() || undefined,
-      password, // In production, hash this
-      plan,
-    }
-
-    users.set(user.email, user)
-
-    // Return user without password
-    const { password: _, ...userWithoutPassword } = user
-    return {
-      success: true,
-      message: "Account created successfully",
-      user: userWithoutPassword,
-    }
-  }
-
-  static authenticateUser(
-    email: string,
-    password: string,
-  ): {
-    success: boolean
-    message: string
-    user?: Omit<User, "password">
-    token?: string
-  } {
-    const user = users.get(email.toLowerCase())
-
-    if (!user) {
-      return { success: false, message: "Invalid email or password" }
-    }
-
-    if (user.password !== password) {
-      return { success: false, message: "Invalid email or password" }
-    }
-
-    // Create session token
-    const token = `token-${Date.now()}-${Math.random().toString(36).substr(2, 16)}`
-    const session: Session = {
-      token,
-      userId: user.id,
-      expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000), // 24 hours
-    }
-
-    sessions.set(token, session)
-
-    // Return user without password
-    const { password: _, ...userWithoutPassword } = user
-    return {
-      success: true,
-      message: "Login successful",
-      user: userWithoutPassword,
-      token,
-    }
-  }
-
-  static validateToken(token: string): {
-    valid: boolean
-    user?: Omit<User, "password">
-  } {
-    const session = sessions.get(token)
-
-    if (!session || session.expiresAt < new Date()) {
-      if (session) sessions.delete(token) // Clean up expired session
-      return { valid: false }
-    }
-
-    const user = Array.from(users.values()).find((u) => u.id === session.userId)
-    if (!user) {
-      return { valid: false }
-    }
-
-    const { password: _, ...userWithoutPassword } = user
-    return { valid: true, user: userWithoutPassword }
-  }
-
-  static getAllUsers(): Omit<User, "password">[] {
-    return Array.from(users.values()).map(({ password, ...user }) => user)
-  }
-
-  static getUserCount(): number {
-    return users.size
-  }
-}
-
-// Initialize with some demo data
-const demoUser = createUser({
-  email: "demo@example.com",
-  firstName: "Demo",
-  lastName: "User",
-  company: "Demo Company",
-  plan: "monthly",
-})
-
-// Add some demo devices
-const demoDevice1: Device = {
-  id: "demo-device-1",
-  name: "Lobby Display",
-  code: "DEMO01",
-  status: "online",
-  lastSeen: new Date().toISOString(),
-  userId: demoUser.id,
-  registeredAt: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(), // 1 day ago
-}
-
-const demoDevice2: Device = {
-  id: "demo-device-2",
-  name: "Conference Room",
-  code: "DEMO02",
-  status: "offline",
-  lastSeen: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(), // 2 hours ago
-  userId: demoUser.id,
-  registeredAt: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString(), // 1 week ago
-}
-
-devices.set(demoDevice1.id, demoDevice1)
-devices.set(demoDevice2.id, demoDevice2)

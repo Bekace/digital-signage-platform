@@ -1,116 +1,78 @@
-import { NextResponse } from "next/server"
-import { getCurrentUser } from "@/lib/auth"
+import { type NextRequest, NextResponse } from "next/server"
 import { sql } from "@/lib/db"
+import { getUserFromRequest } from "@/lib/auth"
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
-    // Check if database is configured
-    if (!process.env.DATABASE_URL) {
-      return NextResponse.json(
-        {
-          success: false,
-          message: "Database not configured",
-        },
-        { status: 500 },
-      )
-    }
-
-    const user = await getCurrentUser()
-
+    // Get user from JWT token
+    const user = getUserFromRequest(request)
     if (!user) {
-      return NextResponse.json(
-        {
-          success: false,
-          message: "Not authenticated",
-        },
-        { status: 401 },
-      )
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    // Get complete user profile
-    const users = await sql`
-      SELECT 
-        id, email, first_name, last_name, company, 
-        plan, created_at
+    // Fetch user profile from database
+    const result = await sql`
+      SELECT id, email, name, company, role, created_at, plan_id
       FROM users 
       WHERE id = ${user.id}
-      LIMIT 1
     `
 
-    if (users.length === 0) {
-      return NextResponse.json(
-        {
-          success: false,
-          message: "User not found",
-        },
-        { status: 404 },
-      )
+    if (result.length === 0) {
+      return NextResponse.json({ error: "User not found" }, { status: 404 })
     }
 
-    const userData = users[0]
+    const userProfile = result[0]
 
     return NextResponse.json({
-      success: true,
-      user: {
-        id: userData.id,
-        email: userData.email,
-        firstName: userData.first_name,
-        lastName: userData.last_name,
-        company: userData.company,
-        plan: userData.plan,
-        createdAt: userData.created_at,
-      },
+      id: userProfile.id,
+      email: userProfile.email,
+      name: userProfile.name,
+      company: userProfile.company,
+      role: userProfile.role,
+      createdAt: userProfile.created_at,
+      planId: userProfile.plan_id || "starter",
     })
   } catch (error) {
     console.error("Profile fetch error:", error)
-    return NextResponse.json(
-      {
-        success: false,
-        message: "Internal server error",
-        error: error instanceof Error ? error.message : "Unknown error",
-      },
-      { status: 500 },
-    )
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 })
   }
 }
 
-export async function PUT(request: Request) {
+export async function PUT(request: NextRequest) {
   try {
-    const user = await getCurrentUser()
-
+    const user = getUserFromRequest(request)
     if (!user) {
-      return NextResponse.json(
-        {
-          success: false,
-          message: "Not authenticated",
-        },
-        { status: 401 },
-      )
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
     const body = await request.json()
-    const { firstName, lastName, company } = body
+    const { name, company } = body
 
     // Update user profile
-    await sql`
+    const result = await sql`
       UPDATE users 
-      SET first_name = ${firstName}, last_name = ${lastName}, company = ${company}, updated_at = CURRENT_TIMESTAMP
+      SET name = ${name}, company = ${company}, updated_at = NOW()
       WHERE id = ${user.id}
+      RETURNING id, email, name, company, role, created_at, plan_id
     `
 
+    if (result.length === 0) {
+      return NextResponse.json({ error: "User not found" }, { status: 404 })
+    }
+
+    const updatedUser = result[0]
+
     return NextResponse.json({
-      success: true,
-      message: "Profile updated successfully",
+      id: updatedUser.id,
+      email: updatedUser.email,
+      name: updatedUser.name,
+      company: updatedUser.company,
+      role: updatedUser.role,
+      createdAt: updatedUser.created_at,
+      planId: updatedUser.plan_id || "starter",
     })
   } catch (error) {
     console.error("Profile update error:", error)
-    return NextResponse.json(
-      {
-        success: false,
-        message: "Internal server error",
-        error: error instanceof Error ? error.message : "Unknown error",
-      },
-      { status: 500 },
-    )
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 })
   }
 }
