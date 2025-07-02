@@ -4,7 +4,7 @@ import { useState, useEffect } from "react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Download, Play, Pause, Volume2, VolumeX, AlertCircle, ExternalLink } from "lucide-react"
+import { Download, Play, Pause, Volume2, VolumeX, AlertCircle } from "lucide-react"
 
 interface MediaFile {
   id: number
@@ -18,9 +18,6 @@ interface MediaFile {
   mime_type?: string
   dimensions?: string
   duration?: number
-  media_source?: string
-  external_url?: string
-  embed_settings?: string
 }
 
 interface MediaPreviewModalProps {
@@ -65,7 +62,6 @@ export function MediaPreviewModal({ file, open, onOpenChange }: MediaPreviewModa
   const isImage = file.mime_type?.startsWith("image/") || file.file_type === "image"
   const isVideo = file.mime_type?.startsWith("video/") || file.file_type === "video"
   const isPDF = file.mime_type === "application/pdf" || file.file_type === "document"
-  const isGoogleSlides = file.file_type === "presentation" && file.media_source === "google_slides"
 
   const handleDownload = () => {
     const link = document.createElement("a")
@@ -214,28 +210,6 @@ export function MediaPreviewModal({ file, open, onOpenChange }: MediaPreviewModa
               </div>
             )}
 
-            {isGoogleSlides && (
-              <div className="relative max-w-full max-h-[60vh]">
-                <iframe
-                  src={file.url}
-                  className="w-full h-[60vh] rounded-lg shadow-lg border"
-                  frameBorder="0"
-                  allowFullScreen
-                  title={file.original_name}
-                />
-                <div className="absolute bottom-4 right-4">
-                  <Button
-                    size="sm"
-                    variant="secondary"
-                    onClick={() => window.open(file.external_url || file.url, "_blank")}
-                  >
-                    <ExternalLink className="h-4 w-4 mr-2" />
-                    Open in Google Slides
-                  </Button>
-                </div>
-              </div>
-            )}
-
             {isPDF && (
               <div className="text-center py-12">
                 <div className="bg-blue-50 border border-blue-200 p-8 rounded-lg inline-block">
@@ -261,7 +235,7 @@ export function MediaPreviewModal({ file, open, onOpenChange }: MediaPreviewModa
               </div>
             )}
 
-            {!isImage && !isVideo && !isPDF && !isGoogleSlides && (
+            {!isImage && !isVideo && !isPDF && (
               <div className="text-center py-12">
                 <div className="bg-gray-100 p-8 rounded-lg inline-block">
                   <svg className="h-16 w-16 text-gray-400 mx-auto mb-4" fill="currentColor" viewBox="0 0 20 20">
@@ -306,24 +280,10 @@ export function MediaPreviewModal({ file, open, onOpenChange }: MediaPreviewModa
                     {file.mime_type || file.file_type}
                   </Badge>
                 </div>
-                {file.media_source === "google_slides" && (
-                  <div className="flex justify-between">
-                    <span className="text-gray-600">Source:</span>
-                    <Badge variant="secondary" className="text-xs">
-                      Google Slides
-                    </Badge>
-                  </div>
-                )}
                 {file.dimensions && (
                   <div className="flex justify-between">
                     <span className="text-gray-600">Dimensions:</span>
                     <span className="font-medium">{file.dimensions}</span>
-                  </div>
-                )}
-                {file.embed_settings && JSON.parse(file.embed_settings).duration && (
-                  <div className="flex justify-between">
-                    <span className="text-gray-600">Duration:</span>
-                    <span className="font-medium">{JSON.parse(file.embed_settings).duration}s per slide</span>
                   </div>
                 )}
                 {file.duration && (

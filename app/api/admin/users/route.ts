@@ -1,66 +1,58 @@
-import { NextResponse } from "next/server"
-import { getCurrentUser } from "@/lib/auth"
-import { getDb } from "@/lib/db"
+import { type NextRequest, NextResponse } from "next/server"
+import { neon } from "@neondatabase/serverless"
+import jwt from "jsonwebtoken"
 
-// Force dynamic rendering
-export const dynamic = "force-dynamic"
-export const runtime = "nodejs"
+const sql = neon(process.env.DATABASE_URL!)
 
-export async function GET() {
+async function isAdmin(request: NextRequest): Promise<boolean> {
   try {
-    console.log("Admin users API: Starting request")
+    const token = request.cookies.get("auth-token")?.value
+    if (!token) return false
 
-    const user = await getCurrentUser()
-    console.log("Admin users API: Current user:", user?.email, user?.id)
+    const decoded = jwt.verify(token, process.env.JWT_SECRET!) as { userId: number }
+    const result = await sql`SELECT is_admin FROM users WHERE id = ${decoded.userId}`
 
-    if (!user) {
-      console.log("Admin users API: No user authenticated")
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    return result.length > 0 && result[0].is_admin
+  } catch {
+    return false
+  }
+}
+
+export async function GET(request: NextRequest) {
+  try {
+    if (!(await isAdmin(request))) {
+      return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 403 })
     }
 
-    const sql = getDb()
-
-    // Check if user is admin
-    const adminCheck = await sql`
-      SELECT is_admin FROM users WHERE id = ${user.id}
-    `
-
-    if (adminCheck.length === 0 || !adminCheck[0].is_admin) {
-      console.log("Admin users API: User is not admin")
-      return NextResponse.json({ error: "Admin access required" }, { status: 403 })
-    }
-
-    console.log("Admin users API: User is admin, fetching users")
-
-    // Get all users with their usage data
     const users = await sql`
       SELECT 
         u.id,
         u.email,
-        u.first_name as "firstName",
-        u.last_name as "lastName", 
-        u.company,
-        u.plan_type as plan,
-        u.created_at as "createdAt",
-        u.is_admin as "isAdmin",
-        COALESCE(u.media_files_count, 0) as "mediaCount",
-        COALESCE(u.storage_used_bytes, 0) as "storageUsed"
+        u.first_name,
+        u.last_name,
+        u.company_name,
+        u.plan_id,
+        u.media_files_count,
+        u.storage_used_bytes,
+        u.created_at,
+        u.is_admin,
+        p.name as plan_name,
+        p.price as plan_price
       FROM users u
+      LEFT JOIN subscription_plans p ON u.plan_id = p.id
       ORDER BY u.created_at DESC
     `
 
-    console.log("Admin users API: Found", users.length, "users")
-
     return NextResponse.json({
       success: true,
-      users: users,
+      users,
     })
   } catch (error) {
-    console.error("Admin users API error:", error)
+    console.error("Admin users GET error:", error)
     return NextResponse.json(
       {
+        success: false,
         error: "Failed to fetch users",
-        details: error instanceof Error ? error.message : "Unknown error",
       },
       { status: 500 },
     )

@@ -23,15 +23,14 @@ export async function GET() {
 
     console.log("Raw media files from DB:", mediaFiles)
 
-    // Format files for the frontend - ensuring compatibility with playlist editor
+    // Format files for the frontend
     const formattedFiles = mediaFiles.map((file) => ({
       id: file.id,
-      filename: file.filename || "",
-      original_name: file.original_name || file.filename || "Untitled",
-      original_filename: file.original_name || file.filename || "Untitled", // Map original_name to original_filename for playlist editor
-      file_type: file.file_type || "unknown",
-      file_size: file.file_size || 0,
-      mime_type: file.mime_type || "application/octet-stream",
+      filename: file.filename,
+      original_name: file.original_name,
+      file_type: file.file_type,
+      file_size: file.file_size,
+      mime_type: file.mime_type,
       // Use url field first, then storage_url, then construct from filename
       url: file.url || file.storage_url || `https://blob.vercel-storage.com/${file.filename}`,
       thumbnail_url: file.thumbnail_url,
@@ -42,24 +41,12 @@ export async function GET() {
 
     console.log("Formatted files for frontend:", formattedFiles)
 
-    // Return both formats for compatibility
     return NextResponse.json({
-      success: true,
-      files: formattedFiles, // For media library page
-      media: formattedFiles, // For playlist editor
+      files: formattedFiles,
       total: mediaFiles.length,
     })
   } catch (error) {
     console.error("Error fetching media files:", error)
-    return NextResponse.json(
-      {
-        error: "Failed to fetch media files",
-        success: false,
-        files: [],
-        media: [],
-        total: 0,
-      },
-      { status: 500 },
-    )
+    return NextResponse.json({ error: "Failed to fetch media files" }, { status: 500 })
   }
 }

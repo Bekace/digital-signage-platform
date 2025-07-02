@@ -1,162 +1,252 @@
 "use client"
 
 import type React from "react"
-
 import { useState, useEffect } from "react"
-import { Home, Monitor, ImageIcon, Play, Settings, Shield, Menu, DollarSign, Users, Tag, Bug } from "lucide-react"
-import { Button } from "@/components/ui/button"
-import { Separator } from "@/components/ui/separator"
-import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet"
-import { usePathname } from "next/navigation"
 import Link from "next/link"
-import { DashboardHeader } from "@/components/dashboard-header"
-import { DashboardFooter } from "@/components/dashboard-footer"
+import { usePathname, useRouter } from "next/navigation"
+import { Monitor, LayoutDashboard, ImageIcon, Play, Settings, Menu, LogOut } from "lucide-react"
 
-interface DashboardLayoutProps {
-  children: React.ReactNode
-}
+import { Button } from "@/components/ui/button"
+import { Sheet, SheetContent } from "@/components/ui/sheet"
+import { useToast } from "@/hooks/use-toast"
 
 const navigation = [
-  { name: "Dashboard", href: "/dashboard", icon: Home },
+  { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
   { name: "Screens", href: "/dashboard/screens", icon: Monitor },
   { name: "Media", href: "/dashboard/media", icon: ImageIcon },
   { name: "Playlists", href: "/dashboard/playlists", icon: Play },
   { name: "Settings", href: "/dashboard/settings", icon: Settings },
 ]
 
-const adminNavigation = [
-  { name: "Admin Overview", href: "/dashboard/admin", icon: Shield },
-  { name: "User Management", href: "/dashboard/admin/users", icon: Users },
-  { name: "Plan Management", href: "/dashboard/admin/plans", icon: DollarSign },
-  { name: "Feature Management", href: "/dashboard/admin/features", icon: Tag },
-  { name: "Debug Dashboard", href: "/dashboard/debug", icon: Bug },
-]
+interface DashboardLayoutProps {
+  children: React.ReactNode
+}
+
+interface UserProfile {
+  id: string
+  email: string
+  firstName: string
+  lastName: string
+  company?: string
+  plan: string
+  createdAt: string
+}
 
 export function DashboardLayout({ children }: DashboardLayoutProps) {
   const pathname = usePathname()
-  const [isAdmin, setIsAdmin] = useState(false)
+  const router = useRouter()
+  const { toast } = useToast()
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [user, setUser] = useState<UserProfile | null>(null)
+  const [isLoggingOut, setIsLoggingOut] = useState(false)
+  const [isLoading, setIsLoading] = useState(true)
 
+  // Fetch user profile on mount
   useEffect(() => {
-    // Check if user is admin
-    const checkAdminStatus = async () => {
-      try {
-        const response = await fetch("/api/user/profile")
-        if (response.ok) {
-          const data = await response.json()
-          setIsAdmin(data.user?.isAdmin || false)
-        }
-      } catch (error) {
-        console.error("Error checking admin status:", error)
-      }
-    }
-
-    checkAdminStatus()
+    fetchUserProfile()
   }, [])
 
-  const allNavigation = [...navigation, ...(isAdmin ? adminNavigation : [])]
+  const fetchUserProfile = async () => {
+    try {
+      setIsLoading(true)
+      const response = await fetch("/api/user/profile")
+      const data = await response.json()
+
+      if (data.success && data.user) {
+        setUser(data.user)
+      } else {
+        console.error("Authentication failed:", data.message)
+        // If not authenticated, redirect to login
+        router.push("/login")
+      }
+    } catch (error) {
+      console.error("Failed to fetch user profile:", error)
+      router.push("/login")
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const handleLogout = async () => {
+    setIsLoggingOut(true)
+    try {
+      const response = await fetch("/api/auth/logout", {
+        method: "POST",
+      })
+
+      const data = await response.json()
+
+      if (data.success) {
+        toast({
+          title: "Logged out successfully",
+          description: "You have been signed out of your account.",
+        })
+        router.push("/login")
+      } else {
+        throw new Error(data.message)
+      }
+    } catch (error) {
+      console.error("Logout error:", error)
+      toast({
+        title: "Logout failed",
+        description: "There was an error signing you out. Please try again.",
+        variant: "destructive",
+      })
+    } finally {
+      setIsLoggingOut(false)
+    }
+  }
+
+  // Safe getters for user data
+  const getUserDisplayName = () => {
+    if (!user || !user.firstName || !user.lastName) return "Loading..."
+    return `${user.firstName} ${user.lastName}`
+  }
+
+  const getUserInitials = () => {
+    if (!user || !user.firstName || !user.lastName) return "??"
+    return `${user.firstName.charAt(0)}${user.lastName.charAt(0)}`.toUpperCase()
+  }
+
+  const getUserEmail = () => {
+    return user?.email || "Loading..."
+  }
+
+  // Show loading state while fetching user data
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
+          <p className="text-gray-600">Loading...</p>
+        </div>
+      </div>
+    )
+  }
 
   return (
-    <div className="flex h-screen bg-gray-100">
-      {/* Desktop Sidebar */}
-      <div className="hidden md:flex md:w-64 md:flex-col">
-        <div className="flex flex-col flex-grow pt-5 overflow-y-auto bg-white border-r">
-          <div className="flex items-center flex-shrink-0 px-4">
-            <h1 className="text-xl font-semibold">Digital Signage</h1>
-          </div>
-          <div className="mt-5 flex-grow flex flex-col">
-            <nav className="flex-1 px-2 pb-4 space-y-1">
+    <div className="min-h-screen bg-gray-50">
+      {/* Mobile sidebar */}
+      <Sheet open={sidebarOpen} onOpenChange={setSidebarOpen}>
+        <SheetContent side="left" className="w-64 p-0">
+          <div className="flex h-full flex-col">
+            <div className="flex h-16 items-center px-6 border-b">
+              <Link href="/" className="flex items-center">
+                <Monitor className="h-6 w-6 mr-2" />
+                <span className="font-bold">SignageCloud</span>
+              </Link>
+            </div>
+            <nav className="flex-1 px-4 py-6 space-y-2">
               {navigation.map((item) => {
                 const isActive = pathname === item.href
                 return (
                   <Link
                     key={item.name}
                     href={item.href}
-                    className={`group flex items-center px-2 py-2 text-sm font-medium rounded-md ${
-                      isActive ? "bg-gray-100 text-gray-900" : "text-gray-600 hover:bg-gray-50 hover:text-gray-900"
+                    className={`flex items-center px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                      isActive
+                        ? "bg-primary text-primary-foreground"
+                        : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
                     }`}
-                  >
-                    <item.icon className="mr-3 h-5 w-5" />
-                    {item.name}
-                  </Link>
-                )
-              })}
-
-              {isAdmin && (
-                <>
-                  <Separator className="my-4" />
-                  <div className="px-2 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wider">
-                    Administration
-                  </div>
-                  {adminNavigation.map((item) => {
-                    const isActive = pathname === item.href
-                    return (
-                      <Link
-                        key={item.name}
-                        href={item.href}
-                        className={`group flex items-center px-2 py-2 text-sm font-medium rounded-md ${
-                          isActive ? "bg-gray-100 text-gray-900" : "text-gray-600 hover:bg-gray-50 hover:text-gray-900"
-                        }`}
-                      >
-                        <item.icon className="mr-3 h-5 w-5" />
-                        {item.name}
-                      </Link>
-                    )
-                  })}
-                </>
-              )}
-            </nav>
-          </div>
-        </div>
-      </div>
-
-      {/* Mobile Sidebar */}
-      <Sheet open={sidebarOpen} onOpenChange={setSidebarOpen}>
-        <SheetTrigger asChild>
-          <Button variant="ghost" size="icon" className="md:hidden fixed top-4 right-4 z-50">
-            <Menu className="h-6 w-6" />
-          </Button>
-        </SheetTrigger>
-        <SheetContent side="right" className="w-64 p-0">
-          <div className="flex flex-col h-full">
-            <div className="flex items-center justify-between p-4">
-              <h1 className="text-xl font-semibold">Digital Signage</h1>
-            </div>
-            <Separator />
-            <nav className="flex-1 px-2 py-4 space-y-1">
-              {allNavigation.map((item) => {
-                const isActive = pathname === item.href
-                return (
-                  <Link
-                    key={item.name}
-                    href={item.href}
                     onClick={() => setSidebarOpen(false)}
-                    className={`group flex items-center px-2 py-2 text-sm font-medium rounded-md ${
-                      isActive ? "bg-gray-100 text-gray-900" : "text-gray-600 hover:bg-gray-50 hover:text-gray-900"
-                    }`}
                   >
-                    <item.icon className="mr-3 h-5 w-5" />
+                    <item.icon className="h-4 w-4 mr-3" />
                     {item.name}
                   </Link>
                 )
               })}
             </nav>
+            <div className="border-t p-4">
+              <div className="flex items-center mb-4">
+                <div className="w-8 h-8 bg-primary rounded-full flex items-center justify-center">
+                  <span className="text-xs font-medium text-primary-foreground">{getUserInitials()}</span>
+                </div>
+                <div className="ml-3 min-w-0 flex-1">
+                  <p className="text-sm font-medium truncate">{getUserDisplayName()}</p>
+                  <p className="text-xs text-gray-500 truncate">{getUserEmail()}</p>
+                </div>
+              </div>
+              <Button variant="ghost" className="w-full justify-start" onClick={handleLogout} disabled={isLoggingOut}>
+                <LogOut className="h-4 w-4 mr-3" />
+                {isLoggingOut ? "Signing out..." : "Sign Out"}
+              </Button>
+            </div>
           </div>
         </SheetContent>
       </Sheet>
 
-      {/* Main Content */}
-      <div className="flex flex-col flex-1 overflow-hidden">
-        <DashboardHeader />
-        <main className="flex-1 relative overflow-y-auto focus:outline-none">
-          <div className="py-6">
-            <div className="max-w-7xl mx-auto px-4 sm:px-6 md:px-8">{children}</div>
+      {/* Desktop sidebar */}
+      <div className="hidden lg:fixed lg:inset-y-0 lg:flex lg:w-64 lg:flex-col">
+        <div className="flex flex-col flex-grow bg-white border-r">
+          <div className="flex h-16 items-center px-6 border-b">
+            <Link href="/" className="flex items-center">
+              <Monitor className="h-6 w-6 mr-2" />
+              <span className="font-bold">SignageCloud</span>
+            </Link>
           </div>
+          <nav className="flex-1 px-4 py-6 space-y-2">
+            {navigation.map((item) => {
+              const isActive = pathname === item.href
+              return (
+                <Link
+                  key={item.name}
+                  href={item.href}
+                  className={`flex items-center px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                    isActive
+                      ? "bg-primary text-primary-foreground"
+                      : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
+                  }`}
+                >
+                  <item.icon className="h-4 w-4 mr-3" />
+                  {item.name}
+                </Link>
+              )
+            })}
+          </nav>
+          <div className="border-t p-4">
+            <div className="flex items-center mb-4">
+              <div className="w-8 h-8 bg-primary rounded-full flex items-center justify-center">
+                <span className="text-xs font-medium text-primary-foreground">{getUserInitials()}</span>
+              </div>
+              <div className="ml-3 min-w-0 flex-1">
+                <p className="text-sm font-medium truncate">{getUserDisplayName()}</p>
+                <p className="text-xs text-gray-500 truncate">{getUserEmail()}</p>
+              </div>
+            </div>
+            <Button variant="ghost" className="w-full justify-start" onClick={handleLogout} disabled={isLoggingOut}>
+              <LogOut className="h-4 w-4 mr-3" />
+              {isLoggingOut ? "Signing out..." : "Sign Out"}
+            </Button>
+          </div>
+        </div>
+      </div>
+
+      {/* Main content */}
+      <div className="lg:pl-64">
+        {/* Top bar */}
+        <div className="sticky top-0 z-40 flex h-16 items-center gap-x-4 border-b bg-white px-4 shadow-sm sm:gap-x-6 sm:px-6 lg:px-8">
+          <Button variant="ghost" size="sm" className="lg:hidden" onClick={() => setSidebarOpen(true)}>
+            <Menu className="h-5 w-5" />
+          </Button>
+
+          <div className="flex flex-1 gap-x-4 self-stretch lg:gap-x-6">
+            <div className="flex flex-1"></div>
+            <div className="flex items-center gap-x-4 lg:gap-x-6">
+              <div className="hidden lg:flex lg:items-center lg:gap-x-2">
+                <div className="w-8 h-8 bg-primary rounded-full flex items-center justify-center">
+                  <span className="text-xs font-medium text-primary-foreground">{getUserInitials()}</span>
+                </div>
+                <span className="text-sm font-medium">{getUserDisplayName()}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Page content */}
+        <main className="py-10">
+          <div className="px-4 sm:px-6 lg:px-8">{children}</div>
         </main>
-        <DashboardFooter />
       </div>
     </div>
   )
 }
-
-export default DashboardLayout

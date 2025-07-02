@@ -12,11 +12,11 @@ export async function GET() {
 
     const sql = getDb()
 
-    // Get complete user profile including company info and admin status
+    // Get complete user profile including company info
     const users = await sql`
       SELECT 
         id, email, first_name, last_name, company, 
-        company_address, company_phone, plan, created_at, is_admin
+        company_address, company_phone, plan, created_at
       FROM users 
       WHERE id = ${user.id}
       LIMIT 1
@@ -40,7 +40,6 @@ export async function GET() {
         companyPhone: userData.company_phone,
         plan: userData.plan,
         createdAt: userData.created_at,
-        isAdmin: userData.is_admin || false,
       },
     })
   } catch (error) {

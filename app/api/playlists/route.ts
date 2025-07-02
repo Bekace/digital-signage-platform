@@ -1,52 +1,55 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { neon } from "@neondatabase/serverless"
-import { getCurrentUser } from "@/lib/auth"
+import jwt from "jsonwebtoken"
 
 const sql = neon(process.env.DATABASE_URL!)
 
-export const dynamic = "force-dynamic"
-
-// GET all playlists for the current user
 export async function GET(request: NextRequest) {
   try {
-    console.log("🎵 [PLAYLISTS] Fetching playlists...")
+    console.log("🎵 [PLAYLISTS API] Starting playlist fetch...")
 
-    const user = await getCurrentUser(request)
-    if (!user) {
-      console.log("🎵 [PLAYLISTS] No user found")
+    // Get user from JWT token
+    const token = request.cookies.get("auth-token")?.value
+    if (!token) {
+      console.log("🎵 [PLAYLISTS API] No auth token found")
       return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 })
     }
 
-    console.log("🎵 [PLAYLISTS] User ID:", user.id)
+    const decoded = jwt.verify(token, process.env.JWT_SECRET!) as { userId: number }
+    const userId = decoded.userId
+    console.log("🎵 [PLAYLISTS API] User ID:", userId)
 
-    // Fetch playlists with item counts
+    // Fetch playlists with item count
     const playlists = await sql`
       SELECT 
         p.id,
         p.name,
         p.description,
         p.status,
-        p.loop_playlist,
-        p.shuffle_items,
+        p.loop_enabled,
+        p.schedule_enabled,
+        p.start_time,
+        p.end_time,
+        p.selected_days,
         p.created_at,
         p.updated_at,
-        COUNT(pi.id) as item_count,
-        COALESCE(SUM(pi.duration), 0) as total_duration
+        COALESCE(COUNT(pi.id), 0)::text as item_count
       FROM playlists p
       LEFT JOIN playlist_items pi ON p.id = pi.playlist_id
-      WHERE p.user_id = ${user.id}
-      GROUP BY p.id, p.name, p.description, p.status, p.loop_playlist, p.shuffle_items, p.created_at, p.updated_at
-      ORDER BY p.created_at DESC
+      WHERE p.user_id = ${userId}
+      GROUP BY p.id, p.name, p.description, p.status, p.loop_enabled, p.schedule_enabled, 
+               p.start_time, p.end_time, p.selected_days, p.created_at, p.updated_at
+      ORDER BY p.updated_at DESC
     `
 
-    console.log("🎵 [PLAYLISTS] Found playlists:", playlists.length)
+    console.log("🎵 [PLAYLISTS API] Found playlists:", playlists.length)
 
     return NextResponse.json({
       success: true,
       playlists: playlists,
     })
   } catch (error) {
-    console.error("🎵 [PLAYLISTS] Error:", error)
+    console.error("🎵 [PLAYLISTS API] Error:", error)
     return NextResponse.json(
       {
         success: false,
@@ -58,59 +61,47 @@ export async function GET(request: NextRequest) {
   }
 }
 
-// POST create new playlist
 export async function POST(request: NextRequest) {
   try {
-    console.log("🎵 [PLAYLISTS] Creating new playlist...")
+    console.log("🎵 [PLAYLISTS API] Creating new playlist...")
 
-    const user = await getCurrentUser(request)
-    if (!user) {
+    // Get user from JWT token
+    const token = request.cookies.get("auth-token")?.value
+    if (!token) {
       return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 })
     }
 
+    const decoded = jwt.verify(token, process.env.JWT_SECRET!) as { userId: number }
+    const userId = decoded.userId
+
     const body = await request.json()
-    const { name, description, loop_playlist = true, shuffle_items = false } = body
+    const { name, description } = body
 
-    console.log("🎵 [PLAYLISTS] Create request:", { name, description, userId: user.id })
-
-    if (!name || name.trim() === "") {
-      return NextResponse.json({ success: false, error: "Playlist name is required" }, { status: 400 })
+    if (!name) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Playlist name is required",
+        },
+        { status: 400 },
+      )
     }
 
-    // Create playlist
+    // Create new playlist
     const result = await sql`
-      INSERT INTO playlists (
-        user_id, 
-        name, 
-        description, 
-        status, 
-        loop_playlist, 
-        shuffle_items, 
-        created_at, 
-        updated_at
-      )
-      VALUES (
-        ${user.id}, 
-        ${name.trim()}, 
-        ${description?.trim() || null}, 
-        'draft', 
-        ${loop_playlist}, 
-        ${shuffle_items}, 
-        NOW(), 
-        NOW()
-      )
-      RETURNING id, name, description, status
+      INSERT INTO playlists (user_id, name, description, status, created_at, updated_at)
+      VALUES (${userId}, ${name}, ${description || ""}, 'draft', NOW(), NOW())
+      RETURNING id, name, description, status, created_at, updated_at
     `
 
-    console.log("🎵 [PLAYLISTS] Playlist created:", result[0])
+    console.log("🎵 [PLAYLISTS API] Created playlist:", result[0])
 
     return NextResponse.json({
       success: true,
-      message: "Playlist created successfully",
       playlist: result[0],
     })
   } catch (error) {
-    console.error("🎵 [PLAYLISTS] Error:", error)
+    console.error("🎵 [PLAYLISTS API] Create error:", error)
     return NextResponse.json(
       {
         success: false,

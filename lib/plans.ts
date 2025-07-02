@@ -1,83 +1,87 @@
-export interface PlanLimits {
-  plan_type: string
-  max_media_files: number
-  max_storage_bytes: number
-  max_screens: number
-  price_monthly: number
+export interface Plan {
+  id: string
+  name: string
+  price: number
+  interval: "monthly" | "annual"
   features: string[]
+  maxScreens: number
+  maxStorage: number // in GB
 }
 
-export interface UserUsage {
-  media_files_count: number
-  storage_used_bytes: number
-  screens_count: number
-  plan_type: string
+export const PLANS: Plan[] = [
+  {
+    id: "free",
+    name: "Free",
+    price: 0,
+    interval: "monthly",
+    features: ["1 screen", "1GB storage", "Basic templates", "Email support"],
+    maxScreens: 1,
+    maxStorage: 1,
+  },
+  {
+    id: "monthly",
+    name: "Pro Monthly",
+    price: 15,
+    interval: "monthly",
+    features: [
+      "Unlimited screens",
+      "10GB storage per screen",
+      "Premium templates",
+      "Priority support",
+      "Custom branding",
+      "Analytics",
+    ],
+    maxScreens: -1, // unlimited
+    maxStorage: 10,
+  },
+  {
+    id: "annual",
+    name: "Pro Annual",
+    price: 150,
+    interval: "annual",
+    features: [
+      "Unlimited screens",
+      "20GB storage per screen",
+      "Premium templates",
+      "Priority support",
+      "Custom branding",
+      "Advanced analytics",
+      "2 months free",
+    ],
+    maxScreens: -1, // unlimited
+    maxStorage: 20,
+  },
+]
+
+export function getPlanById(planId: string): Plan | undefined {
+  return PLANS.find((plan) => plan.id === planId)
 }
 
-export const PLAN_NAMES = {
-  free: "Free",
-  pro: "Pro",
-  enterprise: "Enterprise",
-} as const
+export function calculatePlanCost(planId: string, screenCount: number): number {
+  const plan = getPlanById(planId)
+  if (!plan) return 0
 
-export function formatBytes(bytes: number): string {
-  if (bytes === 0) return "0 Bytes"
-  if (bytes === -1) return "Unlimited"
+  if (plan.id === "free") return 0
+  if (plan.maxScreens === -1) return plan.price // unlimited screens
 
-  const k = 1024
-  const sizes = ["Bytes", "KB", "MB", "GB", "TB"]
-  const i = Math.floor(Math.log(bytes) / Math.log(k))
-
-  return Number.parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i]
+  return plan.price * Math.min(screenCount, plan.maxScreens)
 }
 
-export function formatNumber(num: number): string {
-  if (num === -1) return "Unlimited"
-  return num.toLocaleString()
+export function canAddScreen(planId: string, currentScreenCount: number): boolean {
+  const plan = getPlanById(planId)
+  if (!plan) return false
+
+  if (plan.maxScreens === -1) return true // unlimited
+  return currentScreenCount < plan.maxScreens
 }
 
-export function getUsagePercentage(used: number, limit: number): number {
-  if (limit === -1) return 0 // Unlimited
-  return Math.min((used / limit) * 100, 100)
-}
+export function getStorageLimit(planId: string, screenCount: number): number {
+  const plan = getPlanById(planId)
+  if (!plan) return 0
 
-export function canUploadFile(
-  currentUsage: UserUsage,
-  planLimits: PlanLimits,
-  fileSize: number,
-): { allowed: boolean; reason?: string } {
-  // Check file count limit
-  if (planLimits.max_media_files !== -1 && currentUsage.media_files_count >= planLimits.max_media_files) {
-    return {
-      allowed: false,
-      reason: `You've reached your plan's limit of ${formatNumber(planLimits.max_media_files)} media files. Upgrade to upload more.`,
-    }
+  if (plan.maxScreens === -1) {
+    return plan.maxStorage * screenCount // per screen
   }
 
-  // Check storage limit
-  if (
-    planLimits.max_storage_bytes !== -1 &&
-    currentUsage.storage_used_bytes + fileSize > planLimits.max_storage_bytes
-  ) {
-    return {
-      allowed: false,
-      reason: `This file would exceed your storage limit of ${formatBytes(planLimits.max_storage_bytes)}. Upgrade for more storage.`,
-    }
-  }
-
-  return { allowed: true }
-}
-
-// Remove hardcoded limits - now fetched from database
-export async function getPlanLimits(planType: string): Promise<PlanLimits | null> {
-  try {
-    const response = await fetch(`/api/plans/${planType}`)
-    if (response.ok) {
-      const data = await response.json()
-      return data.plan
-    }
-  } catch (error) {
-    console.error("Error fetching plan limits:", error)
-  }
-  return null
+  return plan.maxStorage
 }

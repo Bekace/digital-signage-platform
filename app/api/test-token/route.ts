@@ -1,10 +1,6 @@
 import { NextResponse } from "next/server"
 import { neon } from "@neondatabase/serverless"
 
-// Force dynamic rendering
-export const dynamic = "force-dynamic"
-export const runtime = "nodejs"
-
 const sql = neon(process.env.DATABASE_URL!)
 
 export async function GET() {
@@ -15,7 +11,7 @@ export async function GET() {
 
     // Step 1: Find the user
     const users = await sql`
-      SELECT id, email, reset_token, reset_token_expires
+      SELECT id, email, reset_token, reset_token_expires, password
       FROM users 
       WHERE reset_token = ${token}
     `
@@ -34,28 +30,37 @@ export async function GET() {
       id: user.id,
       email: user.email,
       idType: typeof user.id,
+      hasPassword: !!user.password,
       tokenExpires: user.reset_token_expires,
     })
 
-    // Step 2: Try a simple update without password field
+    // Step 2: Try the simplest possible update
     try {
       console.log("🔄 Attempting update for user ID:", user.id)
 
       const result = await sql`
         UPDATE users 
-        SET reset_token = NULL, reset_token_expires = NULL
+        SET password = 'newpassword123'
         WHERE id = ${user.id}
-        RETURNING id, email
+        RETURNING id, email, password
       `
 
       console.log("✅ Update successful:", result.length, "rows affected")
 
+      // Also clear the reset token
+      await sql`
+        UPDATE users 
+        SET reset_token = NULL, reset_token_expires = NULL
+        WHERE id = ${user.id}
+      `
+
       return NextResponse.json({
         success: true,
-        message: "Reset token cleared successfully!",
+        message: "Password reset successful!",
         user: {
           id: result[0]?.id,
           email: result[0]?.email,
+          passwordSet: !!result[0]?.password,
         },
       })
     } catch (updateError) {
