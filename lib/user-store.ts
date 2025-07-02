@@ -4,16 +4,10 @@
 interface User {
   id: string
   email: string
-  password: string
   firstName: string
   lastName: string
   company?: string
   plan: string
-  createdAt: string
-  companyAddress?: string
-  companyPhone?: string
-  resetToken?: string
-  resetTokenExpiry?: Date
 }
 
 interface Session {
@@ -42,40 +36,51 @@ const deviceCodes: Map<string, { userId: string; expiresAt: Date }> = new Map()
 users.set("demo@signagecloud.com", {
   id: "demo-user-1",
   email: "demo@signagecloud.com",
-  password: "password123",
   firstName: "Demo",
   lastName: "User",
   company: "SignageCloud Demo",
   plan: "monthly",
-  createdAt: new Date().toISOString(),
 })
 
 // User management
-export function createUser(userData: Omit<User, "id" | "createdAt">): User {
+export function createUser(userData: Omit<User, "id">): User {
+  const id = Math.random().toString(36).substring(2, 15)
   const user: User = {
+    id,
     ...userData,
-    id: Math.random().toString(36).substring(2, 15),
-    createdAt: new Date().toISOString(),
   }
-  users.set(user.id, user)
+  users.set(id, user)
   return user
-}
-
-export function getUserByEmail(email: string): User | undefined {
-  return Array.from(users.values()).find((user) => user.email === email)
 }
 
 export function getUserById(id: string): User | undefined {
   return users.get(id)
 }
 
-export function updateUser(id: string, updates: Partial<User>): User | null {
+export function getUserByEmail(email: string): User | undefined {
+  for (const user of users.values()) {
+    if (user.email === email) {
+      return user
+    }
+  }
+  return undefined
+}
+
+export function updateUser(id: string, updates: Partial<User>): User | undefined {
   const user = users.get(id)
-  if (!user) return null
+  if (!user) return undefined
 
   const updatedUser = { ...user, ...updates }
   users.set(id, updatedUser)
   return updatedUser
+}
+
+export function deleteUser(id: string): boolean {
+  return users.delete(id)
+}
+
+export function getAllUsers(): User[] {
+  return Array.from(users.values())
 }
 
 // Device management
@@ -182,8 +187,6 @@ export class UserStore {
       company: company?.trim() || undefined,
       password, // In production, hash this
       plan,
-      createdAt: new Date().toISOString(),
-      isActive: true,
     }
 
     users.set(user.email, user)
@@ -214,10 +217,6 @@ export class UserStore {
 
     if (user.password !== password) {
       return { success: false, message: "Invalid email or password" }
-    }
-
-    if (!user.isActive) {
-      return { success: false, message: "Account is deactivated" }
     }
 
     // Create session token
@@ -252,7 +251,7 @@ export class UserStore {
     }
 
     const user = Array.from(users.values()).find((u) => u.id === session.userId)
-    if (!user || !user.isActive) {
+    if (!user) {
       return { valid: false }
     }
 
@@ -272,7 +271,6 @@ export class UserStore {
 // Initialize with some demo data
 const demoUser = createUser({
   email: "demo@example.com",
-  password: "$2a$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/LewdBPj/VcSAg/9qm", // 'password123'
   firstName: "Demo",
   lastName: "User",
   company: "Demo Company",

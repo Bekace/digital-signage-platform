@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 import { getCurrentUser } from "@/lib/auth"
-import { getDb } from "@/lib/db"
+import { sql } from "@/lib/db"
 
 export async function GET() {
   try {
@@ -10,17 +10,6 @@ export async function GET() {
         {
           success: false,
           message: "Database not configured",
-        },
-        { status: 500 },
-      )
-    }
-
-    // Check if JWT secret is configured
-    if (!process.env.JWT_SECRET) {
-      return NextResponse.json(
-        {
-          success: false,
-          message: "JWT secret not configured",
         },
         { status: 500 },
       )
@@ -38,13 +27,11 @@ export async function GET() {
       )
     }
 
-    const sql = getDb()
-
-    // Get complete user profile including company info
+    // Get complete user profile
     const users = await sql`
       SELECT 
         id, email, first_name, last_name, company, 
-        company_address, company_phone, plan, created_at
+        plan, created_at
       FROM users 
       WHERE id = ${user.id}
       LIMIT 1
@@ -70,14 +57,53 @@ export async function GET() {
         firstName: userData.first_name,
         lastName: userData.last_name,
         company: userData.company,
-        companyAddress: userData.company_address,
-        companyPhone: userData.company_phone,
         plan: userData.plan,
         createdAt: userData.created_at,
       },
     })
   } catch (error) {
     console.error("Profile fetch error:", error)
+    return NextResponse.json(
+      {
+        success: false,
+        message: "Internal server error",
+        error: error instanceof Error ? error.message : "Unknown error",
+      },
+      { status: 500 },
+    )
+  }
+}
+
+export async function PUT(request: Request) {
+  try {
+    const user = await getCurrentUser()
+
+    if (!user) {
+      return NextResponse.json(
+        {
+          success: false,
+          message: "Not authenticated",
+        },
+        { status: 401 },
+      )
+    }
+
+    const body = await request.json()
+    const { firstName, lastName, company } = body
+
+    // Update user profile
+    await sql`
+      UPDATE users 
+      SET first_name = ${firstName}, last_name = ${lastName}, company = ${company}, updated_at = CURRENT_TIMESTAMP
+      WHERE id = ${user.id}
+    `
+
+    return NextResponse.json({
+      success: true,
+      message: "Profile updated successfully",
+    })
+  } catch (error) {
+    console.error("Profile update error:", error)
     return NextResponse.json(
       {
         success: false,

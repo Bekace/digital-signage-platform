@@ -2,10 +2,13 @@ export interface Plan {
   id: string
   name: string
   price: number
-  interval: "monthly" | "annual"
+  interval: "monthly" | "yearly"
   features: string[]
-  maxScreens: number
-  maxStorage: number // in GB
+  limits: {
+    devices: number
+    storage: number // in GB
+    bandwidth: number // in GB
+  }
 }
 
 export const PLANS: Plan[] = [
@@ -14,74 +17,93 @@ export const PLANS: Plan[] = [
     name: "Free",
     price: 0,
     interval: "monthly",
-    features: ["1 screen", "1GB storage", "Basic templates", "Email support"],
-    maxScreens: 1,
-    maxStorage: 1,
+    features: ["1 device", "1GB storage", "Basic templates", "Community support"],
+    limits: {
+      devices: 1,
+      storage: 1,
+      bandwidth: 5,
+    },
   },
   {
-    id: "monthly",
-    name: "Pro Monthly",
-    price: 15,
+    id: "starter",
+    name: "Starter",
+    price: 29,
+    interval: "monthly",
+    features: ["5 devices", "10GB storage", "All templates", "Email support", "Custom branding"],
+    limits: {
+      devices: 5,
+      storage: 10,
+      bandwidth: 50,
+    },
+  },
+  {
+    id: "professional",
+    name: "Professional",
+    price: 79,
     interval: "monthly",
     features: [
-      "Unlimited screens",
-      "10GB storage per screen",
-      "Premium templates",
-      "Priority support",
-      "Custom branding",
-      "Analytics",
-    ],
-    maxScreens: -1, // unlimited
-    maxStorage: 10,
-  },
-  {
-    id: "annual",
-    name: "Pro Annual",
-    price: 150,
-    interval: "annual",
-    features: [
-      "Unlimited screens",
-      "20GB storage per screen",
-      "Premium templates",
+      "25 devices",
+      "100GB storage",
+      "All templates",
       "Priority support",
       "Custom branding",
       "Advanced analytics",
-      "2 months free",
+      "API access",
     ],
-    maxScreens: -1, // unlimited
-    maxStorage: 20,
+    limits: {
+      devices: 25,
+      storage: 100,
+      bandwidth: 500,
+    },
+  },
+  {
+    id: "enterprise",
+    name: "Enterprise",
+    price: 199,
+    interval: "monthly",
+    features: [
+      "Unlimited devices",
+      "1TB storage",
+      "All templates",
+      "24/7 phone support",
+      "Custom branding",
+      "Advanced analytics",
+      "API access",
+      "White-label solution",
+      "Custom integrations",
+    ],
+    limits: {
+      devices: -1, // unlimited
+      storage: 1000,
+      bandwidth: 5000,
+    },
   },
 ]
 
-export function getPlanById(planId: string): Plan | undefined {
-  return PLANS.find((plan) => plan.id === planId)
+export function getPlanById(id: string): Plan | undefined {
+  return PLANS.find((plan) => plan.id === id)
 }
 
-export function calculatePlanCost(planId: string, screenCount: number): number {
+export function getDefaultPlan(): Plan {
+  return PLANS[0] // Free plan
+}
+
+export function isFeatureAvailable(planId: string, feature: string): boolean {
   const plan = getPlanById(planId)
-  if (!plan) return 0
-
-  if (plan.id === "free") return 0
-  if (plan.maxScreens === -1) return plan.price // unlimited screens
-
-  return plan.price * Math.min(screenCount, plan.maxScreens)
+  return plan ? plan.features.includes(feature) : false
 }
 
-export function canAddScreen(planId: string, currentScreenCount: number): boolean {
+export function canAddDevice(planId: string, currentDeviceCount: number): boolean {
   const plan = getPlanById(planId)
   if (!plan) return false
 
-  if (plan.maxScreens === -1) return true // unlimited
-  return currentScreenCount < plan.maxScreens
+  return plan.limits.devices === -1 || currentDeviceCount < plan.limits.devices
 }
 
-export function getStorageLimit(planId: string, screenCount: number): number {
+export function canUploadMedia(planId: string, currentStorageUsed: number, fileSize: number): boolean {
   const plan = getPlanById(planId)
-  if (!plan) return 0
+  if (!plan) return false
 
-  if (plan.maxScreens === -1) {
-    return plan.maxStorage * screenCount // per screen
-  }
-
-  return plan.maxStorage
+  const newTotal = currentStorageUsed + fileSize / (1024 * 1024 * 1024) // Convert to GB
+  return newTotal <= plan.limits.storage
 }

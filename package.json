@@ -9,6 +9,7 @@
     "start": "next start"
   },
   "dependencies": {
+    "@hookform/resolvers": "^3.9.1",
     "@neondatabase/serverless": "latest",
     "@radix-ui/react-accordion": "latest",
     "@radix-ui/react-alert-dialog": "latest",
@@ -47,15 +48,16 @@
     "clsx": "^2.1.1",
     "cmdk": "latest",
     "crypto": "latest",
+    "date-fns": "^4.1.0",
     "embla-carousel-react": "latest",
     "input-otp": "latest",
     "jsonwebtoken": "latest",
     "lucide-react": "^0.454.0",
-    "next": "14.2.16",
+    "next": "15.2.4",
     "next-themes": "latest",
-    "react": "^18",
+    "react": "^19",
     "react-day-picker": "latest",
-    "react-dom": "^18",
+    "react-dom": "^19",
     "react-hook-form": "latest",
     "react-native": "latest",
     "react-native-gesture-handler": "latest",
@@ -68,18 +70,20 @@
     "sonner": "latest",
     "tailwind-merge": "^2.5.5",
     "tailwindcss-animate": "^1.0.7",
-    "vaul": "latest"
+    "vaul": "latest",
+    "zod": "^3.24.1"
   },
   "devDependencies": {
     "@types/bcryptjs": "^2.4.6",
-    "@types/jsonwebtoken": "^9.0.6",
+    "@types/jsonwebtoken": "^9.0.5",
     "@types/node": "^22",
-    "@types/react": "^18",
-    "@types/react-dom": "^18",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "autoprefixer": "^10.4.20",
     "eslint": "^8",
     "eslint-config-next": "14.2.3",
     "postcss": "^8.5",
-    "tailwindcss": "^3.4.1",
+    "tailwindcss": "^3.4.17",
     "typescript": "^5"
   }
 }
