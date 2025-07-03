@@ -1,297 +1,292 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Button } from "@/components/ui/button"
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 
 export default function DebugDataPage() {
-  const [data, setData] = useState<any>(null)
-  const [loading, setLoading] = useState(false)
+  const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [data, setData] = useState<any>(null)
+  const [tableStructure, setTableStructure] = useState<any>(null)
 
-  const fetchData = async () => {
-    setLoading(true)
-    setError(null)
+  async function fetchDebugData() {
     try {
+      setLoading(true)
+      setError(null)
+
       const response = await fetch("/api/debug/check-data")
+
+      if (!response.ok) {
+        const errorText = await response.text()
+        throw new Error(`API error: ${response.status} - ${errorText}`)
+      }
+
       const result = await response.json()
       setData(result)
     } catch (err) {
-      setError("Failed to fetch debug data")
-      console.error(err)
+      setError(err instanceof Error ? err.message : "Unknown error occurred")
+      console.error("Debug data fetch error:", err)
+    } finally {
+      setLoading(false)
     }
-    setLoading(false)
+  }
+
+  async function fetchTableStructure() {
+    try {
+      const response = await fetch("/api/debug/table-structure")
+
+      if (!response.ok) {
+        const errorText = await response.text()
+        throw new Error(`API error: ${response.status} - ${errorText}`)
+      }
+
+      const result = await response.json()
+      setTableStructure(result)
+    } catch (err) {
+      console.error("Table structure fetch error:", err)
+    }
   }
 
   useEffect(() => {
-    fetchData()
+    fetchDebugData()
+    fetchTableStructure()
   }, [])
 
-  if (loading) {
-    return (
-      <div className="container mx-auto p-6">
-        <div className="text-center">Loading debug data...</div>
-      </div>
-    )
-  }
-
-  if (error) {
-    return (
-      <div className="container mx-auto p-6">
-        <div className="text-red-600">Error: {error}</div>
-        <Button onClick={fetchData} className="mt-4">
-          Retry
-        </Button>
-      </div>
-    )
-  }
-
-  if (!data || !data.success) {
-    return (
-      <div className="container mx-auto p-6">
-        <div className="text-red-600">{data?.error || "No data available or request failed"}</div>
-        <Button onClick={fetchData} className="mt-4">
-          Retry
-        </Button>
-      </div>
-    )
-  }
-
-  const currentUser = data.current_user || {}
-  const currentUserData = data.current_user_data || {}
-  const detailedData = data.detailed_data || {}
-  const allDataDebug = data.all_data_debug || {}
-  const databaseInfo = data.database_info || {}
-
   return (
-    <div className="container mx-auto p-6 space-y-6">
-      <div className="flex justify-between items-center">
-        <h1 className="text-3xl font-bold">Database Debug Dashboard</h1>
-        <Button onClick={fetchData}>Refresh Data</Button>
-      </div>
+    <div className="container mx-auto py-8 space-y-6">
+      <h1 className="text-3xl font-bold">Database Debug Information</h1>
 
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm">Current User</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{currentUser.email || "Not logged in"}</div>
-            <div className="text-sm text-gray-600">ID: {currentUser.id || "None"}</div>
-          </CardContent>
-        </Card>
+      {loading && <p className="text-gray-500">Loading debug data...</p>}
 
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm">Devices</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{currentUserData.devices || 0}</div>
-            <div className="text-sm text-gray-600">Your devices</div>
-          </CardContent>
-        </Card>
+      {error && (
+        <Alert variant="destructive">
+          <AlertTitle>Error</AlertTitle>
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
+      )}
 
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm">Media Files</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{currentUserData.media_files || 0}</div>
-            <div className="text-sm text-gray-600">Your media</div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm">Playlists</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{currentUserData.playlists || 0}</div>
-            <div className="text-sm text-gray-600">Your playlists</div>
-          </CardContent>
-        </Card>
-      </div>
-
-      <Tabs defaultValue="current" className="w-full">
-        <TabsList>
-          <TabsTrigger value="current">Your Data</TabsTrigger>
-          <TabsTrigger value="all">All Data (Debug)</TabsTrigger>
-          <TabsTrigger value="tables">Database Tables</TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="current" className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <Card>
-              <CardHeader>
-                <CardTitle>Your Devices</CardTitle>
-              </CardHeader>
-              <CardContent>
-                {!detailedData.current_user_devices || detailedData.current_user_devices.length === 0 ? (
-                  <p className="text-gray-500">No devices found</p>
-                ) : (
-                  <div className="space-y-2">
-                    {detailedData.current_user_devices.map((device: any) => (
-                      <div key={device.id} className="border p-2 rounded">
-                        <div className="font-medium">{device.name || "Unnamed Device"}</div>
-                        <div className="text-sm text-gray-600">Code: {device.device_code || "No code"}</div>
-                        <Badge variant={device.status === "online" ? "default" : "secondary"}>
-                          {device.status || "unknown"}
-                        </Badge>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle>Your Media Files</CardTitle>
-              </CardHeader>
-              <CardContent>
-                {!detailedData.current_user_media || detailedData.current_user_media.length === 0 ? (
-                  <p className="text-gray-500">No media files found</p>
-                ) : (
-                  <div className="space-y-2">
-                    {detailedData.current_user_media.map((media: any) => (
-                      <div key={media.id} className="border p-2 rounded">
-                        <div className="font-medium">{media.original_name || "Unnamed File"}</div>
-                        <div className="text-sm text-gray-600">
-                          {media.file_type || "Unknown"} • {Math.round((media.file_size || 0) / 1024)} KB
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle>Your Playlists</CardTitle>
-              </CardHeader>
-              <CardContent>
-                {!detailedData.current_user_playlists || detailedData.current_user_playlists.length === 0 ? (
-                  <p className="text-gray-500">No playlists found</p>
-                ) : (
-                  <div className="space-y-2">
-                    {detailedData.current_user_playlists.map((playlist: any) => (
-                      <div key={playlist.id} className="border p-2 rounded">
-                        <div className="font-medium">{playlist.name || "Unnamed Playlist"}</div>
-                        <div className="text-sm text-gray-600">{playlist.description || "No description"}</div>
-                        <Badge variant="outline">{playlist.status || "unknown"}</Badge>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          </div>
-        </TabsContent>
-
-        <TabsContent value="all" className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <Card>
-              <CardHeader>
-                <CardTitle>All Devices</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-2 max-h-64 overflow-y-auto">
-                  {!allDataDebug.all_devices || allDataDebug.all_devices.length === 0 ? (
-                    <p className="text-gray-500">No devices in database</p>
-                  ) : (
-                    allDataDebug.all_devices.map((device: any) => (
-                      <div key={device.id} className="border p-2 rounded text-sm">
-                        <div className="font-medium">{device.name || "Unnamed Device"}</div>
-                        <div className="text-gray-600">User: {device.user_email || "No user"}</div>
-                        <div className="text-gray-600">Code: {device.device_code || "No code"}</div>
-                      </div>
-                    ))
-                  )}
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle>All Media Files</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-2 max-h-64 overflow-y-auto">
-                  {!allDataDebug.all_media_files || allDataDebug.all_media_files.length === 0 ? (
-                    <p className="text-gray-500">No media files in database</p>
-                  ) : (
-                    allDataDebug.all_media_files.map((media: any) => (
-                      <div key={media.id} className="border p-2 rounded text-sm">
-                        <div className="font-medium">{media.original_name || "Unnamed File"}</div>
-                        <div className="text-gray-600">User: {media.user_email || "No user"}</div>
-                        <div className="text-gray-600">Type: {media.file_type || "Unknown"}</div>
-                      </div>
-                    ))
-                  )}
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle>All Playlists</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-2 max-h-64 overflow-y-auto">
-                  {!allDataDebug.all_playlists || allDataDebug.all_playlists.length === 0 ? (
-                    <p className="text-gray-500">No playlists in database</p>
-                  ) : (
-                    allDataDebug.all_playlists.map((playlist: any) => (
-                      <div key={playlist.id} className="border p-2 rounded text-sm">
-                        <div className="font-medium">{playlist.name || "Unnamed Playlist"}</div>
-                        <div className="text-gray-600">User: {playlist.user_email || "No user"}</div>
-                        <div className="text-gray-600">Status: {playlist.status || "unknown"}</div>
-                      </div>
-                    ))
-                  )}
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-        </TabsContent>
-
-        <TabsContent value="tables">
+      {data && (
+        <>
           <Card>
             <CardHeader>
-              <CardTitle>Database Tables</CardTitle>
-              <CardDescription>Tables that exist in your database</CardDescription>
+              <CardTitle>Database Connection</CardTitle>
+              <CardDescription>Status of database connection and configuration</CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="space-y-2">
-                {!databaseInfo.tables_exist || databaseInfo.tables_exist.length === 0 ? (
-                  <p className="text-gray-500">No tables found</p>
-                ) : (
-                  databaseInfo.tables_exist.map((table: any) => (
-                    <Badge key={table.table_name} variant="outline">
-                      {table.table_name}
-                    </Badge>
-                  ))
-                )}
-              </div>
-              <div className="mt-4">
-                <p className="text-sm text-gray-600">Total users in database: {databaseInfo.total_users || 0}</p>
+              <div className="grid grid-cols-2 gap-2">
+                <div className="font-medium">Connection Status:</div>
+                <div>{data.connection === "OK" ? "✅ Connected" : "❌ Failed"}</div>
+
+                <div className="font-medium">Database URL Set:</div>
+                <div>{data.database_url_set ? "✅ Yes" : "❌ No"}</div>
+
+                <div className="font-medium">Database URL Preview:</div>
+                <div className="truncate">{data.database_url_preview || "Not available"}</div>
+
+                <div className="font-medium">Timestamp:</div>
+                <div>{data.timestamp || "Not available"}</div>
               </div>
             </CardContent>
           </Card>
-        </TabsContent>
-      </Tabs>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Raw Debug Data</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <pre className="text-xs bg-gray-100 p-4 rounded overflow-auto max-h-96">{JSON.stringify(data, null, 2)}</pre>
-        </CardContent>
-      </Card>
+          {data.error && (
+            <Alert variant="destructive">
+              <AlertTitle>Database Error</AlertTitle>
+              <AlertDescription className="whitespace-pre-wrap">{data.error}</AlertDescription>
+            </Alert>
+          )}
+
+          {data.tables && (
+            <Card>
+              <CardHeader>
+                <CardTitle>Database Tables</CardTitle>
+                <CardDescription>List of tables in the database</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Table Name</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {data.tables.map((table: any, index: number) => (
+                      <TableRow key={index}>
+                        <TableCell>{table.table_name}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
+          )}
+
+          {tableStructure && (
+            <Card>
+              <CardHeader>
+                <CardTitle>Table Structure</CardTitle>
+                <CardDescription>Column information for key tables</CardDescription>
+              </CardHeader>
+              <CardContent>
+                {Object.entries(tableStructure.tables || {}).map(([tableName, columns]: [string, any]) => (
+                  <div key={tableName} className="mb-6">
+                    <h3 className="text-lg font-medium mb-2">{tableName}</h3>
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Column Name</TableHead>
+                          <TableHead>Data Type</TableHead>
+                          <TableHead>Is Nullable</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {columns.map((column: any, index: number) => (
+                          <TableRow key={index}>
+                            <TableCell>{column.column_name}</TableCell>
+                            <TableCell>{column.data_type}</TableCell>
+                            <TableCell>{column.is_nullable}</TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+          )}
+
+          {data.devices && (
+            <Card>
+              <CardHeader>
+                <CardTitle>Devices</CardTitle>
+                <CardDescription>Registered devices in the system</CardDescription>
+              </CardHeader>
+              <CardContent>
+                {data.devices.length === 0 ? (
+                  <p className="text-gray-500">No devices found</p>
+                ) : (
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>ID</TableHead>
+                        <TableHead>Name</TableHead>
+                        <TableHead>Status</TableHead>
+                        <TableHead>Last Seen</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {data.devices.map((device: any, index: number) => (
+                        <TableRow key={index}>
+                          <TableCell>{device.id || device.device_id}</TableCell>
+                          <TableCell>{device.name || device.screen_name}</TableCell>
+                          <TableCell>{device.status}</TableCell>
+                          <TableCell>{device.last_seen}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                )}
+              </CardContent>
+            </Card>
+          )}
+
+          {data.media && (
+            <Card>
+              <CardHeader>
+                <CardTitle>Media Files</CardTitle>
+                <CardDescription>Media files in the system</CardDescription>
+              </CardHeader>
+              <CardContent>
+                {data.media.length === 0 ? (
+                  <p className="text-gray-500">No media files found</p>
+                ) : (
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>ID</TableHead>
+                        <TableHead>Filename</TableHead>
+                        <TableHead>Type</TableHead>
+                        <TableHead>Size</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {data.media.map((file: any, index: number) => (
+                        <TableRow key={index}>
+                          <TableCell>{file.id}</TableCell>
+                          <TableCell>{file.filename || file.original_name}</TableCell>
+                          <TableCell>{file.file_type}</TableCell>
+                          <TableCell>
+                            {file.file_size ? `${Math.round(file.file_size / 1024)} KB` : "Unknown"}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                )}
+              </CardContent>
+            </Card>
+          )}
+
+          {data.playlists && (
+            <Card>
+              <CardHeader>
+                <CardTitle>Playlists</CardTitle>
+                <CardDescription>Content playlists in the system</CardDescription>
+              </CardHeader>
+              <CardContent>
+                {data.playlists.length === 0 ? (
+                  <p className="text-gray-500">No playlists found</p>
+                ) : (
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>ID</TableHead>
+                        <TableHead>Name</TableHead>
+                        <TableHead>Status</TableHead>
+                        <TableHead>Items</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {data.playlists.map((playlist: any, index: number) => (
+                        <TableRow key={index}>
+                          <TableCell>{playlist.id}</TableCell>
+                          <TableCell>{playlist.name}</TableCell>
+                          <TableCell>{playlist.status}</TableCell>
+                          <TableCell>{playlist.items?.length || 0}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                )}
+              </CardContent>
+            </Card>
+          )}
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Raw Debug Data</CardTitle>
+              <CardDescription>Complete debug information</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <pre className="bg-gray-100 p-4 rounded-md overflow-auto max-h-96 text-xs">
+                {JSON.stringify(data, null, 2)}
+              </pre>
+            </CardContent>
+          </Card>
+        </>
+      )}
+
+      <div className="flex gap-4">
+        <Button onClick={fetchDebugData} disabled={loading}>
+          {loading ? "Loading..." : "Refresh Debug Data"}
+        </Button>
+        <Button onClick={fetchTableStructure} variant="outline">
+          Refresh Table Structure
+        </Button>
+      </div>
     </div>
   )
 }
