@@ -29,7 +29,6 @@ interface UserProfile {
   lastName: string
   company?: string
   plan: string
-  createdAt: string
 }
 
 export function DashboardLayout({ children }: DashboardLayoutProps) {
@@ -49,19 +48,54 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
   const fetchUserProfile = async () => {
     try {
       setIsLoading(true)
-      const response = await fetch("/api/user/profile")
+      console.log("Fetching user profile...")
+
+      const response = await fetch("/api/user/profile", {
+        method: "GET",
+        credentials: "include", // Include cookies
+      })
+
+      console.log("Profile response status:", response.status)
+
       const data = await response.json()
+      console.log("Profile response data:", data)
 
       if (data.success && data.user) {
         setUser(data.user)
+        console.log("User profile loaded:", data.user.email)
       } else {
         console.error("Authentication failed:", data.message)
-        // If not authenticated, redirect to login
-        router.push("/login")
+        // Check localStorage for user data as fallback
+        const storedUser = localStorage.getItem("user")
+        if (storedUser) {
+          try {
+            const parsedUser = JSON.parse(storedUser)
+            setUser(parsedUser)
+            console.log("Using stored user data:", parsedUser.email)
+          } catch (e) {
+            console.error("Failed to parse stored user data")
+            router.push("/login")
+          }
+        } else {
+          router.push("/login")
+        }
       }
     } catch (error) {
       console.error("Failed to fetch user profile:", error)
-      router.push("/login")
+      // Check localStorage as fallback
+      const storedUser = localStorage.getItem("user")
+      if (storedUser) {
+        try {
+          const parsedUser = JSON.parse(storedUser)
+          setUser(parsedUser)
+          console.log("Using stored user data after error:", parsedUser.email)
+        } catch (e) {
+          console.error("Failed to parse stored user data")
+          router.push("/login")
+        }
+      } else {
+        router.push("/login")
+      }
     } finally {
       setIsLoading(false)
     }
@@ -72,11 +106,15 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
     try {
       const response = await fetch("/api/auth/logout", {
         method: "POST",
+        credentials: "include",
       })
 
       const data = await response.json()
 
       if (data.success) {
+        // Clear localStorage
+        localStorage.removeItem("user")
+
         toast({
           title: "Logged out successfully",
           description: "You have been signed out of your account.",
@@ -87,11 +125,13 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
       }
     } catch (error) {
       console.error("Logout error:", error)
+      // Force logout even if API fails
+      localStorage.removeItem("user")
       toast({
-        title: "Logout failed",
-        description: "There was an error signing you out. Please try again.",
-        variant: "destructive",
+        title: "Logged out",
+        description: "You have been signed out.",
       })
+      router.push("/login")
     } finally {
       setIsLoggingOut(false)
     }

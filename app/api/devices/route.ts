@@ -1,38 +1,35 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { getDb } from "@/lib/db"
+import { getCurrentUser } from "@/lib/auth"
 
 export async function GET(request: NextRequest) {
   try {
-    const authHeader = request.headers.get("authorization")
+    console.log("📱 [DEVICES API] Fetching devices...")
 
-    if (!authHeader || !authHeader.startsWith("Bearer ")) {
-      return NextResponse.json(
-        {
-          success: false,
-          message: "Unauthorized",
-        },
-        { status: 401 },
-      )
+    const user = await getCurrentUser()
+    if (!user) {
+      console.log("📱 [DEVICES API] No authenticated user")
+      return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 401 })
     }
 
+    console.log("📱 [DEVICES API] User authenticated:", user.email)
     const sql = getDb()
 
-    // For demo, use user ID 1
-    const userId = 1
-
     // Get devices from database
-    const result = await sql`
+    const devices = await sql`
       SELECT device_id, screen_name, device_type, platform, status, location, 
              resolution, last_seen, registered_at 
       FROM devices 
-      WHERE user_id = ${userId} 
+      WHERE user_id = ${user.id} 
       ORDER BY registered_at DESC
     `
+
+    console.log("📱 [DEVICES API] Found devices:", devices.length)
 
     // Update status based on last_seen
     const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000)
 
-    const devices = result.map((device) => ({
+    const formattedDevices = devices.map((device) => ({
       id: device.device_id,
       screenName: device.screen_name,
       deviceType: device.device_type,
@@ -45,24 +42,18 @@ export async function GET(request: NextRequest) {
     }))
 
     const stats = {
-      total: devices.length,
-      online: devices.filter((d) => d.status === "online").length,
-      offline: devices.filter((d) => d.status === "offline").length,
+      total: formattedDevices.length,
+      online: formattedDevices.filter((d) => d.status === "online").length,
+      offline: formattedDevices.filter((d) => d.status === "offline").length,
     }
 
     return NextResponse.json({
       success: true,
-      devices: devices,
+      devices: formattedDevices,
       ...stats,
     })
   } catch (error) {
-    console.error("Get devices error:", error)
-    return NextResponse.json(
-      {
-        success: false,
-        message: "Internal server error",
-      },
-      { status: 500 },
-    )
+    console.error("📱 [DEVICES API] Error:", error)
+    return NextResponse.json({ success: false, message: "Internal server error" }, { status: 500 })
   }
 }

@@ -1,7 +1,6 @@
 "use client"
 
 import type React from "react"
-
 import { useState } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
@@ -15,8 +14,8 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 
 export default function LoginPage() {
   const [formData, setFormData] = useState({
-    email: "demo@signagecloud.com", // Pre-filled for demo
-    password: "password123", // Pre-filled for demo
+    email: "bekace.multimedia@gmail.com", // Updated to match your actual user
+    password: "password123",
   })
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
@@ -27,6 +26,9 @@ export default function LoginPage() {
     setLoading(true)
     setError("")
 
+    console.log("Starting login process...")
+    console.log("Form data:", { email: formData.email, password: "***" })
+
     try {
       const response = await fetch("/api/auth/login", {
         method: "POST",
@@ -36,20 +38,29 @@ export default function LoginPage() {
         body: JSON.stringify(formData),
       })
 
+      console.log("Response status:", response.status)
+      console.log("Response headers:", Object.fromEntries(response.headers.entries()))
+
       const data = await response.json()
+      console.log("Response data:", data)
 
       if (data.success) {
-        // Store token in localStorage (in production, consider httpOnly cookies)
-        localStorage.setItem("token", data.token)
-        localStorage.setItem("user", JSON.stringify(data.user))
+        console.log("Login successful, redirecting to dashboard...")
+
+        // Store user data in localStorage for client-side access
+        if (data.user) {
+          localStorage.setItem("user", JSON.stringify(data.user))
+        }
 
         // Redirect to dashboard
         router.push("/dashboard")
       } else {
+        console.error("Login failed:", data.message)
         setError(data.message || "Login failed")
       }
     } catch (error) {
-      setError("Network error. Please try again.")
+      console.error("Network error during login:", error)
+      setError("Network error. Please check your connection and try again.")
     } finally {
       setLoading(false)
     }
@@ -83,7 +94,7 @@ export default function LoginPage() {
               <AlertDescription>
                 <strong>Demo Account:</strong>
                 <br />
-                Email: demo@signagecloud.com
+                Email: bekace.multimedia@gmail.com
                 <br />
                 Password: password123
               </AlertDescription>

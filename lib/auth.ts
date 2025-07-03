@@ -1,55 +1,58 @@
+import { cookies } from "next/headers"
+import { getDb } from "@/lib/db"
 import jwt from "jsonwebtoken"
-import bcrypt from "bcryptjs"
-
-const JWT_SECRET = process.env.JWT_SECRET || "fallback-secret-key"
 
 export interface User {
-  id: number
+  id: string
   email: string
-  name: string
+  first_name: string
+  last_name: string
   company?: string
-  role?: string
+  plan: string
+  created_at: string
 }
 
-export function hashPassword(password: string): Promise<string> {
-  return bcrypt.hash(password, 12)
-}
-
-export function verifyPassword(password: string, hashedPassword: string): Promise<boolean> {
-  return bcrypt.compare(password, hashedPassword)
-}
-
-export function generateToken(user: User): string {
-  return jwt.sign(
-    {
-      userId: user.id,
-      email: user.email,
-      name: user.name,
-    },
-    JWT_SECRET,
-    { expiresIn: "7d" },
-  )
-}
-
-export function verifyToken(token: string): User | null {
+export async function getCurrentUser(): Promise<User | null> {
   try {
-    const decoded = jwt.verify(token, JWT_SECRET) as any
-    return {
-      id: decoded.userId,
-      email: decoded.email,
-      name: decoded.name,
+    const cookieStore = await cookies()
+    const token = cookieStore.get("auth-token")?.value
+
+    if (!token) {
+      console.log("No auth token found")
+      return null
     }
+
+    // Verify JWT token
+    const decoded = jwt.verify(token, process.env.JWT_SECRET!) as { userId: string; email: string }
+    console.log("Token decoded:", { userId: decoded.userId })
+
+    const sql = getDb()
+
+    // Get user from database
+    const users = await sql`
+      SELECT id, email, first_name, last_name, company, plan, created_at
+      FROM users 
+      WHERE id = ${decoded.userId}
+      LIMIT 1
+    `
+
+    if (users.length === 0) {
+      console.log("User not found in database")
+      return null
+    }
+
+    console.log("User found:", users[0].email)
+    return users[0] as User
   } catch (error) {
+    console.error("Error getting current user:", error)
     return null
   }
 }
 
-export function getUserFromRequest(request: Request): User | null {
-  const authHeader = request.headers.get("authorization")
-  if (!authHeader || !authHeader.startsWith("Bearer ")) {
-    return null
+export async function requireAuth(): Promise<User> {
+  const user = await getCurrentUser()
+  if (!user) {
+    throw new Error("Authentication required")
   }
-
-  const token = authHeader.substring(7)
-  return verifyToken(token)
+  return user
 }

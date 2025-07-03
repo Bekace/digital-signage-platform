@@ -4,11 +4,15 @@ import { getDb } from "@/lib/db"
 
 export async function GET() {
   try {
+    console.log("🎬 [MEDIA API] Fetching media files...")
+
     const user = await getCurrentUser()
     if (!user) {
+      console.log("🎬 [MEDIA API] No authenticated user")
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
+    console.log("🎬 [MEDIA API] User authenticated:", user.email)
     const sql = getDb()
 
     const mediaFiles = await sql`
@@ -21,7 +25,7 @@ export async function GET() {
       ORDER BY created_at DESC
     `
 
-    console.log("Raw media files from DB:", mediaFiles)
+    console.log("🎬 [MEDIA API] Found media files:", mediaFiles.length)
 
     // Format files for the frontend
     const formattedFiles = mediaFiles.map((file) => ({
@@ -31,7 +35,6 @@ export async function GET() {
       file_type: file.file_type,
       file_size: file.file_size,
       mime_type: file.mime_type,
-      // Use url field first, then storage_url, then construct from filename
       url: file.url || file.storage_url || `https://blob.vercel-storage.com/${file.filename}`,
       thumbnail_url: file.thumbnail_url,
       duration: file.duration,
@@ -39,14 +42,12 @@ export async function GET() {
       created_at: file.created_at,
     }))
 
-    console.log("Formatted files for frontend:", formattedFiles)
-
     return NextResponse.json({
       files: formattedFiles,
       total: mediaFiles.length,
     })
   } catch (error) {
-    console.error("Error fetching media files:", error)
+    console.error("🎬 [MEDIA API] Error:", error)
     return NextResponse.json({ error: "Failed to fetch media files" }, { status: 500 })
   }
 }
