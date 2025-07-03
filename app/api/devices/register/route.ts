@@ -2,36 +2,76 @@ import { type NextRequest, NextResponse } from "next/server"
 
 export async function POST(request: NextRequest) {
   try {
-    const { deviceCode, deviceInfo } = await request.json()
+    const body = await request.json()
+    const { code, deviceInfo } = body
 
-    if (!deviceCode) {
-      return NextResponse.json({ success: false, message: "Device code is required" }, { status: 400 })
+    console.log("[DEVICE REGISTER] Registration attempt with code:", code)
+    console.log("[DEVICE REGISTER] Device info:", deviceInfo)
+
+    if (!code) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Device code is required",
+        },
+        { status: 400 },
+      )
     }
 
-    // Accept both formats:
-    // - 6-digit numeric codes (123456)
-    // - Longer alphanumeric codes (ABC123DEF456)
-    const isValidCode = /^(\d{6}|[A-Z0-9]{8,15})$/i.test(deviceCode)
-
-    if (isValidCode) {
-      // Simulate successful registration
-      const deviceId = `device_${Date.now()}`
-      const apiKey = `api_${Math.random().toString(36).substring(2, 15)}`
-      const screenName = `Screen ${Math.floor(Math.random() * 1000)}`
-
-      return NextResponse.json({
-        success: true,
-        message: "Device registered successfully",
-        deviceId,
-        apiKey,
-        screenName,
-        deviceInfo: deviceInfo || { name: "Test Device" },
-      })
+    // For now, we'll accept any 6-digit code as valid
+    // In a real implementation, you'd store generated codes in a database with expiry times
+    if (!/^\d{6}$/.test(code)) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Invalid device code format",
+        },
+        { status: 400 },
+      )
     }
 
-    return NextResponse.json({ success: false, message: "Invalid or expired device code" }, { status: 400 })
+    // Generate a unique device ID
+    const deviceId = `device_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+
+    console.log("[DEVICE REGISTER] Generated device ID:", deviceId)
+
+    // In a real implementation, you would:
+    // 1. Verify the code exists and hasn't expired
+    // 2. Get the user who generated the code
+    // 3. Store the device registration in the database
+    // 4. Return device configuration
+
+    const deviceData = {
+      deviceId,
+      name: deviceInfo?.name || "New Device",
+      type: deviceInfo?.type || "unknown",
+      location: deviceInfo?.location || "",
+      status: "online",
+      lastSeen: new Date().toISOString(),
+      registeredAt: new Date().toISOString(),
+    }
+
+    console.log("[DEVICE REGISTER] Registration successful:", deviceData)
+
+    return NextResponse.json({
+      success: true,
+      device: deviceData,
+      message: "Device registered successfully",
+      config: {
+        apiEndpoint: process.env.NEXT_PUBLIC_APP_URL || "https://www.britelitedigital.com",
+        heartbeatInterval: 30000, // 30 seconds
+        contentRefreshInterval: 300000, // 5 minutes
+      },
+    })
   } catch (error) {
-    console.error("Register device error:", error)
-    return NextResponse.json({ success: false, message: "Internal server error" }, { status: 500 })
+    console.error("[DEVICE REGISTER] Registration error:", error)
+    return NextResponse.json(
+      {
+        success: false,
+        error: "Internal server error",
+        message: "Failed to register device",
+      },
+      { status: 500 },
+    )
   }
 }

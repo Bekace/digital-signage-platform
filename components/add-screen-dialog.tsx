@@ -7,7 +7,8 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Card, CardContent } from "@/components/ui/card"
-import { Copy, RefreshCw } from "lucide-react"
+import { Copy, RefreshCw, AlertCircle } from "lucide-react"
+import { useToast } from "@/hooks/use-toast"
 
 interface AddScreenDialogProps {
   open: boolean
@@ -17,9 +18,13 @@ interface AddScreenDialogProps {
 export function AddScreenDialog({ open, onOpenChange }: AddScreenDialogProps) {
   const [step, setStep] = useState(1)
   const [deviceType, setDeviceType] = useState("")
+  const [screenName, setScreenName] = useState("")
+  const [location, setLocation] = useState("")
   const [deviceCode, setDeviceCode] = useState("")
   const [codeExpiry, setCodeExpiry] = useState<Date | null>(null)
   const [loading, setLoading] = useState(false)
+  const [error, setError] = useState("")
+  const { toast } = useToast()
 
   useEffect(() => {
     if (open && step === 2) {
@@ -29,33 +34,70 @@ export function AddScreenDialog({ open, onOpenChange }: AddScreenDialogProps) {
 
   const generateDeviceCode = async () => {
     setLoading(true)
+    setError("")
+
     try {
+      console.log("[ADD SCREEN] Generating pairing code for:", { screenName, deviceType })
+
       const response = await fetch("/api/devices/generate-code", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer your-user-token`, // In real app, get from auth context
         },
+        credentials: "include", // Important: include cookies for authentication
       })
 
       const data = await response.json()
+      console.log("[ADD SCREEN] Generate code response:", data)
+
       if (data.success) {
         setDeviceCode(data.code)
         setCodeExpiry(new Date(data.expiresAt))
+        toast({
+          title: "Device code generated",
+          description: `Code ${data.code} is ready for pairing`,
+        })
+      } else {
+        setError(data.message || data.error || "Failed to generate device code")
+        toast({
+          title: "Error",
+          description: data.message || data.error || "Failed to generate device code",
+          variant: "destructive",
+        })
       }
     } catch (error) {
-      console.error("Failed to generate device code:", error)
+      console.error("[ADD SCREEN] Failed to generate device code:", error)
+      const errorMessage = "Network error - please check your connection"
+      setError(errorMessage)
+      toast({
+        title: "Error",
+        description: errorMessage,
+        variant: "destructive",
+      })
     } finally {
       setLoading(false)
     }
   }
 
-  const copyToClipboard = () => {
-    navigator.clipboard.writeText(deviceCode)
+  const copyToClipboard = async () => {
+    try {
+      await navigator.clipboard.writeText(deviceCode)
+      toast({
+        title: "Copied!",
+        description: "Device code copied to clipboard",
+      })
+    } catch (error) {
+      console.error("Failed to copy to clipboard:", error)
+      toast({
+        title: "Copy failed",
+        description: "Please copy the code manually",
+        variant: "destructive",
+      })
+    }
   }
 
   const handleNext = () => {
-    if (step === 1 && deviceType) {
+    if (step === 1 && deviceType && screenName.trim()) {
       setStep(2)
     }
   }
@@ -63,36 +105,76 @@ export function AddScreenDialog({ open, onOpenChange }: AddScreenDialogProps) {
   const handleClose = () => {
     setStep(1)
     setDeviceType("")
+    setScreenName("")
+    setLocation("")
     setDeviceCode("")
     setCodeExpiry(null)
+    setError("")
     onOpenChange(false)
   }
 
   const getDeviceInstructions = () => {
     switch (deviceType) {
-      case "firestick":
+      case "fire_tv":
         return [
           "Install the SignageCloud app on your Fire TV Stick",
           "Launch the app and you'll see a setup screen",
           "Enter the 6-digit code shown below",
           "The device will automatically connect and start displaying content",
         ]
-      case "android-tv":
+      case "android_tv":
         return [
           "Install the SignageCloud app on your Android TV",
           "Open the app and navigate to the setup screen",
           "Enter the 6-digit code shown below",
           "Your Android TV will connect and begin showing your content",
         ]
-      case "web-browser":
+      case "web_browser":
         return [
           "Open a web browser on your display device",
-          "Navigate to: https://player.signagecloud.com",
+          "Navigate to: https://player.britelitedigital.com",
           "Enter the 6-digit code shown below",
           "The browser will enter fullscreen mode and display your content",
         ]
+      case "raspberry_pi":
+        return [
+          "Install the SignageCloud player on your Raspberry Pi",
+          "Run the setup command and enter the 6-digit code below",
+          "The Pi will connect and start displaying your content",
+        ]
+      case "windows":
+        return [
+          "Download and install the SignageCloud Windows app",
+          "Launch the app and enter the 6-digit code below",
+          "The app will connect and display your content in fullscreen",
+        ]
+      case "mac":
+        return [
+          "Download and install the SignageCloud Mac app",
+          "Launch the app and enter the 6-digit code below",
+          "The app will connect and display your content in fullscreen",
+        ]
       default:
         return []
+    }
+  }
+
+  const getDeviceDisplayName = (type: string) => {
+    switch (type) {
+      case "fire_tv":
+        return "Amazon Fire TV Stick"
+      case "android_tv":
+        return "Android TV"
+      case "web_browser":
+        return "Web Browser"
+      case "raspberry_pi":
+        return "Raspberry Pi"
+      case "windows":
+        return "Windows PC"
+      case "mac":
+        return "Mac"
+      default:
+        return type
     }
   }
 
@@ -107,16 +189,26 @@ export function AddScreenDialog({ open, onOpenChange }: AddScreenDialogProps) {
         {step === 1 && (
           <div className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="deviceType">Device Type</Label>
+              <Label htmlFor="screenName">Screen Name *</Label>
+              <Input
+                id="screenName"
+                placeholder="e.g., Lobby Display, Reception TV"
+                value={screenName}
+                onChange={(e) => setScreenName(e.target.value)}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="deviceType">Device Type *</Label>
               <Select value={deviceType} onValueChange={setDeviceType}>
                 <SelectTrigger>
                   <SelectValue placeholder="Select your device type" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="firestick">Amazon Fire TV Stick</SelectItem>
-                  <SelectItem value="android-tv">Android TV</SelectItem>
-                  <SelectItem value="web-browser">Web Browser</SelectItem>
-                  <SelectItem value="raspberry-pi">Raspberry Pi</SelectItem>
+                  <SelectItem value="fire_tv">Amazon Fire TV Stick</SelectItem>
+                  <SelectItem value="android_tv">Android TV</SelectItem>
+                  <SelectItem value="web_browser">Web Browser</SelectItem>
+                  <SelectItem value="raspberry_pi">Raspberry Pi</SelectItem>
                   <SelectItem value="windows">Windows PC</SelectItem>
                   <SelectItem value="mac">Mac</SelectItem>
                 </SelectContent>
@@ -124,20 +216,20 @@ export function AddScreenDialog({ open, onOpenChange }: AddScreenDialogProps) {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="screenName">Screen Name</Label>
-              <Input id="screenName" placeholder="e.g., Lobby Display, Reception TV" />
-            </div>
-
-            <div className="space-y-2">
               <Label htmlFor="location">Location (Optional)</Label>
-              <Input id="location" placeholder="e.g., Main Lobby, Conference Room A" />
+              <Input
+                id="location"
+                placeholder="e.g., Main Lobby, Conference Room A"
+                value={location}
+                onChange={(e) => setLocation(e.target.value)}
+              />
             </div>
 
             <div className="flex justify-end space-x-2">
               <Button variant="outline" onClick={handleClose}>
                 Cancel
               </Button>
-              <Button onClick={handleNext} disabled={!deviceType}>
+              <Button onClick={handleNext} disabled={!deviceType || !screenName.trim()}>
                 Next
               </Button>
             </div>
@@ -146,15 +238,39 @@ export function AddScreenDialog({ open, onOpenChange }: AddScreenDialogProps) {
 
         {step === 2 && (
           <div className="space-y-6">
+            {error && (
+              <div className="flex items-center space-x-2 p-3 bg-red-50 border border-red-200 rounded-lg">
+                <AlertCircle className="h-4 w-4 text-red-600" />
+                <p className="text-sm text-red-700">{error}</p>
+              </div>
+            )}
+
+            <div className="space-y-2">
+              <h3 className="text-lg font-semibold">Setup Details</h3>
+              <div className="text-sm text-gray-600 space-y-1">
+                <p>
+                  <strong>Screen Name:</strong> {screenName}
+                </p>
+                <p>
+                  <strong>Device Type:</strong> {getDeviceDisplayName(deviceType)}
+                </p>
+                {location && (
+                  <p>
+                    <strong>Location:</strong> {location}
+                  </p>
+                )}
+              </div>
+            </div>
+
             <Card>
               <CardContent className="p-6">
                 <div className="text-center space-y-4">
-                  <h3 className="text-lg font-semibold">Device Code</h3>
+                  <h3 className="text-lg font-semibold">Device Pairing Code</h3>
                   <div className="flex items-center justify-center space-x-2">
                     <div className="text-4xl font-mono font-bold tracking-wider bg-gray-100 px-4 py-2 rounded-lg">
-                      {loading ? "------" : deviceCode}
+                      {loading ? "------" : deviceCode || "------"}
                     </div>
-                    <Button variant="outline" size="sm" onClick={copyToClipboard} disabled={loading}>
+                    <Button variant="outline" size="sm" onClick={copyToClipboard} disabled={loading || !deviceCode}>
                       <Copy className="h-4 w-4" />
                     </Button>
                   </div>
@@ -162,8 +278,8 @@ export function AddScreenDialog({ open, onOpenChange }: AddScreenDialogProps) {
                     <p className="text-sm text-gray-600">Code expires at {codeExpiry.toLocaleTimeString()}</p>
                   )}
                   <Button variant="outline" size="sm" onClick={generateDeviceCode} disabled={loading}>
-                    <RefreshCw className="h-4 w-4 mr-2" />
-                    Generate New Code
+                    <RefreshCw className={`h-4 w-4 mr-2 ${loading ? "animate-spin" : ""}`} />
+                    {loading ? "Generating..." : "Generate New Code"}
                   </Button>
                 </div>
               </CardContent>

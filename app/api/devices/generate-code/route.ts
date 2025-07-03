@@ -1,13 +1,31 @@
 import { type NextRequest, NextResponse } from "next/server"
+import { getCurrentUser } from "@/lib/auth"
 
 export async function POST(request: NextRequest) {
   try {
+    // Check authentication
+    const user = await getCurrentUser()
+    if (!user) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Unauthorized",
+          message: "Authentication required",
+        },
+        { status: 401 },
+      )
+    }
+
+    console.log("Generating device code for user:", user.email)
+
     // Generate 6-digit code
     const code = Math.floor(100000 + Math.random() * 900000).toString()
 
     // Code expires in 10 minutes from NOW - add extra buffer
     const now = new Date()
     const expiresAt = new Date(now.getTime() + 11 * 60 * 1000) // 11 minutes to account for any timing issues
+
+    console.log("Generated code:", code, "expires at:", expiresAt.toISOString())
 
     return NextResponse.json({
       success: true,
@@ -21,7 +39,8 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(
       {
         success: false,
-        message: "Internal server error",
+        error: "Internal server error",
+        message: "Failed to generate device code",
       },
       { status: 500 },
     )
