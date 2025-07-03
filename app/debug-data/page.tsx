@@ -48,13 +48,22 @@ export default function DebugDataPage() {
     )
   }
 
-  if (!data) {
+  if (!data || !data.success) {
     return (
       <div className="container mx-auto p-6">
-        <div>No data available</div>
+        <div className="text-red-600">{data?.error || "No data available or request failed"}</div>
+        <Button onClick={fetchData} className="mt-4">
+          Retry
+        </Button>
       </div>
     )
   }
+
+  const currentUser = data.current_user || {}
+  const currentUserData = data.current_user_data || {}
+  const detailedData = data.detailed_data || {}
+  const allDataDebug = data.all_data_debug || {}
+  const databaseInfo = data.database_info || {}
 
   return (
     <div className="container mx-auto p-6 space-y-6">
@@ -69,8 +78,8 @@ export default function DebugDataPage() {
             <CardTitle className="text-sm">Current User</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{data.current_user.email}</div>
-            <div className="text-sm text-gray-600">ID: {data.current_user.id || "Not logged in"}</div>
+            <div className="text-2xl font-bold">{currentUser.email || "Not logged in"}</div>
+            <div className="text-sm text-gray-600">ID: {currentUser.id || "None"}</div>
           </CardContent>
         </Card>
 
@@ -79,7 +88,7 @@ export default function DebugDataPage() {
             <CardTitle className="text-sm">Devices</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{data.current_user_data.devices}</div>
+            <div className="text-2xl font-bold">{currentUserData.devices || 0}</div>
             <div className="text-sm text-gray-600">Your devices</div>
           </CardContent>
         </Card>
@@ -89,7 +98,7 @@ export default function DebugDataPage() {
             <CardTitle className="text-sm">Media Files</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{data.current_user_data.media_files}</div>
+            <div className="text-2xl font-bold">{currentUserData.media_files || 0}</div>
             <div className="text-sm text-gray-600">Your media</div>
           </CardContent>
         </Card>
@@ -99,7 +108,7 @@ export default function DebugDataPage() {
             <CardTitle className="text-sm">Playlists</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{data.current_user_data.playlists}</div>
+            <div className="text-2xl font-bold">{currentUserData.playlists || 0}</div>
             <div className="text-sm text-gray-600">Your playlists</div>
           </CardContent>
         </Card>
@@ -119,15 +128,17 @@ export default function DebugDataPage() {
                 <CardTitle>Your Devices</CardTitle>
               </CardHeader>
               <CardContent>
-                {data.detailed_data.current_user_devices.length === 0 ? (
+                {!detailedData.current_user_devices || detailedData.current_user_devices.length === 0 ? (
                   <p className="text-gray-500">No devices found</p>
                 ) : (
                   <div className="space-y-2">
-                    {data.detailed_data.current_user_devices.map((device: any) => (
+                    {detailedData.current_user_devices.map((device: any) => (
                       <div key={device.id} className="border p-2 rounded">
-                        <div className="font-medium">{device.name}</div>
-                        <div className="text-sm text-gray-600">Code: {device.device_code}</div>
-                        <Badge variant={device.status === "online" ? "default" : "secondary"}>{device.status}</Badge>
+                        <div className="font-medium">{device.name || "Unnamed Device"}</div>
+                        <div className="text-sm text-gray-600">Code: {device.device_code || "No code"}</div>
+                        <Badge variant={device.status === "online" ? "default" : "secondary"}>
+                          {device.status || "unknown"}
+                        </Badge>
                       </div>
                     ))}
                   </div>
@@ -140,15 +151,15 @@ export default function DebugDataPage() {
                 <CardTitle>Your Media Files</CardTitle>
               </CardHeader>
               <CardContent>
-                {data.detailed_data.current_user_media.length === 0 ? (
+                {!detailedData.current_user_media || detailedData.current_user_media.length === 0 ? (
                   <p className="text-gray-500">No media files found</p>
                 ) : (
                   <div className="space-y-2">
-                    {data.detailed_data.current_user_media.map((media: any) => (
+                    {detailedData.current_user_media.map((media: any) => (
                       <div key={media.id} className="border p-2 rounded">
-                        <div className="font-medium">{media.original_name}</div>
+                        <div className="font-medium">{media.original_name || "Unnamed File"}</div>
                         <div className="text-sm text-gray-600">
-                          {media.file_type} • {Math.round(media.file_size / 1024)} KB
+                          {media.file_type || "Unknown"} • {Math.round((media.file_size || 0) / 1024)} KB
                         </div>
                       </div>
                     ))}
@@ -162,15 +173,15 @@ export default function DebugDataPage() {
                 <CardTitle>Your Playlists</CardTitle>
               </CardHeader>
               <CardContent>
-                {data.detailed_data.current_user_playlists.length === 0 ? (
+                {!detailedData.current_user_playlists || detailedData.current_user_playlists.length === 0 ? (
                   <p className="text-gray-500">No playlists found</p>
                 ) : (
                   <div className="space-y-2">
-                    {data.detailed_data.current_user_playlists.map((playlist: any) => (
+                    {detailedData.current_user_playlists.map((playlist: any) => (
                       <div key={playlist.id} className="border p-2 rounded">
-                        <div className="font-medium">{playlist.name}</div>
-                        <div className="text-sm text-gray-600">{playlist.description}</div>
-                        <Badge variant="outline">{playlist.status}</Badge>
+                        <div className="font-medium">{playlist.name || "Unnamed Playlist"}</div>
+                        <div className="text-sm text-gray-600">{playlist.description || "No description"}</div>
+                        <Badge variant="outline">{playlist.status || "unknown"}</Badge>
                       </div>
                     ))}
                   </div>
@@ -188,13 +199,17 @@ export default function DebugDataPage() {
               </CardHeader>
               <CardContent>
                 <div className="space-y-2 max-h-64 overflow-y-auto">
-                  {data.all_data_debug.all_devices.map((device: any) => (
-                    <div key={device.id} className="border p-2 rounded text-sm">
-                      <div className="font-medium">{device.name}</div>
-                      <div className="text-gray-600">User: {device.user_email}</div>
-                      <div className="text-gray-600">Code: {device.device_code}</div>
-                    </div>
-                  ))}
+                  {!allDataDebug.all_devices || allDataDebug.all_devices.length === 0 ? (
+                    <p className="text-gray-500">No devices in database</p>
+                  ) : (
+                    allDataDebug.all_devices.map((device: any) => (
+                      <div key={device.id} className="border p-2 rounded text-sm">
+                        <div className="font-medium">{device.name || "Unnamed Device"}</div>
+                        <div className="text-gray-600">User: {device.user_email || "No user"}</div>
+                        <div className="text-gray-600">Code: {device.device_code || "No code"}</div>
+                      </div>
+                    ))
+                  )}
                 </div>
               </CardContent>
             </Card>
@@ -205,13 +220,17 @@ export default function DebugDataPage() {
               </CardHeader>
               <CardContent>
                 <div className="space-y-2 max-h-64 overflow-y-auto">
-                  {data.all_data_debug.all_media_files.map((media: any) => (
-                    <div key={media.id} className="border p-2 rounded text-sm">
-                      <div className="font-medium">{media.original_name}</div>
-                      <div className="text-gray-600">User: {media.user_email}</div>
-                      <div className="text-gray-600">Type: {media.file_type}</div>
-                    </div>
-                  ))}
+                  {!allDataDebug.all_media_files || allDataDebug.all_media_files.length === 0 ? (
+                    <p className="text-gray-500">No media files in database</p>
+                  ) : (
+                    allDataDebug.all_media_files.map((media: any) => (
+                      <div key={media.id} className="border p-2 rounded text-sm">
+                        <div className="font-medium">{media.original_name || "Unnamed File"}</div>
+                        <div className="text-gray-600">User: {media.user_email || "No user"}</div>
+                        <div className="text-gray-600">Type: {media.file_type || "Unknown"}</div>
+                      </div>
+                    ))
+                  )}
                 </div>
               </CardContent>
             </Card>
@@ -222,13 +241,17 @@ export default function DebugDataPage() {
               </CardHeader>
               <CardContent>
                 <div className="space-y-2 max-h-64 overflow-y-auto">
-                  {data.all_data_debug.all_playlists.map((playlist: any) => (
-                    <div key={playlist.id} className="border p-2 rounded text-sm">
-                      <div className="font-medium">{playlist.name}</div>
-                      <div className="text-gray-600">User: {playlist.user_email}</div>
-                      <div className="text-gray-600">Status: {playlist.status}</div>
-                    </div>
-                  ))}
+                  {!allDataDebug.all_playlists || allDataDebug.all_playlists.length === 0 ? (
+                    <p className="text-gray-500">No playlists in database</p>
+                  ) : (
+                    allDataDebug.all_playlists.map((playlist: any) => (
+                      <div key={playlist.id} className="border p-2 rounded text-sm">
+                        <div className="font-medium">{playlist.name || "Unnamed Playlist"}</div>
+                        <div className="text-gray-600">User: {playlist.user_email || "No user"}</div>
+                        <div className="text-gray-600">Status: {playlist.status || "unknown"}</div>
+                      </div>
+                    ))
+                  )}
                 </div>
               </CardContent>
             </Card>
@@ -243,14 +266,18 @@ export default function DebugDataPage() {
             </CardHeader>
             <CardContent>
               <div className="space-y-2">
-                {data.database_info.tables_exist.map((table: any) => (
-                  <Badge key={table.table_name} variant="outline">
-                    {table.table_name}
-                  </Badge>
-                ))}
+                {!databaseInfo.tables_exist || databaseInfo.tables_exist.length === 0 ? (
+                  <p className="text-gray-500">No tables found</p>
+                ) : (
+                  databaseInfo.tables_exist.map((table: any) => (
+                    <Badge key={table.table_name} variant="outline">
+                      {table.table_name}
+                    </Badge>
+                  ))
+                )}
               </div>
               <div className="mt-4">
-                <p className="text-sm text-gray-600">Total users in database: {data.database_info.total_users}</p>
+                <p className="text-sm text-gray-600">Total users in database: {databaseInfo.total_users || 0}</p>
               </div>
             </CardContent>
           </Card>
