@@ -73,7 +73,7 @@ export default function ScreensPage() {
         <div className="flex justify-between items-center">
           <div>
             <h1 className="text-3xl font-bold">Screens</h1>
-            <p className="text-gray-600">Manage your digital displays and monitor their status</p>
+            <p className="text-gray-600">Manage your digital displays and monitor their status -- BEKACE</p>
           </div>
           <div className="flex space-x-2">
             <Button variant="outline" onClick={handleRefresh}>
