@@ -1,70 +1,85 @@
 import { type NextRequest, NextResponse } from "next/server"
+import { getCurrentUser } from "@/lib/auth"
+import { getDb } from "@/lib/db"
 
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json()
-    const { code, deviceInfo } = body
-
-    console.log("[DEVICE REGISTER] Registration attempt with code:", code)
-    console.log("[DEVICE REGISTER] Device info:", deviceInfo)
-
-    if (!code) {
+    // Check authentication
+    const user = await getCurrentUser()
+    if (!user) {
       return NextResponse.json(
         {
           success: false,
-          error: "Device code is required",
+          error: "Unauthorized",
+          message: "Authentication required",
+        },
+        { status: 401 },
+      )
+    }
+
+    const body = await request.json()
+    const { code, deviceName, deviceType, location } = body
+
+    console.log("Device registration attempt:", { code, deviceName, deviceType, userId: user.id })
+
+    if (!code || !deviceName || !deviceType) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Missing required fields",
+          message: "Code, device name, and device type are required",
         },
         { status: 400 },
       )
     }
 
-    // For now, we'll accept any 6-digit code as valid
-    // In a real implementation, you'd store generated codes in a database with expiry times
+    const sql = getDb()
+
+    // For now, we'll accept any 6-digit code since we don't have persistent storage for codes
     if (!/^\d{6}$/.test(code)) {
       return NextResponse.json(
         {
           success: false,
-          error: "Invalid device code format",
+          error: "Invalid code format",
+          message: "Code must be 6 digits",
         },
         { status: 400 },
       )
     }
 
-    // Generate a unique device ID
+    // Generate device ID
     const deviceId = `device_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
 
-    console.log("[DEVICE REGISTER] Generated device ID:", deviceId)
+    // Insert device into database
+    await sql`
+      INSERT INTO devices (id, user_id, name, type, location, status, last_seen, created_at)
+      VALUES (
+        ${deviceId},
+        ${user.id},
+        ${deviceName},
+        ${deviceType},
+        ${location || null},
+        'online',
+        NOW(),
+        NOW()
+      )
+    `
 
-    // In a real implementation, you would:
-    // 1. Verify the code exists and hasn't expired
-    // 2. Get the user who generated the code
-    // 3. Store the device registration in the database
-    // 4. Return device configuration
-
-    const deviceData = {
-      deviceId,
-      name: deviceInfo?.name || "New Device",
-      type: deviceInfo?.type || "unknown",
-      location: deviceInfo?.location || "",
-      status: "online",
-      lastSeen: new Date().toISOString(),
-      registeredAt: new Date().toISOString(),
-    }
-
-    console.log("[DEVICE REGISTER] Registration successful:", deviceData)
+    console.log("Device registered successfully:", deviceId)
 
     return NextResponse.json({
       success: true,
-      device: deviceData,
       message: "Device registered successfully",
-      config: {
-        apiEndpoint: process.env.NEXT_PUBLIC_APP_URL || "https://www.britelitedigital.com",
-        heartbeatInterval: 30000, // 30 seconds
-        contentRefreshInterval: 300000, // 5 minutes
+      device: {
+        id: deviceId,
+        name: deviceName,
+        type: deviceType,
+        location: location || null,
+        status: "online",
       },
     })
   } catch (error) {
-    console.error("[DEVICE REGISTER] Registration error:", error)
+    console.error("Device registration error:", error)
     return NextResponse.json(
       {
         success: false,

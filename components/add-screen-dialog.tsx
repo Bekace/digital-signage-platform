@@ -24,13 +24,54 @@ export function AddScreenDialog({ open, onOpenChange }: AddScreenDialogProps) {
   const [codeExpiry, setCodeExpiry] = useState<Date | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
+  const [authChecked, setAuthChecked] = useState(false)
   const { toast } = useToast()
 
+  // Check authentication when dialog opens
   useEffect(() => {
-    if (open && step === 2) {
+    if (open && !authChecked) {
+      checkAuthentication()
+    }
+  }, [open, authChecked])
+
+  useEffect(() => {
+    if (open && step === 2 && authChecked) {
       generateDeviceCode()
     }
-  }, [open, step])
+  }, [open, step, authChecked])
+
+  const checkAuthentication = async () => {
+    try {
+      console.log("[ADD SCREEN] Checking authentication...")
+      const response = await fetch("/api/auth/check", {
+        method: "GET",
+        credentials: "include",
+      })
+
+      const data = await response.json()
+      console.log("[ADD SCREEN] Auth check response:", data)
+
+      if (data.authenticated) {
+        setAuthChecked(true)
+        console.log("[ADD SCREEN] User authenticated:", data.user.email)
+      } else {
+        setError("Please log in to add a screen")
+        toast({
+          title: "Authentication Required",
+          description: "Please log in to add a screen",
+          variant: "destructive",
+        })
+      }
+    } catch (error) {
+      console.error("[ADD SCREEN] Auth check failed:", error)
+      setError("Authentication check failed")
+      toast({
+        title: "Error",
+        description: "Failed to verify authentication",
+        variant: "destructive",
+      })
+    }
+  }
 
   const generateDeviceCode = async () => {
     setLoading(true)
@@ -110,6 +151,7 @@ export function AddScreenDialog({ open, onOpenChange }: AddScreenDialogProps) {
     setDeviceCode("")
     setCodeExpiry(null)
     setError("")
+    setAuthChecked(false)
     onOpenChange(false)
   }
 
@@ -188,6 +230,13 @@ export function AddScreenDialog({ open, onOpenChange }: AddScreenDialogProps) {
 
         {step === 1 && (
           <div className="space-y-4">
+            {error && (
+              <div className="flex items-center space-x-2 p-3 bg-red-50 border border-red-200 rounded-lg">
+                <AlertCircle className="h-4 w-4 text-red-600" />
+                <p className="text-sm text-red-700">{error}</p>
+              </div>
+            )}
+
             <div className="space-y-2">
               <Label htmlFor="screenName">Screen Name *</Label>
               <Input
@@ -229,7 +278,7 @@ export function AddScreenDialog({ open, onOpenChange }: AddScreenDialogProps) {
               <Button variant="outline" onClick={handleClose}>
                 Cancel
               </Button>
-              <Button onClick={handleNext} disabled={!deviceType || !screenName.trim()}>
+              <Button onClick={handleNext} disabled={!deviceType || !screenName.trim() || !authChecked}>
                 Next
               </Button>
             </div>
