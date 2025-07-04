@@ -10,6 +10,7 @@ export interface User {
   company?: string
   plan: string
   created_at: string
+  is_admin?: boolean
 }
 
 export async function getCurrentUser(): Promise<User | null> {
@@ -30,7 +31,7 @@ export async function getCurrentUser(): Promise<User | null> {
 
     // Get user from database
     const users = await sql`
-      SELECT id, email, first_name, last_name, company, plan, created_at
+      SELECT id, email, first_name, last_name, company, plan, created_at, is_admin
       FROM users 
       WHERE id = ${decoded.userId}
       LIMIT 1
@@ -53,6 +54,17 @@ export async function requireAuth(): Promise<User> {
   const user = await getCurrentUser()
   if (!user) {
     throw new Error("Authentication required")
+  }
+  return user
+}
+
+export async function requireAdmin(): Promise<User> {
+  const user = await getCurrentUser()
+  if (!user) {
+    throw new Error("Authentication required")
+  }
+  if (!user.is_admin) {
+    throw new Error("Admin access required")
   }
   return user
 }

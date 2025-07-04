@@ -33,9 +33,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const sql = getDb()
-
-    // For now, we'll accept any 6-digit code since we don't have persistent storage for codes
+    // Validate code format
     if (!/^\d{6}$/.test(code)) {
       return NextResponse.json(
         {
@@ -47,12 +45,14 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    const sql = getDb()
+
     // Generate device ID
     const deviceId = `device_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
 
     // Insert device into database
     await sql`
-      INSERT INTO devices (id, user_id, name, type, location, status, last_seen, created_at)
+      INSERT INTO devices (id, user_id, name, type, location, status, last_seen, created_at, resolution)
       VALUES (
         ${deviceId},
         ${user.id},
@@ -61,7 +61,8 @@ export async function POST(request: NextRequest) {
         ${location || null},
         'online',
         NOW(),
-        NOW()
+        NOW(),
+        '1920x1080'
       )
     `
 
@@ -76,6 +77,7 @@ export async function POST(request: NextRequest) {
         type: deviceType,
         location: location || null,
         status: "online",
+        resolution: "1920x1080",
       },
     })
   } catch (error) {

@@ -7,15 +7,16 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Card, CardContent } from "@/components/ui/card"
-import { Copy, RefreshCw, AlertCircle } from "lucide-react"
+import { Copy, RefreshCw, AlertCircle, CheckCircle } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 
 interface AddScreenDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
+  onDeviceAdded?: () => void
 }
 
-export function AddScreenDialog({ open, onOpenChange }: AddScreenDialogProps) {
+export function AddScreenDialog({ open, onOpenChange, onDeviceAdded }: AddScreenDialogProps) {
   const [step, setStep] = useState(1)
   const [deviceType, setDeviceType] = useState("")
   const [screenName, setScreenName] = useState("")
@@ -25,6 +26,8 @@ export function AddScreenDialog({ open, onOpenChange }: AddScreenDialogProps) {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
   const [authChecked, setAuthChecked] = useState(false)
+  const [isAuthenticated, setIsAuthenticated] = useState(false)
+  const [registrationStatus, setRegistrationStatus] = useState<"waiting" | "success" | "failed">("waiting")
   const { toast } = useToast()
 
   // Check authentication when dialog opens
@@ -34,11 +37,29 @@ export function AddScreenDialog({ open, onOpenChange }: AddScreenDialogProps) {
     }
   }, [open, authChecked])
 
+  // Generate code when moving to step 2
   useEffect(() => {
-    if (open && step === 2 && authChecked) {
+    if (open && step === 2 && isAuthenticated && !deviceCode) {
       generateDeviceCode()
     }
-  }, [open, step, authChecked])
+  }, [open, step, isAuthenticated, deviceCode])
+
+  // Poll for device registration
+  useEffect(() => {
+    let pollInterval: NodeJS.Timeout
+
+    if (step === 2 && deviceCode && registrationStatus === "waiting") {
+      pollInterval = setInterval(() => {
+        checkDeviceRegistration()
+      }, 3000) // Check every 3 seconds
+    }
+
+    return () => {
+      if (pollInterval) {
+        clearInterval(pollInterval)
+      }
+    }
+  }, [step, deviceCode, registrationStatus])
 
   const checkAuthentication = async () => {
     try {
@@ -52,10 +73,12 @@ export function AddScreenDialog({ open, onOpenChange }: AddScreenDialogProps) {
       console.log("[ADD SCREEN] Auth check response:", data)
 
       if (data.authenticated) {
+        setIsAuthenticated(true)
         setAuthChecked(true)
         console.log("[ADD SCREEN] User authenticated:", data.user.email)
       } else {
         setError("Please log in to add a screen")
+        setIsAuthenticated(false)
         toast({
           title: "Authentication Required",
           description: "Please log in to add a screen",
@@ -65,6 +88,7 @@ export function AddScreenDialog({ open, onOpenChange }: AddScreenDialogProps) {
     } catch (error) {
       console.error("[ADD SCREEN] Auth check failed:", error)
       setError("Authentication check failed")
+      setIsAuthenticated(false)
       toast({
         title: "Error",
         description: "Failed to verify authentication",
@@ -85,7 +109,7 @@ export function AddScreenDialog({ open, onOpenChange }: AddScreenDialogProps) {
         headers: {
           "Content-Type": "application/json",
         },
-        credentials: "include", // Important: include cookies for authentication
+        credentials: "include",
       })
 
       const data = await response.json()
@@ -94,6 +118,7 @@ export function AddScreenDialog({ open, onOpenChange }: AddScreenDialogProps) {
       if (data.success) {
         setDeviceCode(data.code)
         setCodeExpiry(new Date(data.expiresAt))
+        setRegistrationStatus("waiting")
         toast({
           title: "Device code generated",
           description: `Code ${data.code} is ready for pairing`,
@@ -120,6 +145,41 @@ export function AddScreenDialog({ open, onOpenChange }: AddScreenDialogProps) {
     }
   }
 
+  const checkDeviceRegistration = async () => {
+    try {
+      const response = await fetch("/api/devices", {
+        method: "GET",
+        credentials: "include",
+      })
+
+      const data = await response.json()
+
+      if (data.success && data.devices) {
+        // Check if a new device was added recently (within last 30 seconds)
+        const recentDevices = data.devices.filter((device: any) => {
+          const deviceTime = new Date(device.lastSeen || device.created_at)
+          const now = new Date()
+          return now.getTime() - deviceTime.getTime() < 30000 // 30 seconds
+        })
+
+        if (recentDevices.length > 0) {
+          setRegistrationStatus("success")
+          toast({
+            title: "Device Connected!",
+            description: `${screenName} has been successfully connected`,
+          })
+
+          // Call the callback to refresh the devices list
+          if (onDeviceAdded) {
+            onDeviceAdded()
+          }
+        }
+      }
+    } catch (error) {
+      console.error("[ADD SCREEN] Failed to check device registration:", error)
+    }
+  }
+
   const copyToClipboard = async () => {
     try {
       await navigator.clipboard.writeText(deviceCode)
@@ -138,7 +198,7 @@ export function AddScreenDialog({ open, onOpenChange }: AddScreenDialogProps) {
   }
 
   const handleNext = () => {
-    if (step === 1 && deviceType && screenName.trim()) {
+    if (step === 1 && deviceType && screenName.trim() && isAuthenticated) {
       setStep(2)
     }
   }
@@ -152,6 +212,8 @@ export function AddScreenDialog({ open, onOpenChange }: AddScreenDialogProps) {
     setCodeExpiry(null)
     setError("")
     setAuthChecked(false)
+    setIsAuthenticated(false)
+    setRegistrationStatus("waiting")
     onOpenChange(false)
   }
 
@@ -174,7 +236,7 @@ export function AddScreenDialog({ open, onOpenChange }: AddScreenDialogProps) {
       case "web_browser":
         return [
           "Open a web browser on your display device",
-          "Navigate to: https://player.britelitedigital.com",
+          "Navigate to: https://player.signagecloud.com",
           "Enter the 6-digit code shown below",
           "The browser will enter fullscreen mode and display your content",
         ]
@@ -278,7 +340,7 @@ export function AddScreenDialog({ open, onOpenChange }: AddScreenDialogProps) {
               <Button variant="outline" onClick={handleClose}>
                 Cancel
               </Button>
-              <Button onClick={handleNext} disabled={!deviceType || !screenName.trim() || !authChecked}>
+              <Button onClick={handleNext} disabled={!deviceType || !screenName.trim() || !isAuthenticated}>
                 Next
               </Button>
             </div>
@@ -291,6 +353,13 @@ export function AddScreenDialog({ open, onOpenChange }: AddScreenDialogProps) {
               <div className="flex items-center space-x-2 p-3 bg-red-50 border border-red-200 rounded-lg">
                 <AlertCircle className="h-4 w-4 text-red-600" />
                 <p className="text-sm text-red-700">{error}</p>
+              </div>
+            )}
+
+            {registrationStatus === "success" && (
+              <div className="flex items-center space-x-2 p-3 bg-green-50 border border-green-200 rounded-lg">
+                <CheckCircle className="h-4 w-4 text-green-600" />
+                <p className="text-sm text-green-700">Device successfully connected!</p>
               </div>
             )}
 
@@ -326,6 +395,9 @@ export function AddScreenDialog({ open, onOpenChange }: AddScreenDialogProps) {
                   {codeExpiry && (
                     <p className="text-sm text-gray-600">Code expires at {codeExpiry.toLocaleTimeString()}</p>
                   )}
+                  {registrationStatus === "waiting" && (
+                    <p className="text-sm text-blue-600">Waiting for device to connect...</p>
+                  )}
                   <Button variant="outline" size="sm" onClick={generateDeviceCode} disabled={loading}>
                     <RefreshCw className={`h-4 w-4 mr-2 ${loading ? "animate-spin" : ""}`} />
                     {loading ? "Generating..." : "Generate New Code"}
@@ -347,7 +419,7 @@ export function AddScreenDialog({ open, onOpenChange }: AddScreenDialogProps) {
               <Button variant="outline" onClick={() => setStep(1)}>
                 Back
               </Button>
-              <Button onClick={handleClose}>Done</Button>
+              <Button onClick={handleClose}>{registrationStatus === "success" ? "Complete" : "Done"}</Button>
             </div>
           </div>
         )}

@@ -11,34 +11,44 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import { DashboardLayout } from "@/components/dashboard-layout"
 import { AddScreenDialog } from "@/components/add-screen-dialog"
 
+interface Device {
+  id: string
+  screenName: string
+  deviceType: string
+  location?: string
+  status: string
+  resolution: string
+  lastSeen: string
+}
+
 export default function ScreensPage() {
   const [showAddDialog, setShowAddDialog] = useState(false)
-  const [devices, setDevices] = useState([])
+  const [devices, setDevices] = useState<Device[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState("")
 
   const fetchDevices = async () => {
     try {
-      const token = localStorage.getItem("token")
-      if (!token) {
-        setError("Please log in to view devices")
-        return
-      }
+      setError("")
+      console.log("[SCREENS] Fetching devices...")
 
       const response = await fetch("/api/devices", {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
+        method: "GET",
+        credentials: "include",
       })
 
       const data = await response.json()
+      console.log("[SCREENS] Devices response:", data)
 
       if (data.success) {
-        setDevices(data.devices)
+        setDevices(data.devices || [])
+        console.log(`[SCREENS] Loaded ${data.devices?.length || 0} devices`)
       } else {
         setError(data.message || "Failed to fetch devices")
+        console.error("[SCREENS] Failed to fetch devices:", data.message)
       }
     } catch (error) {
+      console.error("[SCREENS] Network error:", error)
       setError("Network error. Please try again.")
     } finally {
       setLoading(false)
@@ -52,6 +62,31 @@ export default function ScreensPage() {
   const handleRefresh = () => {
     setLoading(true)
     fetchDevices()
+  }
+
+  const handleDeviceAdded = () => {
+    console.log("[SCREENS] Device added, refreshing list...")
+    fetchDevices()
+  }
+
+  const handleDeleteDevice = async (deviceId: string) => {
+    try {
+      const response = await fetch(`/api/devices/${deviceId}`, {
+        method: "DELETE",
+        credentials: "include",
+      })
+
+      const data = await response.json()
+
+      if (data.success) {
+        setDevices(devices.filter((d) => d.id !== deviceId))
+      } else {
+        setError(data.message || "Failed to delete device")
+      }
+    } catch (error) {
+      console.error("Failed to delete device:", error)
+      setError("Failed to delete device")
+    }
   }
 
   if (loading) {
@@ -72,12 +107,12 @@ export default function ScreensPage() {
       <div className="space-y-6">
         <div className="flex justify-between items-center">
           <div>
-            <h1 className="text-3xl font-bold">Screens BEKACE</h1>
-            <p className="text-gray-600">Manage your digital displays and monitor their status -- BEKACE</p>
+            <h1 className="text-3xl font-bold">Screens</h1>
+            <p className="text-gray-600">Manage your digital displays and monitor their status</p>
           </div>
           <div className="flex space-x-2">
-            <Button variant="outline" onClick={handleRefresh}>
-              <RefreshCw className="h-4 w-4 mr-2" />
+            <Button variant="outline" onClick={handleRefresh} disabled={loading}>
+              <RefreshCw className={`h-4 w-4 mr-2 ${loading ? "animate-spin" : ""}`} />
               Refresh
             </Button>
             <Button onClick={() => setShowAddDialog(true)}>
@@ -165,7 +200,7 @@ export default function ScreensPage() {
                         <Settings className="h-4 w-4 mr-2" />
                         Settings
                       </DropdownMenuItem>
-                      <DropdownMenuItem className="text-red-600">
+                      <DropdownMenuItem className="text-red-600" onClick={() => handleDeleteDevice(device.id)}>
                         <Trash2 className="h-4 w-4 mr-2" />
                         Delete
                       </DropdownMenuItem>
@@ -192,7 +227,7 @@ export default function ScreensPage() {
                     </div>
                     <div className="flex justify-between">
                       <span className="text-sm text-gray-600">Device Type</span>
-                      <span className="text-sm capitalize">{device.deviceType}</span>
+                      <span className="text-sm capitalize">{device.deviceType.replace("_", " ")}</span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-sm text-gray-600">Location</span>
@@ -208,7 +243,7 @@ export default function ScreensPage() {
                     </div>
                   </div>
                   <div className="flex space-x-2">
-                    <Button variant="outline" size="sm" className="flex-1">
+                    <Button variant="outline" size="sm" className="flex-1 bg-transparent">
                       Configure
                     </Button>
                     <Button size="sm" className="flex-1">
@@ -221,7 +256,7 @@ export default function ScreensPage() {
           </div>
         )}
 
-        <AddScreenDialog open={showAddDialog} onOpenChange={setShowAddDialog} />
+        <AddScreenDialog open={showAddDialog} onOpenChange={setShowAddDialog} onDeviceAdded={handleDeviceAdded} />
       </div>
     </DashboardLayout>
   )

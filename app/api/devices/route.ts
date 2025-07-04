@@ -1,59 +1,69 @@
 import { type NextRequest, NextResponse } from "next/server"
-import { getDb } from "@/lib/db"
 import { getCurrentUser } from "@/lib/auth"
+import { getDb } from "@/lib/db"
 
 export async function GET(request: NextRequest) {
   try {
-    console.log("📱 [DEVICES API] Fetching devices...")
-
+    // Check authentication
     const user = await getCurrentUser()
     if (!user) {
-      console.log("📱 [DEVICES API] No authenticated user")
-      return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 401 })
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Unauthorized",
+          message: "Authentication required",
+        },
+        { status: 401 },
+      )
     }
 
-    console.log("📱 [DEVICES API] User authenticated:", user.email)
+    console.log("Fetching devices for user:", user.email)
+
     const sql = getDb()
 
-    // Get devices from database
+    // Get devices for the current user
     const devices = await sql`
-      SELECT device_id, screen_name, device_type, platform, status, location, 
-             resolution, last_seen, registered_at 
+      SELECT 
+        id,
+        name as screenName,
+        type as deviceType,
+        location,
+        status,
+        resolution,
+        last_seen as lastSeen,
+        created_at
       FROM devices 
-      WHERE user_id = ${user.id} 
-      ORDER BY registered_at DESC
+      WHERE user_id = ${user.id}
+      ORDER BY created_at DESC
     `
 
-    console.log("📱 [DEVICES API] Found devices:", devices.length)
+    console.log(`Found ${devices.length} devices for user ${user.email}`)
 
-    // Update status based on last_seen
-    const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000)
-
+    // Format devices for frontend
     const formattedDevices = devices.map((device) => ({
-      id: device.device_id,
-      screenName: device.screen_name,
-      deviceType: device.device_type,
-      platform: device.platform,
-      status: new Date(device.last_seen) < fiveMinutesAgo ? "offline" : device.status,
+      id: device.id,
+      screenName: device.screenName,
+      deviceType: device.deviceType,
       location: device.location,
-      resolution: device.resolution,
-      lastSeen: device.last_seen,
-      registeredAt: device.registered_at,
+      status: device.status,
+      resolution: device.resolution || "1920x1080",
+      lastSeen: device.lastSeen || device.created_at,
     }))
-
-    const stats = {
-      total: formattedDevices.length,
-      online: formattedDevices.filter((d) => d.status === "online").length,
-      offline: formattedDevices.filter((d) => d.status === "offline").length,
-    }
 
     return NextResponse.json({
       success: true,
       devices: formattedDevices,
-      ...stats,
+      message: "Devices fetched successfully",
     })
   } catch (error) {
-    console.error("📱 [DEVICES API] Error:", error)
-    return NextResponse.json({ success: false, message: "Internal server error" }, { status: 500 })
+    console.error("Fetch devices error:", error)
+    return NextResponse.json(
+      {
+        success: false,
+        error: "Internal server error",
+        message: "Failed to fetch devices",
+      },
+      { status: 500 },
+    )
   }
 }
