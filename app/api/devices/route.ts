@@ -15,22 +15,27 @@ export async function GET(request: NextRequest) {
     console.log("🔍 [DEVICES API] User authenticated:", user.email)
     const sql = getDb()
 
-    // Fetch devices with current playlist information
+    // Fetch devices without playlist information for now
     const devices = await sql`
       SELECT 
-        d.*,
-        p.id as playlist_id,
-        p.name as playlist_name,
-        COUNT(pi.id)::text as playlist_items
-      FROM devices d
-      LEFT JOIN device_playlists dp ON d.id = dp.device_id AND dp.user_id = d.user_id
-      LEFT JOIN playlists p ON dp.playlist_id = p.id
-      LEFT JOIN playlist_items pi ON p.id = pi.playlist_id
-      WHERE d.user_id = ${user.id}
-      GROUP BY d.id, d.name, d.type, d.status, d.location, d.last_seen, d.code, d.created_at, d.updated_at, 
-               d.user_id, d.orientation, d.brightness, d.volume, d.auto_restart, d.restart_time, d.notes,
-               p.id, p.name
-      ORDER BY d.created_at DESC
+        id,
+        name,
+        COALESCE(type, 'monitor') as type,
+        COALESCE(status, 'offline') as status,
+        location,
+        COALESCE(last_seen, created_at) as last_seen,
+        code,
+        created_at,
+        orientation,
+        brightness,
+        volume,
+        auto_restart,
+        restart_time,
+        notes,
+        user_id
+      FROM devices 
+      WHERE user_id = ${user.id}
+      ORDER BY created_at DESC
     `
 
     console.log("🔍 [DEVICES API] Found devices:", devices.length)
@@ -39,10 +44,10 @@ export async function GET(request: NextRequest) {
     const formattedDevices = devices.map((device) => ({
       id: device.id,
       name: device.name,
-      type: device.type || "monitor",
-      status: device.status || "offline",
+      type: device.type,
+      status: device.status,
       location: device.location,
-      lastSeen: device.last_seen || device.created_at,
+      lastSeen: device.last_seen,
       resolution: "1920x1080", // Default resolution
       orientation: device.orientation,
       brightness: device.brightness,
@@ -53,13 +58,8 @@ export async function GET(request: NextRequest) {
       last_seen: device.last_seen,
       code: device.code,
       created_at: device.created_at,
-      current_playlist: device.playlist_id
-        ? {
-            id: device.playlist_id,
-            name: device.playlist_name,
-            items: Number.parseInt(device.playlist_items) || 0,
-          }
-        : null,
+      // Will add playlist info later when table is created
+      current_playlist: null,
     }))
 
     return NextResponse.json({

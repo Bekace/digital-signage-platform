@@ -9,52 +9,45 @@ export async function POST(request: NextRequest, { params }: { params: { deviceI
       return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 })
     }
 
-    const deviceId = params.deviceId
     const sql = getDb()
 
     // Check if device exists and belongs to user
-    const device = await sql`
+    const devices = await sql`
       SELECT * FROM devices 
-      WHERE id = ${deviceId} AND user_id = ${user.id}
+      WHERE id = ${params.deviceId} AND user_id = ${user.id}
+      LIMIT 1
     `
 
-    if (device.length === 0) {
-      return NextResponse.json({ success: false, error: "Device not found or access denied" }, { status: 404 })
+    if (devices.length === 0) {
+      return NextResponse.json({ success: false, error: "Device not found" }, { status: 404 })
     }
 
-    // Update device status to indicate restart is pending
+    // Update device with restart command
     await sql`
       UPDATE devices 
       SET 
-        status = 'offline',
-        updated_at = NOW()
-      WHERE id = ${deviceId}
+        status = 'restarting',
+        last_seen = CURRENT_TIMESTAMP,
+        updated_at = CURRENT_TIMESTAMP
+      WHERE id = ${params.deviceId} AND user_id = ${user.id}
     `
 
-    // In a real implementation, you would send a restart command to the actual device here
-    // For now, we just simulate the restart by updating the status
-
-    // Simulate device coming back online after restart (in a real app, the device would do this)
-    setTimeout(async () => {
-      try {
-        await sql`
-          UPDATE devices 
-          SET 
-            status = 'online',
-            last_seen = NOW()
-          WHERE id = ${deviceId}
-        `
-      } catch (error) {
-        console.error("Error updating device status after restart:", error)
-      }
-    }, 5000) // Simulate 5 second restart time
+    // In a real implementation, you would send a restart command to the device
+    // For now, we'll just update the status and simulate the restart
 
     return NextResponse.json({
       success: true,
-      message: "Device restart command sent successfully",
+      message: "Restart command sent to device",
     })
   } catch (error) {
     console.error("Restart device error:", error)
-    return NextResponse.json({ success: false, error: "Internal server error" }, { status: 500 })
+    return NextResponse.json(
+      {
+        success: false,
+        error: "Failed to restart device",
+        details: error instanceof Error ? error.message : "Unknown error",
+      },
+      { status: 500 },
+    )
   }
 }

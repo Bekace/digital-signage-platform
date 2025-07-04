@@ -9,40 +9,45 @@ export async function POST(request: NextRequest, { params }: { params: { deviceI
       return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 })
     }
 
-    const deviceId = params.deviceId
     const body = await request.json()
     const { action } = body
 
     if (!action || !["play", "pause"].includes(action)) {
-      return NextResponse.json({ success: false, error: "Invalid action. Must be 'play' or 'pause'" }, { status: 400 })
+      return NextResponse.json({ success: false, error: "Invalid action" }, { status: 400 })
     }
 
     const sql = getDb()
 
     // Update device status
-    const result = await sql`
+    const newStatus = action === "play" ? "playing" : "paused"
+    const updatedDevices = await sql`
       UPDATE devices 
       SET 
-        status = ${action === "play" ? "playing" : "paused"},
-        updated_at = NOW()
-      WHERE id = ${deviceId} AND user_id = ${user.id}
+        status = ${newStatus},
+        last_seen = CURRENT_TIMESTAMP,
+        updated_at = CURRENT_TIMESTAMP
+      WHERE id = ${params.deviceId} AND user_id = ${user.id}
       RETURNING *
     `
 
-    if (result.length === 0) {
-      return NextResponse.json({ success: false, error: "Device not found or access denied" }, { status: 404 })
+    if (updatedDevices.length === 0) {
+      return NextResponse.json({ success: false, error: "Device not found" }, { status: 404 })
     }
-
-    // In a real implementation, you would send a command to the actual device here
-    // For now, we just update the database status
 
     return NextResponse.json({
       success: true,
-      message: `Device ${action} command sent successfully`,
-      device: result[0],
+      message: `Playback ${action}d successfully`,
+      device: updatedDevices[0],
     })
   } catch (error) {
     console.error("Playback control error:", error)
-    return NextResponse.json({ success: false, error: "Internal server error" }, { status: 500 })
+    return NextResponse.json(
+      {
+        success: false,
+        error: "Failed to control playback",
+        details: error instanceof Error ? error.message : "Unknown error",
+      },
+      { status: 500 },
+    )
   }
 }
