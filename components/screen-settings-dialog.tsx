@@ -1,98 +1,76 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
-import { Alert, AlertDescription } from "@/components/ui/alert"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Switch } from "@/components/ui/switch"
 import { Textarea } from "@/components/ui/textarea"
+import { Switch } from "@/components/ui/switch"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Slider } from "@/components/ui/slider"
-import {
-  Loader2,
-  Settings,
-  Monitor,
-  Wifi,
-  Volume2,
-  FlashlightIcon as Brightness4,
-  RotateCcw,
-  Save,
-  AlertCircle,
-} from "lucide-react"
+import { Badge } from "@/components/ui/badge"
+import { Separator } from "@/components/ui/separator"
 import { useToast } from "@/hooks/use-toast"
+import { Monitor, MapPin, Volume2, Sun, Wifi, Battery, Clock, RefreshCw } from "lucide-react"
 
 interface Device {
   id: string
   name: string
-  type: string
-  status: string
   location?: string
-  lastSeen: string
-  resolution?: string
-  orientation?: string
+  notes?: string
+  status: "online" | "offline" | "playing" | "paused"
+  type: string
+  orientation?: "landscape" | "portrait"
   brightness?: number
   volume?: number
-  autoRestart?: boolean
-  restartTime?: string
-  notes?: string
+  auto_restart?: boolean
+  restart_time?: string
+  last_seen?: string
+  ip_address?: string
+  battery_level?: number
+  wifi_strength?: number
 }
 
 interface ScreenSettingsDialogProps {
-  device: Device
-  onDeviceUpdated: () => void
+  device: Device | null
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  onDeviceUpdate: (device: Device) => void
 }
 
-export function ScreenSettingsDialog({ device, onDeviceUpdated }: ScreenSettingsDialogProps) {
-  const [open, setOpen] = useState(false)
-  const [loading, setLoading] = useState(false)
-  const [saving, setSaving] = useState(false)
-  const [error, setError] = useState("")
-  const [settings, setSettings] = useState({
-    name: device.name,
-    location: device.location || "",
-    orientation: device.orientation || "landscape",
-    brightness: device.brightness || 80,
-    volume: device.volume || 50,
-    autoRestart: device.autoRestart || false,
-    restartTime: device.restartTime || "03:00",
-    notes: device.notes || "",
-  })
+export function ScreenSettingsDialog({ device, open, onOpenChange, onDeviceUpdate }: ScreenSettingsDialogProps) {
   const { toast } = useToast()
+  const [isLoading, setIsLoading] = useState(false)
+  const [formData, setFormData] = useState<Partial<Device>>({})
 
-  const orientations = [
-    { value: "landscape", label: "Landscape (16:9)" },
-    { value: "portrait", label: "Portrait (9:16)" },
-    { value: "square", label: "Square (1:1)" },
-  ]
-
-  const resetSettings = () => {
-    setSettings({
-      name: device.name,
-      location: device.location || "",
-      orientation: device.orientation || "landscape",
-      brightness: device.brightness || 80,
-      volume: device.volume || 50,
-      autoRestart: device.autoRestart || false,
-      restartTime: device.restartTime || "03:00",
-      notes: device.notes || "",
-    })
-    setError("")
-  }
+  useEffect(() => {
+    if (device) {
+      setFormData({
+        name: device.name || "",
+        location: device.location || "",
+        notes: device.notes || "",
+        orientation: device.orientation || "landscape",
+        brightness: device.brightness || 80,
+        volume: device.volume || 50,
+        auto_restart: device.auto_restart || false,
+        restart_time: device.restart_time || "02:00",
+      })
+    }
+  }, [device])
 
   const handleSave = async () => {
-    if (!settings.name.trim()) {
-      setError("Device name is required")
-      return
-    }
+    if (!device) return
 
-    setSaving(true)
-    setError("")
-
+    setIsLoading(true)
     try {
       const response = await fetch(`/api/devices/${device.id}`, {
         method: "PATCH",
@@ -100,41 +78,37 @@ export function ScreenSettingsDialog({ device, onDeviceUpdated }: ScreenSettings
           "Content-Type": "application/json",
         },
         credentials: "include",
-        body: JSON.stringify(settings),
+        body: JSON.stringify(formData),
       })
 
       const data = await response.json()
 
-      if (!response.ok) {
-        throw new Error(data.error || `HTTP ${response.status}`)
-      }
-
       if (data.success) {
         toast({
           title: "Settings saved",
-          description: `${settings.name} settings have been updated`,
+          description: "Device settings have been updated successfully.",
         })
-        setOpen(false)
-        onDeviceUpdated()
+        onDeviceUpdate({ ...device, ...formData })
+        onOpenChange(false)
       } else {
         throw new Error(data.error || "Failed to save settings")
       }
     } catch (error) {
       console.error("Save settings error:", error)
-      const errorMessage = error instanceof Error ? error.message : "Failed to save settings"
-      setError(errorMessage)
       toast({
         title: "Error",
-        description: errorMessage,
+        description: "Failed to save device settings. Please try again.",
         variant: "destructive",
       })
     } finally {
-      setSaving(false)
+      setIsLoading(false)
     }
   }
 
   const handleRestart = async () => {
-    setLoading(true)
+    if (!device) return
+
+    setIsLoading(true)
     try {
       const response = await fetch(`/api/devices/${device.id}/restart`, {
         method: "POST",
@@ -145,8 +119,8 @@ export function ScreenSettingsDialog({ device, onDeviceUpdated }: ScreenSettings
 
       if (data.success) {
         toast({
-          title: "Restart command sent",
-          description: `${device.name} will restart shortly`,
+          title: "Restart initiated",
+          description: "Device restart command has been sent.",
         })
       } else {
         throw new Error(data.error || "Failed to restart device")
@@ -155,33 +129,39 @@ export function ScreenSettingsDialog({ device, onDeviceUpdated }: ScreenSettings
       console.error("Restart error:", error)
       toast({
         title: "Error",
-        description: error instanceof Error ? error.message : "Failed to restart device",
+        description: "Failed to restart device. Please try again.",
         variant: "destructive",
       })
     } finally {
-      setLoading(false)
+      setIsLoading(false)
     }
   }
 
-  useEffect(() => {
-    if (open) {
-      resetSettings()
+  if (!device) return null
+
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case "online":
+      case "playing":
+        return "bg-green-500"
+      case "paused":
+        return "bg-yellow-500"
+      case "offline":
+        return "bg-red-500"
+      default:
+        return "bg-gray-500"
     }
-  }, [open, device])
+  }
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
-        <Button variant="ghost" size="sm">
-          <Settings className="h-4 w-4" />
-        </Button>
-      </DialogTrigger>
-      <DialogContent className="sm:max-w-[600px] max-h-[80vh] overflow-y-auto">
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <Settings className="h-5 w-5" />
-            Screen Settings - {device.name}
+            <Monitor className="h-5 w-5" />
+            Screen Settings
           </DialogTitle>
+          <DialogDescription>Configure settings for {device.name}</DialogDescription>
         </DialogHeader>
 
         <Tabs defaultValue="general" className="w-full">
@@ -193,228 +173,225 @@ export function ScreenSettingsDialog({ device, onDeviceUpdated }: ScreenSettings
           </TabsList>
 
           <TabsContent value="general" className="space-y-4">
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-lg">Device Information</CardTitle>
-                <CardDescription>Basic device settings and information</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="name">Device Name</Label>
-                    <Input
-                      id="name"
-                      value={settings.name}
-                      onChange={(e) => setSettings({ ...settings, name: e.target.value })}
-                      placeholder="e.g., Lobby Display"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="location">Location</Label>
-                    <Input
-                      id="location"
-                      value={settings.location}
-                      onChange={(e) => setSettings({ ...settings, location: e.target.value })}
-                      placeholder="e.g., Main Lobby"
-                    />
-                  </div>
-                </div>
+            <div className="flex items-center gap-2 mb-4">
+              <Badge className={getStatusColor(device.status)}>{device.status}</Badge>
+              <span className="text-sm text-gray-500">
+                Last seen: {device.last_seen ? new Date(device.last_seen).toLocaleString() : "Never"}
+              </span>
+            </div>
 
-                <div className="space-y-2">
-                  <Label htmlFor="notes">Notes</Label>
-                  <Textarea
-                    id="notes"
-                    value={settings.notes}
-                    onChange={(e) => setSettings({ ...settings, notes: e.target.value })}
-                    placeholder="Additional notes about this device..."
-                    rows={3}
+            <div className="space-y-4">
+              <div>
+                <Label htmlFor="name">Device Name</Label>
+                <Input
+                  id="name"
+                  value={formData.name || ""}
+                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                  placeholder="Enter device name"
+                />
+              </div>
+
+              <div>
+                <Label htmlFor="location">Location</Label>
+                <div className="relative">
+                  <MapPin className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
+                  <Input
+                    id="location"
+                    className="pl-10"
+                    value={formData.location || ""}
+                    onChange={(e) => setFormData({ ...formData, location: e.target.value })}
+                    placeholder="e.g., Main Lobby, Conference Room A"
                   />
                 </div>
+              </div>
 
-                <div className="grid grid-cols-2 gap-4 pt-4 border-t">
-                  <div className="space-y-1">
-                    <Label className="text-sm font-medium">Status</Label>
-                    <Badge variant={device.status === "online" ? "default" : "secondary"}>{device.status}</Badge>
-                  </div>
-                  <div className="space-y-1">
-                    <Label className="text-sm font-medium">Last Seen</Label>
-                    <p className="text-sm text-gray-600">{new Date(device.lastSeen).toLocaleString()}</p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
+              <div>
+                <Label htmlFor="notes">Notes</Label>
+                <Textarea
+                  id="notes"
+                  value={formData.notes || ""}
+                  onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+                  placeholder="Add any notes about this device..."
+                  rows={3}
+                />
+              </div>
+            </div>
           </TabsContent>
 
           <TabsContent value="display" className="space-y-4">
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-lg flex items-center gap-2">
-                  <Monitor className="h-5 w-5" />
-                  Display Settings
-                </CardTitle>
-                <CardDescription>Configure display orientation, brightness, and volume</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-6">
-                <div className="space-y-2">
-                  <Label htmlFor="orientation">Screen Orientation</Label>
-                  <Select
-                    value={settings.orientation}
-                    onValueChange={(value) => setSettings({ ...settings, orientation: value })}
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {orientations.map((orientation) => (
-                        <SelectItem key={orientation.value} value={orientation.value}>
-                          {orientation.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
+            <div className="space-y-6">
+              <div>
+                <Label>Orientation</Label>
+                <Select
+                  value={formData.orientation || "landscape"}
+                  onValueChange={(value) =>
+                    setFormData({ ...formData, orientation: value as "landscape" | "portrait" })
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="landscape">Landscape</SelectItem>
+                    <SelectItem value="portrait">Portrait</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
 
-                <div className="space-y-3">
-                  <div className="flex items-center gap-2">
-                    <Brightness4 className="h-4 w-4" />
-                    <Label>Brightness: {settings.brightness}%</Label>
-                  </div>
-                  <Slider
-                    value={[settings.brightness]}
-                    onValueChange={(value) => setSettings({ ...settings, brightness: value[0] })}
-                    max={100}
-                    min={10}
-                    step={5}
-                    className="w-full"
-                  />
+              <div>
+                <div className="flex items-center gap-2 mb-2">
+                  <Sun className="h-4 w-4" />
+                  <Label>Brightness: {formData.brightness || 80}%</Label>
                 </div>
+                <Slider
+                  value={[formData.brightness || 80]}
+                  onValueChange={(value) => setFormData({ ...formData, brightness: value[0] })}
+                  max={100}
+                  min={10}
+                  step={5}
+                  className="w-full"
+                />
+              </div>
 
-                <div className="space-y-3">
-                  <div className="flex items-center gap-2">
-                    <Volume2 className="h-4 w-4" />
-                    <Label>Volume: {settings.volume}%</Label>
-                  </div>
-                  <Slider
-                    value={[settings.volume]}
-                    onValueChange={(value) => setSettings({ ...settings, volume: value[0] })}
-                    max={100}
-                    min={0}
-                    step={5}
-                    className="w-full"
-                  />
+              <div>
+                <div className="flex items-center gap-2 mb-2">
+                  <Volume2 className="h-4 w-4" />
+                  <Label>Volume: {formData.volume || 50}%</Label>
                 </div>
-
-                <div className="pt-4 border-t">
-                  <p className="text-sm text-gray-600">Current Resolution: {device.resolution || "1920x1080"}</p>
-                </div>
-              </CardContent>
-            </Card>
+                <Slider
+                  value={[formData.volume || 50]}
+                  onValueChange={(value) => setFormData({ ...formData, volume: value[0] })}
+                  max={100}
+                  min={0}
+                  step={5}
+                  className="w-full"
+                />
+              </div>
+            </div>
           </TabsContent>
 
           <TabsContent value="schedule" className="space-y-4">
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-lg flex items-center gap-2">
-                  <RotateCcw className="h-5 w-5" />
-                  Schedule Settings
-                </CardTitle>
-                <CardDescription>Configure automatic restart and maintenance schedules</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <div className="space-y-0.5">
-                    <Label className="text-base">Auto Restart</Label>
-                    <p className="text-sm text-gray-600">Automatically restart the device daily</p>
-                  </div>
-                  <Switch
-                    checked={settings.autoRestart}
-                    onCheckedChange={(checked) => setSettings({ ...settings, autoRestart: checked })}
-                  />
+            <div className="space-y-6">
+              <div className="flex items-center justify-between">
+                <div className="space-y-0.5">
+                  <Label>Auto Restart</Label>
+                  <p className="text-sm text-gray-500">Automatically restart the device daily</p>
                 </div>
+                <Switch
+                  checked={formData.auto_restart || false}
+                  onCheckedChange={(checked) => setFormData({ ...formData, auto_restart: checked })}
+                />
+              </div>
 
-                {settings.autoRestart && (
-                  <div className="space-y-2 pl-4 border-l-2 border-gray-200">
-                    <Label htmlFor="restartTime">Restart Time</Label>
+              {formData.auto_restart && (
+                <div>
+                  <Label htmlFor="restart-time">Restart Time</Label>
+                  <div className="relative">
+                    <Clock className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
                     <Input
-                      id="restartTime"
+                      id="restart-time"
                       type="time"
-                      value={settings.restartTime}
-                      onChange={(e) => setSettings({ ...settings, restartTime: e.target.value })}
+                      className="pl-10"
+                      value={formData.restart_time || "02:00"}
+                      onChange={(e) => setFormData({ ...formData, restart_time: e.target.value })}
                     />
-                    <p className="text-xs text-gray-500">Device will restart daily at this time</p>
                   </div>
-                )}
-
-                <div className="pt-4 border-t">
-                  <Button
-                    variant="outline"
-                    onClick={handleRestart}
-                    disabled={loading || device.status !== "online"}
-                    className="w-full bg-transparent"
-                  >
-                    {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                    <RotateCcw className="mr-2 h-4 w-4" />
-                    Restart Device Now
-                  </Button>
-                  {device.status !== "online" && (
-                    <p className="text-xs text-gray-500 mt-2 text-center">Device must be online to restart</p>
-                  )}
                 </div>
-              </CardContent>
-            </Card>
+              )}
+
+              <Separator />
+
+              <div>
+                <Label>Manual Restart</Label>
+                <p className="text-sm text-gray-500 mb-3">Immediately restart this device</p>
+                <Button
+                  variant="outline"
+                  onClick={handleRestart}
+                  disabled={isLoading}
+                  className="w-full bg-transparent"
+                >
+                  <RefreshCw className="h-4 w-4 mr-2" />
+                  Restart Device
+                </Button>
+              </div>
+            </div>
           </TabsContent>
 
           <TabsContent value="advanced" className="space-y-4">
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-lg flex items-center gap-2">
-                  <Wifi className="h-5 w-5" />
-                  Advanced Settings
-                </CardTitle>
-                <CardDescription>Advanced device configuration and diagnostics</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-1">
-                    <Label className="text-sm font-medium">Device ID</Label>
-                    <p className="text-sm font-mono bg-gray-100 p-2 rounded">{device.id}</p>
-                  </div>
-                  <div className="space-y-1">
-                    <Label className="text-sm font-medium">Device Type</Label>
-                    <p className="text-sm capitalize">{device.type}</p>
-                  </div>
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label>Device ID</Label>
+                  <Input value={device.id} disabled className="font-mono text-sm" />
                 </div>
+                <div>
+                  <Label>Device Type</Label>
+                  <Input value={device.type} disabled />
+                </div>
+              </div>
 
-                <div className="pt-4 border-t">
-                  <Alert>
-                    <AlertCircle className="h-4 w-4" />
-                    <AlertDescription>
-                      Advanced settings may affect device performance. Contact support if you need assistance.
-                    </AlertDescription>
-                  </Alert>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label>IP Address</Label>
+                  <Input value={device.ip_address || "Unknown"} disabled />
                 </div>
-              </CardContent>
-            </Card>
+                <div>
+                  <Label>Last Seen</Label>
+                  <Input value={device.last_seen ? new Date(device.last_seen).toLocaleString() : "Never"} disabled />
+                </div>
+              </div>
+
+              {(device.battery_level !== undefined || device.wifi_strength !== undefined) && (
+                <>
+                  <Separator />
+                  <div className="grid grid-cols-2 gap-4">
+                    {device.battery_level !== undefined && (
+                      <div className="flex items-center gap-2">
+                        <Battery className="h-4 w-4" />
+                        <span className="text-sm">Battery: {device.battery_level}%</span>
+                      </div>
+                    )}
+                    {device.wifi_strength !== undefined && (
+                      <div className="flex items-center gap-2">
+                        <Wifi className="h-4 w-4" />
+                        <span className="text-sm">WiFi: {device.wifi_strength}%</span>
+                      </div>
+                    )}
+                  </div>
+                </>
+              )}
+
+              <Separator />
+
+              <div className="bg-gray-50 p-4 rounded-lg">
+                <h4 className="font-medium mb-2">Device Information</h4>
+                <div className="text-sm space-y-1">
+                  <p>
+                    <strong>Status:</strong> {device.status}
+                  </p>
+                  <p>
+                    <strong>Type:</strong> {device.type}
+                  </p>
+                  <p>
+                    <strong>Orientation:</strong> {device.orientation || "landscape"}
+                  </p>
+                  <p>
+                    <strong>Auto Restart:</strong> {device.auto_restart ? "Enabled" : "Disabled"}
+                  </p>
+                </div>
+              </div>
+            </div>
           </TabsContent>
         </Tabs>
 
-        {error && (
-          <Alert variant="destructive">
-            <AlertCircle className="h-4 w-4" />
-            <AlertDescription>{error}</AlertDescription>
-          </Alert>
-        )}
-
-        <div className="flex justify-end gap-2 pt-4 border-t">
-          <Button variant="outline" onClick={() => setOpen(false)}>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
-          <Button onClick={handleSave} disabled={saving}>
-            {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-            <Save className="mr-2 h-4 w-4" />
-            Save Settings
+          <Button onClick={handleSave} disabled={isLoading}>
+            {isLoading ? "Saving..." : "Save Settings"}
           </Button>
-        </div>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   )

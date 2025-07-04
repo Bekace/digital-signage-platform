@@ -1,60 +1,60 @@
-import { NextResponse } from "next/server"
-import { getCurrentUser } from "@/lib/auth"
+import { type NextRequest, NextResponse } from "next/server"
 import { getDb } from "@/lib/db"
+import { getCurrentUser } from "@/lib/auth"
 
-export async function POST(request: Request, { params }: { params: { deviceId: string } }) {
+export async function POST(request: NextRequest, { params }: { params: { deviceId: string } }) {
   try {
-    console.log(`Restart Device API: Starting request for device ${params.deviceId}`)
-
     const user = await getCurrentUser()
     if (!user) {
-      return NextResponse.json({ success: false, error: "Authentication required" }, { status: 401 })
+      return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 })
     }
 
+    const deviceId = params.deviceId
     const sql = getDb()
 
     // Check if device exists and belongs to user
-    const devices = await sql`
-      SELECT id, name, status FROM devices 
-      WHERE id = ${params.deviceId} AND user_id = ${user.id}
-      LIMIT 1
+    const device = await sql`
+      SELECT * FROM devices 
+      WHERE id = ${deviceId} AND user_id = ${user.id}
     `
 
-    if (devices.length === 0) {
-      return NextResponse.json({ success: false, error: "Device not found" }, { status: 404 })
+    if (device.length === 0) {
+      return NextResponse.json({ success: false, error: "Device not found or access denied" }, { status: 404 })
     }
 
-    const device = devices[0]
-
-    if (device.status === "offline") {
-      return NextResponse.json({ success: false, error: "Cannot restart offline device" }, { status: 400 })
-    }
-
-    // In a real implementation, this would send a restart command to the device
-    // For now, we'll just log the restart request
-    console.log(`Restart command sent to device ${device.name} (${params.deviceId})`)
-
-    // Update last heartbeat to indicate restart was requested
+    // Update device status to indicate restart is pending
     await sql`
       UPDATE devices 
       SET 
-        last_heartbeat = CURRENT_TIMESTAMP,
-        updated_at = CURRENT_TIMESTAMP
-      WHERE id = ${params.deviceId} AND user_id = ${user.id}
+        status = 'offline',
+        updated_at = NOW()
+      WHERE id = ${deviceId}
     `
+
+    // In a real implementation, you would send a restart command to the actual device here
+    // For now, we just simulate the restart by updating the status
+
+    // Simulate device coming back online after restart (in a real app, the device would do this)
+    setTimeout(async () => {
+      try {
+        await sql`
+          UPDATE devices 
+          SET 
+            status = 'online',
+            last_seen = NOW()
+          WHERE id = ${deviceId}
+        `
+      } catch (error) {
+        console.error("Error updating device status after restart:", error)
+      }
+    }, 5000) // Simulate 5 second restart time
 
     return NextResponse.json({
       success: true,
-      message: `Restart command sent to ${device.name}`,
+      message: "Device restart command sent successfully",
     })
   } catch (error) {
-    console.error("Restart Device API error:", error)
-    return NextResponse.json(
-      {
-        success: false,
-        error: error instanceof Error ? error.message : "Failed to restart device",
-      },
-      { status: 500 },
-    )
+    console.error("Restart device error:", error)
+    return NextResponse.json({ success: false, error: "Internal server error" }, { status: 500 })
   }
 }

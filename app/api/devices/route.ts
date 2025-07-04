@@ -1,74 +1,78 @@
-import { NextResponse } from "next/server"
-import { getCurrentUser } from "@/lib/auth"
+import { type NextRequest, NextResponse } from "next/server"
 import { getDb } from "@/lib/db"
+import { getCurrentUser } from "@/lib/auth"
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
-    console.log("Devices API: Starting request")
+    console.log("🔍 [DEVICES API] Starting device fetch...")
 
     const user = await getCurrentUser()
-    console.log("Devices API: User check result:", user ? `User ${user.email}` : "No user")
-
     if (!user) {
-      console.log("Devices API: Authentication failed")
-      return NextResponse.json({ success: false, error: "Authentication required" }, { status: 401 })
+      console.log("🔍 [DEVICES API] No authenticated user")
+      return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 })
     }
 
+    console.log("🔍 [DEVICES API] User authenticated:", user.email)
     const sql = getDb()
-    console.log("Devices API: Database connection established")
 
-    // First check if the required columns exist
-    try {
-      const devices = await sql`
-        SELECT 
-          id,
-          name,
-          COALESCE(type, 'monitor') as type,
-          COALESCE(status, 'offline') as status,
-          COALESCE(location, 'Office') as location,
-          COALESCE(resolution, '1920x1080') as resolution,
-          COALESCE(last_seen, created_at) as last_seen,
-          created_at,
-          user_id
-        FROM devices 
-        WHERE user_id = ${user.id}
-        ORDER BY created_at DESC
-      `
+    // Fetch devices with current playlist information
+    const devices = await sql`
+      SELECT 
+        d.*,
+        p.id as playlist_id,
+        p.name as playlist_name,
+        COUNT(pi.id)::text as playlist_items
+      FROM devices d
+      LEFT JOIN device_playlists dp ON d.id = dp.device_id AND dp.user_id = d.user_id
+      LEFT JOIN playlists p ON dp.playlist_id = p.id
+      LEFT JOIN playlist_items pi ON p.id = pi.playlist_id
+      WHERE d.user_id = ${user.id}
+      GROUP BY d.id, d.name, d.type, d.status, d.location, d.last_seen, d.code, d.created_at, d.updated_at, 
+               d.user_id, d.orientation, d.brightness, d.volume, d.auto_restart, d.restart_time, d.notes,
+               p.id, p.name
+      ORDER BY d.created_at DESC
+    `
 
-      console.log(`Devices API: Found ${devices.length} devices for user ${user.id}`)
+    console.log("🔍 [DEVICES API] Found devices:", devices.length)
 
-      return NextResponse.json({
-        success: true,
-        devices: devices.map((device) => ({
-          id: device.id.toString(),
-          name: device.name,
-          type: device.type,
-          status: device.status,
-          location: device.location,
-          resolution: device.resolution,
-          lastSeen: device.last_seen,
-          createdAt: device.created_at,
-        })),
-      })
-    } catch (columnError) {
-      console.error("Column error - database schema needs fixing:", columnError)
-      return NextResponse.json(
-        {
-          success: false,
-          error: "Database schema needs updating. Please run the database fix at /fix-database",
-          schemaError: true,
-          details: columnError instanceof Error ? columnError.message : "Column missing",
-        },
-        { status: 500 },
-      )
-    }
+    // Format devices for frontend
+    const formattedDevices = devices.map((device) => ({
+      id: device.id,
+      name: device.name,
+      type: device.type || "monitor",
+      status: device.status || "offline",
+      location: device.location,
+      lastSeen: device.last_seen || device.created_at,
+      resolution: "1920x1080", // Default resolution
+      orientation: device.orientation,
+      brightness: device.brightness,
+      volume: device.volume,
+      autoRestart: device.auto_restart,
+      restartTime: device.restart_time,
+      notes: device.notes,
+      last_seen: device.last_seen,
+      code: device.code,
+      created_at: device.created_at,
+      current_playlist: device.playlist_id
+        ? {
+            id: device.playlist_id,
+            name: device.playlist_name,
+            items: Number.parseInt(device.playlist_items) || 0,
+          }
+        : null,
+    }))
+
+    return NextResponse.json({
+      success: true,
+      devices: formattedDevices,
+    })
   } catch (error) {
-    console.error("Devices API error:", error)
+    console.error("🔍 [DEVICES API] Error:", error)
     return NextResponse.json(
       {
         success: false,
-        error: error instanceof Error ? error.message : "Failed to fetch devices",
-        details: process.env.NODE_ENV === "development" ? error : undefined,
+        error: "Failed to fetch devices",
+        details: error instanceof Error ? error.message : "Unknown error",
       },
       { status: 500 },
     )
