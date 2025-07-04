@@ -1,67 +1,56 @@
-import { type NextRequest, NextResponse } from "next/server"
+import { NextResponse } from "next/server"
 import { getCurrentUser } from "@/lib/auth"
 import { getDb } from "@/lib/db"
 
-export async function GET(request: NextRequest) {
+export async function GET() {
   try {
-    // Check authentication
+    console.log("Devices API: Starting request")
+
     const user = await getCurrentUser()
+    console.log("Devices API: User check result:", user ? `User ${user.email}` : "No user")
+
     if (!user) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: "Unauthorized",
-          message: "Authentication required",
-        },
-        { status: 401 },
-      )
+      console.log("Devices API: Authentication failed")
+      return NextResponse.json({ success: false, error: "Authentication required" }, { status: 401 })
     }
 
-    console.log("Fetching devices for user:", user.email)
-
     const sql = getDb()
+    console.log("Devices API: Database connection established")
 
-    // Get devices for the current user
     const devices = await sql`
       SELECT 
         id,
-        name as screenName,
-        type as deviceType,
-        location,
+        name,
+        type,
         status,
-        resolution,
-        last_seen as lastSeen,
-        created_at
+        last_seen,
+        created_at,
+        user_id
       FROM devices 
       WHERE user_id = ${user.id}
       ORDER BY created_at DESC
     `
 
-    console.log(`Found ${devices.length} devices for user ${user.email}`)
-
-    // Format devices for frontend
-    const formattedDevices = devices.map((device) => ({
-      id: device.id,
-      screenName: device.screenName,
-      deviceType: device.deviceType,
-      location: device.location,
-      status: device.status,
-      resolution: device.resolution || "1920x1080",
-      lastSeen: device.lastSeen || device.created_at,
-    }))
+    console.log(`Devices API: Found ${devices.length} devices for user ${user.id}`)
 
     return NextResponse.json({
       success: true,
-      devices: formattedDevices,
-      message: "Devices fetched successfully",
+      devices: devices.map((device) => ({
+        id: device.id,
+        name: device.name,
+        type: device.type,
+        status: device.status,
+        lastSeen: device.last_seen,
+        createdAt: device.created_at,
+      })),
     })
   } catch (error) {
-    console.error("Fetch devices error:", error)
+    console.error("Devices API error:", error)
     return NextResponse.json(
       {
         success: false,
-        error: "Internal server error",
-        message: "Failed to fetch devices",
+        error: error instanceof Error ? error.message : "Failed to fetch devices",
+        details: process.env.NODE_ENV === "development" ? error : undefined,
       },
       { status: 500 },
     )

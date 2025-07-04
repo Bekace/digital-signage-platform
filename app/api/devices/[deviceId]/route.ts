@@ -1,65 +1,51 @@
-import { type NextRequest, NextResponse } from "next/server"
+import { NextResponse } from "next/server"
 import { getCurrentUser } from "@/lib/auth"
 import { getDb } from "@/lib/db"
 
-export async function DELETE(request: NextRequest, { params }: { params: { deviceId: string } }) {
+export async function DELETE(request: Request, { params }: { params: { deviceId: string } }) {
   try {
-    // Check authentication
+    console.log(`Delete Device API: Starting request for device ${params.deviceId}`)
+
     const user = await getCurrentUser()
+    console.log("Delete Device API: User check result:", user ? `User ${user.email}` : "No user")
+
     if (!user) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: "Unauthorized",
-          message: "Authentication required",
-        },
-        { status: 401 },
-      )
+      console.log("Delete Device API: Authentication failed")
+      return NextResponse.json({ success: false, error: "Authentication required" }, { status: 401 })
     }
-
-    const deviceId = params.deviceId
-
-    console.log("Deleting device:", deviceId, "for user:", user.email)
 
     const sql = getDb()
 
-    // Check if device belongs to user
+    // Check if device exists and belongs to user
     const devices = await sql`
-      SELECT id FROM devices 
-      WHERE id = ${deviceId} AND user_id = ${user.id}
+      SELECT id, name FROM devices 
+      WHERE id = ${params.deviceId} AND user_id = ${user.id}
       LIMIT 1
     `
 
     if (devices.length === 0) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: "Not found",
-          message: "Device not found or access denied",
-        },
-        { status: 404 },
-      )
+      return NextResponse.json({ success: false, error: "Device not found" }, { status: 404 })
     }
 
     // Delete the device
     await sql`
       DELETE FROM devices 
-      WHERE id = ${deviceId} AND user_id = ${user.id}
+      WHERE id = ${params.deviceId} AND user_id = ${user.id}
     `
 
-    console.log("Device deleted successfully:", deviceId)
+    console.log(`Delete Device API: Device ${params.deviceId} deleted successfully`)
 
     return NextResponse.json({
       success: true,
       message: "Device deleted successfully",
     })
   } catch (error) {
-    console.error("Delete device error:", error)
+    console.error("Delete Device API error:", error)
     return NextResponse.json(
       {
         success: false,
-        error: "Internal server error",
-        message: "Failed to delete device",
+        error: error instanceof Error ? error.message : "Failed to delete device",
+        details: process.env.NODE_ENV === "development" ? error : undefined,
       },
       { status: 500 },
     )
