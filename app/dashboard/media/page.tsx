@@ -158,7 +158,7 @@ export default function MediaPage() {
       <div className="space-y-6">
         <div className="flex justify-between items-center">
           <div>
-            <h1 className="text-3xl font-bold">Media Library</h1>
+            <h1 className="text-3xl font-bold">Media Library TEST</h1>
             <p className="text-gray-600">Manage your media files and assets</p>
           </div>
           <Button onClick={() => setShowUploadDialog(true)}>
