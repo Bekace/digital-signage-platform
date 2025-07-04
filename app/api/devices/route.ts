@@ -23,6 +23,8 @@ export async function GET() {
         name,
         type,
         status,
+        location,
+        resolution,
         last_seen,
         created_at,
         user_id
@@ -36,11 +38,13 @@ export async function GET() {
     return NextResponse.json({
       success: true,
       devices: devices.map((device) => ({
-        id: device.id,
+        id: device.id.toString(),
         name: device.name,
-        type: device.type,
-        status: device.status,
-        lastSeen: device.last_seen,
+        type: device.type || "monitor",
+        status: device.status || "offline",
+        location: device.location,
+        resolution: device.resolution || "1920x1080",
+        lastSeen: device.last_seen || device.created_at,
         createdAt: device.created_at,
       })),
     })

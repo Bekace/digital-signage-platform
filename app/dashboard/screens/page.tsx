@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Skeleton } from "@/components/ui/skeleton"
 import { AddScreenDialog } from "@/components/add-screen-dialog"
+import { DashboardLayout } from "@/components/dashboard-layout"
 import { Monitor, Smartphone, Tv, MoreHorizontal, Trash2, Settings, AlertCircle } from "lucide-react"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { useToast } from "@/hooks/use-toast"
@@ -21,7 +22,7 @@ interface Device {
   resolution?: string
 }
 
-export default function ScreensPage() {
+function ScreensContent() {
   const [devices, setDevices] = useState<Device[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState("")
@@ -271,5 +272,13 @@ export default function ScreensPage() {
         </div>
       )}
     </div>
+  )
+}
+
+export default function ScreensPage() {
+  return (
+    <DashboardLayout>
+      <ScreensContent />
+    </DashboardLayout>
   )
 }
