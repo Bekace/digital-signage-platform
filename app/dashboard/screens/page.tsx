@@ -257,7 +257,7 @@ export default function ScreensPage() {
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
                       <Monitor className="h-5 w-5" />
-                      <CardTitle className="text-lg">{device.name}</CardTitle>
+                      <CardTitle className="text-lg">{device.name || "Unnamed Device"}</CardTitle>
                     </div>
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
@@ -292,7 +292,7 @@ export default function ScreensPage() {
                   </div>
                   <div className="flex items-center gap-2">
                     <Badge className={getStatusColor(device.status)}>{getStatusText(device.status)}</Badge>
-                    <span className="text-sm text-gray-500">{device.type}</span>
+                    <span className="text-sm text-gray-500">{device.type || "Unknown"}</span>
                   </div>
                 </CardHeader>
                 <CardContent className="space-y-3">
