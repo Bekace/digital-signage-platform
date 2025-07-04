@@ -2,327 +2,243 @@
 
 import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Label } from "@/components/ui/label"
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Badge } from "@/components/ui/badge"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { useToast } from "@/hooks/use-toast"
-import { Monitor, Play, Clock, Calendar } from "lucide-react"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
+import { Label } from "@/components/ui/label"
+import { Play, Monitor, Clock, X } from "lucide-react"
+import { toast } from "@/hooks/use-toast"
 
 interface Playlist {
-  id: string
+  id: number
   name: string
-  description?: string
+  description: string
   items: number
   duration: string
-  status: "draft" | "active" | "scheduled"
-  lastModified: string
+  status: string
 }
 
 interface Device {
-  id: string
+  id: number
   name: string
-  status: string
-  location?: string
+  current_playlist?: string
 }
 
 interface AssignPlaylistDialogProps {
-  device: Device | null
   open: boolean
   onOpenChange: (open: boolean) => void
-  onAssignmentComplete: () => void
+  device: Device
+  onPlaylistAssigned?: () => void
 }
 
-export function AssignPlaylistDialog({ device, open, onOpenChange, onAssignmentComplete }: AssignPlaylistDialogProps) {
-  const { toast } = useToast()
+export function AssignPlaylistDialog({ open, onOpenChange, device, onPlaylistAssigned }: AssignPlaylistDialogProps) {
   const [playlists, setPlaylists] = useState<Playlist[]>([])
   const [selectedPlaylistId, setSelectedPlaylistId] = useState<string>("")
-  const [currentPlaylist, setCurrentPlaylist] = useState<Playlist | null>(null)
-  const [isLoading, setIsLoading] = useState(false)
-  const [isLoadingPlaylists, setIsLoadingPlaylists] = useState(false)
-
-  useEffect(() => {
-    if (open && device) {
-      fetchPlaylists()
-      fetchCurrentPlaylist()
-    }
-  }, [open, device])
+  const [loading, setLoading] = useState(false)
+  const [fetchingPlaylists, setFetchingPlaylists] = useState(true)
 
   const fetchPlaylists = async () => {
     try {
-      setIsLoadingPlaylists(true)
-      const response = await fetch("/api/playlists", {
-        credentials: "include",
-      })
-
-      const data = await response.json()
-
-      if (data.success) {
-        setPlaylists(data.playlists || [])
+      const response = await fetch("/api/playlists")
+      if (response.ok) {
+        const data = await response.json()
+        // Only show published playlists
+        const publishedPlaylists = (data.playlists || []).filter((playlist: Playlist) => playlist.status === "active")
+        setPlaylists(publishedPlaylists)
       } else {
-        throw new Error(data.error || "Failed to fetch playlists")
+        throw new Error("Failed to fetch playlists")
       }
     } catch (error) {
-      console.error("Fetch playlists error:", error)
+      console.error("Failed to fetch playlists:", error)
       toast({
         title: "Error",
-        description: "Failed to load playlists. Please try again.",
+        description: "Failed to load playlists",
         variant: "destructive",
       })
     } finally {
-      setIsLoadingPlaylists(false)
+      setFetchingPlaylists(false)
     }
   }
 
-  const fetchCurrentPlaylist = async () => {
-    if (!device) return
-
-    try {
-      const response = await fetch(`/api/devices/${device.id}/playlist`, {
-        credentials: "include",
-      })
-
-      const data = await response.json()
-
-      if (data.success && data.playlist) {
-        setCurrentPlaylist(data.playlist)
-      }
-    } catch (error) {
-      console.error("Fetch current playlist error:", error)
+  useEffect(() => {
+    if (open) {
+      fetchPlaylists()
     }
-  }
+  }, [open])
 
   const handleAssign = async () => {
-    if (!device || !selectedPlaylistId) return
+    if (!selectedPlaylistId) {
+      toast({
+        title: "Error",
+        description: "Please select a playlist to assign",
+        variant: "destructive",
+      })
+      return
+    }
 
-    setIsLoading(true)
+    setLoading(true)
+
     try {
       const response = await fetch(`/api/devices/${device.id}/playlist`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        credentials: "include",
-        body: JSON.stringify({ playlistId: selectedPlaylistId }),
+        body: JSON.stringify({
+          playlistId: Number.parseInt(selectedPlaylistId),
+        }),
       })
 
-      const data = await response.json()
-
-      if (data.success) {
+      if (response.ok) {
         toast({
-          title: "Playlist assigned",
-          description: `Playlist has been assigned to ${device.name}`,
+          title: "Success",
+          description: "Playlist assigned successfully",
         })
-        onAssignmentComplete()
         onOpenChange(false)
+        onPlaylistAssigned?.()
       } else {
-        throw new Error(data.error || "Failed to assign playlist")
+        const error = await response.json()
+        throw new Error(error.error || "Failed to assign playlist")
       }
     } catch (error) {
       console.error("Assign playlist error:", error)
       toast({
         title: "Error",
-        description: "Failed to assign playlist. Please try again.",
+        description: error instanceof Error ? error.message : "Failed to assign playlist",
         variant: "destructive",
       })
     } finally {
-      setIsLoading(false)
+      setLoading(false)
     }
   }
 
   const handleUnassign = async () => {
-    if (!device) return
+    setLoading(true)
 
-    setIsLoading(true)
     try {
       const response = await fetch(`/api/devices/${device.id}/playlist`, {
         method: "DELETE",
-        credentials: "include",
       })
 
-      const data = await response.json()
-
-      if (data.success) {
+      if (response.ok) {
         toast({
-          title: "Playlist unassigned",
-          description: `Playlist has been removed from ${device.name}`,
+          title: "Success",
+          description: "Playlist unassigned successfully",
         })
-        setCurrentPlaylist(null)
-        onAssignmentComplete()
+        onOpenChange(false)
+        onPlaylistAssigned?.()
       } else {
-        throw new Error(data.error || "Failed to unassign playlist")
+        const error = await response.json()
+        throw new Error(error.error || "Failed to unassign playlist")
       }
     } catch (error) {
       console.error("Unassign playlist error:", error)
       toast({
         title: "Error",
-        description: "Failed to unassign playlist. Please try again.",
+        description: error instanceof Error ? error.message : "Failed to unassign playlist",
         variant: "destructive",
       })
     } finally {
-      setIsLoading(false)
-    }
-  }
-
-  if (!device) return null
-
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case "active":
-        return "bg-green-500"
-      case "scheduled":
-        return "bg-blue-500"
-      case "draft":
-        return "bg-gray-500"
-      default:
-        return "bg-gray-500"
+      setLoading(false)
     }
   }
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg">
+      <DialogContent className="sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Monitor className="h-5 w-5" />
-            Assign Playlist
+            Assign Playlist to {device.name}
           </DialogTitle>
-          <DialogDescription>Assign a playlist to {device.name}</DialogDescription>
+          <DialogDescription>Select a published playlist to assign to this screen</DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4">
           {/* Current Assignment */}
-          {currentPlaylist && (
-            <Card>
-              <CardHeader className="pb-3">
-                <CardTitle className="text-sm flex items-center gap-2">
-                  <Play className="h-4 w-4" />
-                  Currently Playing
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="font-medium">{currentPlaylist.name}</p>
-                    <p className="text-sm text-gray-500">
-                      {currentPlaylist.items} items • {currentPlaylist.duration}
-                    </p>
-                  </div>
-                  <Badge className={getStatusColor(currentPlaylist.status)}>{currentPlaylist.status}</Badge>
+          {device.current_playlist && (
+            <div className="p-3 bg-blue-50 border border-blue-200 rounded-md">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-blue-900">Currently Assigned:</p>
+                  <p className="text-sm text-blue-700">{device.current_playlist}</p>
                 </div>
                 <Button
                   variant="outline"
                   size="sm"
                   onClick={handleUnassign}
-                  disabled={isLoading}
-                  className="mt-3 w-full bg-transparent"
+                  disabled={loading}
+                  className="text-red-600 hover:text-red-700 bg-transparent"
                 >
-                  Remove Assignment
+                  <X className="h-4 w-4 mr-1" />
+                  Unassign
                 </Button>
-              </CardContent>
-            </Card>
+              </div>
+            </div>
           )}
 
           {/* Playlist Selection */}
-          <div className="space-y-2">
-            <Label>Select Playlist</Label>
-            {isLoadingPlaylists ? (
-              <div className="flex items-center justify-center py-4">
-                <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary"></div>
-              </div>
-            ) : (
-              <Select value={selectedPlaylistId} onValueChange={setSelectedPlaylistId}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Choose a playlist to assign" />
-                </SelectTrigger>
-                <SelectContent>
+          {fetchingPlaylists ? (
+            <div className="text-center py-4">Loading playlists...</div>
+          ) : playlists.length === 0 ? (
+            <div className="text-center py-8">
+              <Play className="h-12 w-12 mx-auto text-gray-400 mb-4" />
+              <h3 className="text-lg font-medium text-gray-900 mb-2">No Published Playlists</h3>
+              <p className="text-gray-500 mb-4">
+                You need to publish at least one playlist before you can assign it to a screen.
+              </p>
+              <p className="text-sm text-gray-400">Go to Playlists → Create/Edit a playlist → Publish it</p>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              <h4 className="font-medium">Available Playlists:</h4>
+              <RadioGroup value={selectedPlaylistId} onValueChange={setSelectedPlaylistId}>
+                <div className="grid gap-3">
                   {playlists.map((playlist) => (
-                    <SelectItem key={playlist.id} value={playlist.id}>
-                      <div className="flex items-center gap-2">
-                        <span>{playlist.name}</span>
-                        <Badge variant="outline" className="text-xs">
-                          {playlist.items} items
-                        </Badge>
-                      </div>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            )}
-          </div>
-
-          {/* Selected Playlist Preview */}
-          {selectedPlaylistId && (
-            <Card>
-              <CardHeader className="pb-3">
-                <CardTitle className="text-sm">Playlist Preview</CardTitle>
-              </CardHeader>
-              <CardContent>
-                {(() => {
-                  const selectedPlaylist = playlists.find((p) => p.id === selectedPlaylistId)
-                  if (!selectedPlaylist) return null
-
-                  return (
-                    <div className="space-y-2">
-                      <div className="flex items-center justify-between">
-                        <p className="font-medium">{selectedPlaylist.name}</p>
-                        <Badge className={getStatusColor(selectedPlaylist.status)}>{selectedPlaylist.status}</Badge>
-                      </div>
-                      {selectedPlaylist.description && (
-                        <p className="text-sm text-gray-600">{selectedPlaylist.description}</p>
-                      )}
-                      <div className="flex items-center gap-4 text-sm text-gray-500">
-                        <div className="flex items-center gap-1">
-                          <Play className="h-3 w-3" />
-                          {selectedPlaylist.items} items
-                        </div>
-                        <div className="flex items-center gap-1">
-                          <Clock className="h-3 w-3" />
-                          {selectedPlaylist.duration}
-                        </div>
-                        <div className="flex items-center gap-1">
-                          <Calendar className="h-3 w-3" />
-                          {selectedPlaylist.lastModified}
-                        </div>
-                      </div>
+                    <div key={playlist.id} className="flex items-center space-x-3">
+                      <RadioGroupItem value={playlist.id.toString()} id={`playlist-${playlist.id}`} />
+                      <Label htmlFor={`playlist-${playlist.id}`} className="flex-1 cursor-pointer">
+                        <Card className="hover:bg-gray-50">
+                          <CardHeader className="pb-2">
+                            <div className="flex items-center justify-between">
+                              <CardTitle className="text-base">{playlist.name}</CardTitle>
+                              <Badge className="bg-green-100 text-green-800">Published</Badge>
+                            </div>
+                            {playlist.description && (
+                              <CardDescription className="text-sm">{playlist.description}</CardDescription>
+                            )}
+                          </CardHeader>
+                          <CardContent className="pt-0">
+                            <div className="flex items-center gap-4 text-sm text-gray-600">
+                              <div className="flex items-center gap-1">
+                                <Play className="h-3 w-3" />
+                                {playlist.items} items
+                              </div>
+                              <div className="flex items-center gap-1">
+                                <Clock className="h-3 w-3" />
+                                {playlist.duration}
+                              </div>
+                            </div>
+                          </CardContent>
+                        </Card>
+                      </Label>
                     </div>
-                  )
-                })()}
-              </CardContent>
-            </Card>
+                  ))}
+                </div>
+              </RadioGroup>
+            </div>
           )}
 
-          {/* Device Status */}
-          <div className="bg-gray-50 p-3 rounded-lg">
-            <div className="flex items-center justify-between text-sm">
-              <span className="text-gray-600">Device Status:</span>
-              <Badge variant={device.status === "online" ? "default" : "secondary"}>{device.status}</Badge>
-            </div>
-            {device.location && (
-              <div className="flex items-center justify-between text-sm mt-1">
-                <span className="text-gray-600">Location:</span>
-                <span>{device.location}</span>
-              </div>
-            )}
+          <div className="flex justify-end space-x-2">
+            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleAssign} disabled={loading || !selectedPlaylistId || playlists.length === 0}>
+              {loading ? "Assigning..." : "Assign Playlist"}
+            </Button>
           </div>
         </div>
-
-        <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
-            Cancel
-          </Button>
-          <Button onClick={handleAssign} disabled={!selectedPlaylistId || isLoading}>
-            {isLoading ? "Assigning..." : "Assign Playlist"}
-          </Button>
-        </DialogFooter>
       </DialogContent>
     </Dialog>
   )

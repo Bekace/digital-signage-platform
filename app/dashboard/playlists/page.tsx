@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { Plus, Play, MoreHorizontal, Edit, Trash2, Copy, Clock, Monitor } from "lucide-react"
+import { Plus, Play, MoreHorizontal, Edit, Trash2, Copy, Clock, Monitor, Upload } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -9,6 +9,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { Badge } from "@/components/ui/badge"
 import { DashboardLayout } from "@/components/dashboard-layout"
 import { CreatePlaylistDialog } from "@/components/create-playlist-dialog"
+import { PublishPlaylistDialog } from "@/components/publish-playlist-dialog"
 import { toast } from "@/hooks/use-toast"
 
 interface Playlist {
@@ -24,6 +25,8 @@ interface Playlist {
 
 export default function PlaylistsPage() {
   const [showCreateDialog, setShowCreateDialog] = useState(false)
+  const [showPublishDialog, setShowPublishDialog] = useState(false)
+  const [selectedPlaylist, setSelectedPlaylist] = useState<Playlist | null>(null)
   const [playlists, setPlaylists] = useState<Playlist[]>([])
   const [loading, setLoading] = useState(true)
 
@@ -70,6 +73,42 @@ export default function PlaylistsPage() {
     setShowCreateDialog(false)
   }
 
+  const handlePlaylistPublished = () => {
+    fetchPlaylists()
+    setShowPublishDialog(false)
+    setSelectedPlaylist(null)
+  }
+
+  const handlePublishClick = (playlist: Playlist) => {
+    setSelectedPlaylist(playlist)
+    setShowPublishDialog(true)
+  }
+
+  const handleUnpublish = async (playlistId: number) => {
+    try {
+      const response = await fetch(`/api/playlists/${playlistId}/unpublish`, {
+        method: "POST",
+      })
+
+      if (response.ok) {
+        toast({
+          title: "Success",
+          description: "Playlist unpublished successfully",
+        })
+        fetchPlaylists()
+      } else {
+        throw new Error("Failed to unpublish playlist")
+      }
+    } catch (error) {
+      console.error("Unpublish error:", error)
+      toast({
+        title: "Error",
+        description: "Failed to unpublish playlist",
+        variant: "destructive",
+      })
+    }
+  }
+
   if (loading) {
     return (
       <DashboardLayout>
@@ -85,7 +124,7 @@ export default function PlaylistsPage() {
       <div className="space-y-6">
         <div className="flex justify-between items-center">
           <div>
-            <h1 className="text-3xl font-bold">Playlists ----bekace</h1>
+            <h1 className="text-3xl font-bold">Playlists</h1>
             <p className="text-gray-600">Create and manage content playlists for your screens</p>
           </div>
           <Button onClick={() => setShowCreateDialog(true)}>
@@ -107,7 +146,7 @@ export default function PlaylistsPage() {
           </Card>
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Active</CardTitle>
+              <CardTitle className="text-sm font-medium">Published</CardTitle>
               <div className="w-2 h-2 bg-green-500 rounded-full"></div>
             </CardHeader>
             <CardContent>
@@ -173,6 +212,17 @@ export default function PlaylistsPage() {
                         <Edit className="h-4 w-4 mr-2" />
                         Edit
                       </DropdownMenuItem>
+                      {playlist.status === "draft" ? (
+                        <DropdownMenuItem onClick={() => handlePublishClick(playlist)}>
+                          <Upload className="h-4 w-4 mr-2" />
+                          Publish
+                        </DropdownMenuItem>
+                      ) : (
+                        <DropdownMenuItem onClick={() => handleUnpublish(playlist.id)}>
+                          <Upload className="h-4 w-4 mr-2" />
+                          Unpublish
+                        </DropdownMenuItem>
+                      )}
                       <DropdownMenuItem>
                         <Copy className="h-4 w-4 mr-2" />
                         Duplicate
@@ -230,9 +280,15 @@ export default function PlaylistsPage() {
                     <Button variant="outline" size="sm" className="flex-1 bg-transparent">
                       Edit
                     </Button>
-                    <Button size="sm" className="flex-1">
-                      {playlist.status === "draft" ? "Publish" : "Preview"}
-                    </Button>
+                    {playlist.status === "draft" ? (
+                      <Button size="sm" className="flex-1" onClick={() => handlePublishClick(playlist)}>
+                        Publish
+                      </Button>
+                    ) : (
+                      <Button size="sm" className="flex-1">
+                        Preview
+                      </Button>
+                    )}
                   </div>
                 </CardContent>
               </Card>
@@ -245,6 +301,15 @@ export default function PlaylistsPage() {
           onOpenChange={setShowCreateDialog}
           onPlaylistCreated={handlePlaylistCreated}
         />
+
+        {selectedPlaylist && (
+          <PublishPlaylistDialog
+            open={showPublishDialog}
+            onOpenChange={setShowPublishDialog}
+            playlist={selectedPlaylist}
+            onPlaylistPublished={handlePlaylistPublished}
+          />
+        )}
       </div>
     </DashboardLayout>
   )
