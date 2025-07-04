@@ -141,7 +141,7 @@ export default function MediaPage() {
       <DashboardLayout>
         <div className="space-y-6">
           <div className="flex justify-between items-center">
-            <h1 className="text-3xl font-bold">Media Library</h1>
+            <h1 className="text-3xl font-bold">Media Library BEKACE</h1>
           </div>
           <div className="grid gap-4 md:grid-cols-4">
             {[...Array(8)].map((_, i) => (
