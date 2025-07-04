@@ -1,21 +1,22 @@
 import { cookies } from "next/headers"
-import { getDb } from "@/lib/db"
 import jwt from "jsonwebtoken"
+import { getDb } from "./db"
+
+const JWT_SECRET = process.env.JWT_SECRET || "your-secret-key"
 
 export interface User {
-  id: string
+  id: number
   email: string
   first_name: string
   last_name: string
-  company?: string
+  company: string
+  role: string
   plan: string
-  created_at: string
-  is_admin?: boolean
 }
 
 export async function getCurrentUser(): Promise<User | null> {
   try {
-    const cookieStore = await cookies()
+    const cookieStore = cookies()
     const token = cookieStore.get("auth-token")?.value
 
     if (!token) {
@@ -23,15 +24,12 @@ export async function getCurrentUser(): Promise<User | null> {
       return null
     }
 
-    // Verify JWT token
-    const decoded = jwt.verify(token, process.env.JWT_SECRET!) as { userId: string; email: string }
-    console.log("Token decoded:", { userId: decoded.userId })
+    const decoded = jwt.verify(token, JWT_SECRET) as any
+    console.log("Token decoded:", decoded)
 
     const sql = getDb()
-
-    // Get user from database
     const users = await sql`
-      SELECT id, email, first_name, last_name, company, plan, created_at, is_admin
+      SELECT id, email, first_name, last_name, company, role, plan
       FROM users 
       WHERE id = ${decoded.userId}
       LIMIT 1
@@ -42,29 +40,19 @@ export async function getCurrentUser(): Promise<User | null> {
       return null
     }
 
-    console.log("User found:", users[0].email)
-    return users[0] as User
+    const user = users[0]
+    console.log("User found:", user.email)
+    return user
   } catch (error) {
-    console.error("Error getting current user:", error)
+    console.error("Auth error:", error)
     return null
   }
 }
 
-export async function requireAuth(): Promise<User> {
-  const user = await getCurrentUser()
-  if (!user) {
-    throw new Error("Authentication required")
-  }
-  return user
+export function generateToken(userId: number): string {
+  return jwt.sign({ userId }, JWT_SECRET, { expiresIn: "7d" })
 }
 
-export async function requireAdmin(): Promise<User> {
-  const user = await getCurrentUser()
-  if (!user) {
-    throw new Error("Authentication required")
-  }
-  if (!user.is_admin) {
-    throw new Error("Admin access required")
-  }
-  return user
+export function verifyToken(token: string): any {
+  return jwt.verify(token, JWT_SECRET)
 }

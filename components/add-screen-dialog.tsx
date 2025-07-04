@@ -1,108 +1,67 @@
 "use client"
 
+import React from "react"
+
 import { useState, useEffect } from "react"
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Card, CardContent } from "@/components/ui/card"
-import { Copy, RefreshCw, AlertCircle, CheckCircle } from "lucide-react"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Badge } from "@/components/ui/badge"
+import { Alert, AlertDescription } from "@/components/ui/alert"
+import { Loader2, Monitor, Smartphone, Tv, CheckCircle, Copy, RefreshCw } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 
 interface AddScreenDialogProps {
-  open: boolean
-  onOpenChange: (open: boolean) => void
-  onDeviceAdded?: () => void
+  onDeviceAdded: () => void
 }
 
-export function AddScreenDialog({ open, onOpenChange, onDeviceAdded }: AddScreenDialogProps) {
+export function AddScreenDialog({ onDeviceAdded }: AddScreenDialogProps) {
+  const [open, setOpen] = useState(false)
   const [step, setStep] = useState(1)
-  const [deviceType, setDeviceType] = useState("")
-  const [screenName, setScreenName] = useState("")
-  const [location, setLocation] = useState("")
-  const [deviceCode, setDeviceCode] = useState("")
-  const [codeExpiry, setCodeExpiry] = useState<Date | null>(null)
   const [loading, setLoading] = useState(false)
+  const [deviceName, setDeviceName] = useState("")
+  const [deviceType, setDeviceType] = useState("")
+  const [location, setLocation] = useState("")
+  const [generatedCode, setGeneratedCode] = useState("")
+  const [deviceId, setDeviceId] = useState("")
+  const [isPolling, setIsPolling] = useState(false)
+  const [deviceConnected, setDeviceConnected] = useState(false)
   const [error, setError] = useState("")
-  const [authChecked, setAuthChecked] = useState(false)
-  const [isAuthenticated, setIsAuthenticated] = useState(false)
-  const [registrationStatus, setRegistrationStatus] = useState<"waiting" | "success" | "failed">("waiting")
   const { toast } = useToast()
 
-  // Check authentication when dialog opens
-  useEffect(() => {
-    if (open && !authChecked) {
-      checkAuthentication()
-    }
-  }, [open, authChecked])
+  const deviceTypes = [
+    { value: "web", label: "Web Browser", icon: Monitor },
+    { value: "android", label: "Android Device", icon: Smartphone },
+    { value: "tv", label: "Smart TV", icon: Tv },
+  ]
 
-  // Generate code when moving to step 2
-  useEffect(() => {
-    if (open && step === 2 && isAuthenticated && !deviceCode) {
-      generateDeviceCode()
-    }
-  }, [open, step, isAuthenticated, deviceCode])
-
-  // Poll for device registration
-  useEffect(() => {
-    let pollInterval: NodeJS.Timeout
-
-    if (step === 2 && deviceCode && registrationStatus === "waiting") {
-      pollInterval = setInterval(() => {
-        checkDeviceRegistration()
-      }, 3000) // Check every 3 seconds
-    }
-
-    return () => {
-      if (pollInterval) {
-        clearInterval(pollInterval)
-      }
-    }
-  }, [step, deviceCode, registrationStatus])
-
-  const checkAuthentication = async () => {
-    try {
-      console.log("[ADD SCREEN] Checking authentication...")
-      const response = await fetch("/api/auth/check", {
-        method: "GET",
-        credentials: "include",
-      })
-
-      const data = await response.json()
-      console.log("[ADD SCREEN] Auth check response:", data)
-
-      if (data.authenticated) {
-        setIsAuthenticated(true)
-        setAuthChecked(true)
-        console.log("[ADD SCREEN] User authenticated:", data.user.email)
-      } else {
-        setError("Please log in to add a screen")
-        setIsAuthenticated(false)
-        toast({
-          title: "Authentication Required",
-          description: "Please log in to add a screen",
-          variant: "destructive",
-        })
-      }
-    } catch (error) {
-      console.error("[ADD SCREEN] Auth check failed:", error)
-      setError("Authentication check failed")
-      setIsAuthenticated(false)
-      toast({
-        title: "Error",
-        description: "Failed to verify authentication",
-        variant: "destructive",
-      })
-    }
+  const resetDialog = () => {
+    setStep(1)
+    setDeviceName("")
+    setDeviceType("")
+    setLocation("")
+    setGeneratedCode("")
+    setDeviceId("")
+    setIsPolling(false)
+    setDeviceConnected(false)
+    setError("")
+    setLoading(false)
   }
 
-  const generateDeviceCode = async () => {
+  const handleNext = async () => {
+    if (!deviceName.trim() || !deviceType) {
+      setError("Please fill in all required fields")
+      return
+    }
+
     setLoading(true)
     setError("")
 
     try {
-      console.log("[ADD SCREEN] Generating pairing code for:", { screenName, deviceType })
+      console.log("Generating code for device:", { deviceName, deviceType, location })
 
       const response = await fetch("/api/devices/generate-code", {
         method: "POST",
@@ -110,30 +69,36 @@ export function AddScreenDialog({ open, onOpenChange, onDeviceAdded }: AddScreen
           "Content-Type": "application/json",
         },
         credentials: "include",
+        body: JSON.stringify({
+          name: deviceName,
+          type: deviceType,
+          location: location || null,
+        }),
       })
 
       const data = await response.json()
-      console.log("[ADD SCREEN] Generate code response:", data)
+      console.log("Generate code response:", data)
 
-      if (data.success) {
-        setDeviceCode(data.code)
-        setCodeExpiry(new Date(data.expiresAt))
-        setRegistrationStatus("waiting")
-        toast({
-          title: "Device code generated",
-          description: `Code ${data.code} is ready for pairing`,
-        })
-      } else {
-        setError(data.message || data.error || "Failed to generate device code")
-        toast({
-          title: "Error",
-          description: data.message || data.error || "Failed to generate device code",
-          variant: "destructive",
-        })
+      if (!response.ok) {
+        throw new Error(data.error || `HTTP ${response.status}`)
       }
+
+      if (!data.success) {
+        throw new Error(data.error || "Failed to generate code")
+      }
+
+      setGeneratedCode(data.code)
+      setDeviceId(data.device?.id || "")
+      setStep(2)
+      startPolling()
+
+      toast({
+        title: "Device code generated",
+        description: `Code: ${data.code}`,
+      })
     } catch (error) {
-      console.error("[ADD SCREEN] Failed to generate device code:", error)
-      const errorMessage = "Network error - please check your connection"
+      console.error("Generate code error:", error)
+      const errorMessage = error instanceof Error ? error.message : "Failed to generate device code"
       setError(errorMessage)
       toast({
         title: "Error",
@@ -145,167 +110,86 @@ export function AddScreenDialog({ open, onOpenChange, onDeviceAdded }: AddScreen
     }
   }
 
-  const checkDeviceRegistration = async () => {
-    try {
-      const response = await fetch("/api/devices", {
-        method: "GET",
-        credentials: "include",
-      })
-
-      const data = await response.json()
-
-      if (data.success && data.devices) {
-        // Check if a new device was added recently (within last 30 seconds)
-        const recentDevices = data.devices.filter((device: any) => {
-          const deviceTime = new Date(device.lastSeen || device.created_at)
-          const now = new Date()
-          return now.getTime() - deviceTime.getTime() < 30000 // 30 seconds
+  const startPolling = () => {
+    setIsPolling(true)
+    const pollInterval = setInterval(async () => {
+      try {
+        const response = await fetch("/api/devices", {
+          credentials: "include",
         })
+        const data = await response.json()
 
-        if (recentDevices.length > 0) {
-          setRegistrationStatus("success")
-          toast({
-            title: "Device Connected!",
-            description: `${screenName} has been successfully connected`,
-          })
+        if (data.success && data.devices) {
+          const connectedDevice = data.devices.find(
+            (device: any) => device.name === deviceName && device.status === "online",
+          )
 
-          // Call the callback to refresh the devices list
-          if (onDeviceAdded) {
-            onDeviceAdded()
+          if (connectedDevice) {
+            setDeviceConnected(true)
+            setIsPolling(false)
+            clearInterval(pollInterval)
+            toast({
+              title: "Device connected!",
+              description: `${deviceName} is now online`,
+            })
           }
         }
+      } catch (error) {
+        console.error("Polling error:", error)
       }
-    } catch (error) {
-      console.error("[ADD SCREEN] Failed to check device registration:", error)
-    }
+    }, 3000)
+
+    // Stop polling after 5 minutes
+    setTimeout(() => {
+      clearInterval(pollInterval)
+      setIsPolling(false)
+    }, 300000)
   }
 
-  const copyToClipboard = async () => {
-    try {
-      await navigator.clipboard.writeText(deviceCode)
-      toast({
-        title: "Copied!",
-        description: "Device code copied to clipboard",
-      })
-    } catch (error) {
-      console.error("Failed to copy to clipboard:", error)
-      toast({
-        title: "Copy failed",
-        description: "Please copy the code manually",
-        variant: "destructive",
-      })
-    }
+  const copyCode = () => {
+    navigator.clipboard.writeText(generatedCode)
+    toast({
+      title: "Code copied",
+      description: "Device code copied to clipboard",
+    })
   }
 
-  const handleNext = () => {
-    if (step === 1 && deviceType && screenName.trim() && isAuthenticated) {
-      setStep(2)
-    }
+  const handleFinish = () => {
+    setOpen(false)
+    resetDialog()
+    onDeviceAdded()
   }
 
-  const handleClose = () => {
-    setStep(1)
-    setDeviceType("")
-    setScreenName("")
-    setLocation("")
-    setDeviceCode("")
-    setCodeExpiry(null)
-    setError("")
-    setAuthChecked(false)
-    setIsAuthenticated(false)
-    setRegistrationStatus("waiting")
-    onOpenChange(false)
-  }
-
-  const getDeviceInstructions = () => {
-    switch (deviceType) {
-      case "fire_tv":
-        return [
-          "Install the SignageCloud app on your Fire TV Stick",
-          "Launch the app and you'll see a setup screen",
-          "Enter the 6-digit code shown below",
-          "The device will automatically connect and start displaying content",
-        ]
-      case "android_tv":
-        return [
-          "Install the SignageCloud app on your Android TV",
-          "Open the app and navigate to the setup screen",
-          "Enter the 6-digit code shown below",
-          "Your Android TV will connect and begin showing your content",
-        ]
-      case "web_browser":
-        return [
-          "Open a web browser on your display device",
-          "Navigate to: https://player.signagecloud.com",
-          "Enter the 6-digit code shown below",
-          "The browser will enter fullscreen mode and display your content",
-        ]
-      case "raspberry_pi":
-        return [
-          "Install the SignageCloud player on your Raspberry Pi",
-          "Run the setup command and enter the 6-digit code below",
-          "The Pi will connect and start displaying your content",
-        ]
-      case "windows":
-        return [
-          "Download and install the SignageCloud Windows app",
-          "Launch the app and enter the 6-digit code below",
-          "The app will connect and display your content in fullscreen",
-        ]
-      case "mac":
-        return [
-          "Download and install the SignageCloud Mac app",
-          "Launch the app and enter the 6-digit code below",
-          "The app will connect and display your content in fullscreen",
-        ]
-      default:
-        return []
+  useEffect(() => {
+    if (!open) {
+      resetDialog()
     }
-  }
+  }, [open])
 
-  const getDeviceDisplayName = (type: string) => {
-    switch (type) {
-      case "fire_tv":
-        return "Amazon Fire TV Stick"
-      case "android_tv":
-        return "Android TV"
-      case "web_browser":
-        return "Web Browser"
-      case "raspberry_pi":
-        return "Raspberry Pi"
-      case "windows":
-        return "Windows PC"
-      case "mac":
-        return "Mac"
-      default:
-        return type
-    }
+  const getDeviceIcon = (type: string) => {
+    const deviceType = deviceTypes.find((dt) => dt.value === type)
+    return deviceType?.icon || Monitor
   }
 
   return (
-    <Dialog open={open} onOpenChange={handleClose}>
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>
+        <Button>Add Screen</Button>
+      </DialogTrigger>
       <DialogContent className="sm:max-w-[500px]">
         <DialogHeader>
           <DialogTitle>Add New Screen</DialogTitle>
-          <DialogDescription>Connect a new display device to your SignageCloud account</DialogDescription>
         </DialogHeader>
 
         {step === 1 && (
           <div className="space-y-4">
-            {error && (
-              <div className="flex items-center space-x-2 p-3 bg-red-50 border border-red-200 rounded-lg">
-                <AlertCircle className="h-4 w-4 text-red-600" />
-                <p className="text-sm text-red-700">{error}</p>
-              </div>
-            )}
-
             <div className="space-y-2">
-              <Label htmlFor="screenName">Screen Name *</Label>
+              <Label htmlFor="deviceName">Screen Name *</Label>
               <Input
-                id="screenName"
-                placeholder="e.g., Lobby Display, Reception TV"
-                value={screenName}
-                onChange={(e) => setScreenName(e.target.value)}
+                id="deviceName"
+                placeholder="e.g., Lobby Display"
+                value={deviceName}
+                onChange={(e) => setDeviceName(e.target.value)}
               />
             </div>
 
@@ -313,15 +197,20 @@ export function AddScreenDialog({ open, onOpenChange, onDeviceAdded }: AddScreen
               <Label htmlFor="deviceType">Device Type *</Label>
               <Select value={deviceType} onValueChange={setDeviceType}>
                 <SelectTrigger>
-                  <SelectValue placeholder="Select your device type" />
+                  <SelectValue placeholder="Select device type" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="fire_tv">Amazon Fire TV Stick</SelectItem>
-                  <SelectItem value="android_tv">Android TV</SelectItem>
-                  <SelectItem value="web_browser">Web Browser</SelectItem>
-                  <SelectItem value="raspberry_pi">Raspberry Pi</SelectItem>
-                  <SelectItem value="windows">Windows PC</SelectItem>
-                  <SelectItem value="mac">Mac</SelectItem>
+                  {deviceTypes.map((type) => {
+                    const Icon = type.icon
+                    return (
+                      <SelectItem key={type.value} value={type.value}>
+                        <div className="flex items-center gap-2">
+                          <Icon className="h-4 w-4" />
+                          {type.label}
+                        </div>
+                      </SelectItem>
+                    )
+                  })}
                 </SelectContent>
               </Select>
             </div>
@@ -336,11 +225,18 @@ export function AddScreenDialog({ open, onOpenChange, onDeviceAdded }: AddScreen
               />
             </div>
 
-            <div className="flex justify-end space-x-2">
-              <Button variant="outline" onClick={handleClose}>
+            {error && (
+              <Alert variant="destructive">
+                <AlertDescription>{error}</AlertDescription>
+              </Alert>
+            )}
+
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" onClick={() => setOpen(false)}>
                 Cancel
               </Button>
-              <Button onClick={handleNext} disabled={!deviceType || !screenName.trim() || !isAuthenticated}>
+              <Button onClick={handleNext} disabled={loading}>
+                {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                 Next
               </Button>
             </div>
@@ -348,78 +244,58 @@ export function AddScreenDialog({ open, onOpenChange, onDeviceAdded }: AddScreen
         )}
 
         {step === 2 && (
-          <div className="space-y-6">
-            {error && (
-              <div className="flex items-center space-x-2 p-3 bg-red-50 border border-red-200 rounded-lg">
-                <AlertCircle className="h-4 w-4 text-red-600" />
-                <p className="text-sm text-red-700">{error}</p>
-              </div>
-            )}
-
-            {registrationStatus === "success" && (
-              <div className="flex items-center space-x-2 p-3 bg-green-50 border border-green-200 rounded-lg">
-                <CheckCircle className="h-4 w-4 text-green-600" />
-                <p className="text-sm text-green-700">Device successfully connected!</p>
-              </div>
-            )}
-
-            <div className="space-y-2">
-              <h3 className="text-lg font-semibold">Setup Details</h3>
-              <div className="text-sm text-gray-600 space-y-1">
-                <p>
-                  <strong>Screen Name:</strong> {screenName}
-                </p>
-                <p>
-                  <strong>Device Type:</strong> {getDeviceDisplayName(deviceType)}
-                </p>
-                {location && (
-                  <p>
-                    <strong>Location:</strong> {location}
-                  </p>
-                )}
-              </div>
-            </div>
-
+          <div className="space-y-4">
             <Card>
-              <CardContent className="p-6">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  {React.createElement(getDeviceIcon(deviceType), { className: "h-5 w-5" })}
+                  {deviceName}
+                </CardTitle>
+                <CardDescription>
+                  {deviceType === "web" && "Open a web browser and navigate to your signage URL"}
+                  {deviceType === "android" && "Open the SignageCloud app on your Android device"}
+                  {deviceType === "tv" && "Open the SignageCloud app on your Smart TV"}
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
                 <div className="text-center space-y-4">
-                  <h3 className="text-lg font-semibold">Device Pairing Code</h3>
-                  <div className="flex items-center justify-center space-x-2">
-                    <div className="text-4xl font-mono font-bold tracking-wider bg-gray-100 px-4 py-2 rounded-lg">
-                      {loading ? "------" : deviceCode || "------"}
+                  <div>
+                    <Label className="text-sm font-medium">Enter this code on your device:</Label>
+                    <div className="flex items-center justify-center gap-2 mt-2">
+                      <div className="text-3xl font-mono font-bold bg-gray-100 px-4 py-2 rounded">{generatedCode}</div>
+                      <Button variant="outline" size="sm" onClick={copyCode}>
+                        <Copy className="h-4 w-4" />
+                      </Button>
                     </div>
-                    <Button variant="outline" size="sm" onClick={copyToClipboard} disabled={loading || !deviceCode}>
-                      <Copy className="h-4 w-4" />
-                    </Button>
                   </div>
-                  {codeExpiry && (
-                    <p className="text-sm text-gray-600">Code expires at {codeExpiry.toLocaleTimeString()}</p>
+
+                  {deviceConnected ? (
+                    <div className="flex items-center justify-center gap-2 text-green-600">
+                      <CheckCircle className="h-5 w-5" />
+                      <span className="font-medium">Device Connected!</span>
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      {isPolling && (
+                        <div className="flex items-center justify-center gap-2 text-blue-600">
+                          <RefreshCw className="h-4 w-4 animate-spin" />
+                          <span className="text-sm">Waiting for device to connect...</span>
+                        </div>
+                      )}
+                      <Badge variant="secondary">Status: Waiting for connection</Badge>
+                    </div>
                   )}
-                  {registrationStatus === "waiting" && (
-                    <p className="text-sm text-blue-600">Waiting for device to connect...</p>
-                  )}
-                  <Button variant="outline" size="sm" onClick={generateDeviceCode} disabled={loading}>
-                    <RefreshCw className={`h-4 w-4 mr-2 ${loading ? "animate-spin" : ""}`} />
-                    {loading ? "Generating..." : "Generate New Code"}
-                  </Button>
                 </div>
               </CardContent>
             </Card>
 
-            <div className="space-y-3">
-              <h4 className="font-medium">Setup Instructions:</h4>
-              <ol className="list-decimal list-inside space-y-2 text-sm">
-                {getDeviceInstructions().map((instruction, index) => (
-                  <li key={index}>{instruction}</li>
-                ))}
-              </ol>
-            </div>
-
-            <div className="flex justify-end space-x-2">
+            <div className="flex justify-end gap-2">
               <Button variant="outline" onClick={() => setStep(1)}>
                 Back
               </Button>
-              <Button onClick={handleClose}>{registrationStatus === "success" ? "Complete" : "Done"}</Button>
+              <Button onClick={handleFinish} disabled={!deviceConnected}>
+                {deviceConnected ? "Finish" : "Skip for Now"}
+              </Button>
             </div>
           </div>
         )}
