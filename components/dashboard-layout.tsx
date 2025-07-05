@@ -4,7 +4,7 @@ import type React from "react"
 import { useState, useEffect } from "react"
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
-import { Monitor, LayoutDashboard, ImageIcon, Play, Settings, Menu, LogOut } from "lucide-react"
+import { Monitor, LayoutDashboard, ImageIcon, Play, Settings, Menu, LogOut, Plus } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { Sheet, SheetContent } from "@/components/ui/sheet"
@@ -31,18 +31,26 @@ interface UserProfile {
   plan: string
 }
 
+interface Playlist {
+  id: number
+  name: string
+  status: string
+}
+
 export function DashboardLayout({ children }: DashboardLayoutProps) {
   const pathname = usePathname()
   const router = useRouter()
   const { toast } = useToast()
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [user, setUser] = useState<UserProfile | null>(null)
+  const [playlists, setPlaylists] = useState<Playlist[]>([])
   const [isLoggingOut, setIsLoggingOut] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
 
   // Fetch user profile on mount
   useEffect(() => {
     fetchUserProfile()
+    fetchPlaylists()
   }, [])
 
   const fetchUserProfile = async () => {
@@ -98,6 +106,31 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
       }
     } finally {
       setIsLoading(false)
+    }
+  }
+
+  const fetchPlaylists = async () => {
+    try {
+      const response = await fetch("/api/playlists")
+      if (response.ok) {
+        const data = await response.json()
+        setPlaylists(data.playlists || [])
+      } else {
+        // Fallback to mock data
+        setPlaylists([
+          { id: 1, name: "Morning Announcements", status: "active" },
+          { id: 2, name: "Product Showcase", status: "draft" },
+          { id: 3, name: "Emergency Alerts", status: "active" },
+        ])
+      }
+    } catch (error) {
+      console.error("Failed to fetch playlists:", error)
+      // Use mock data as fallback
+      setPlaylists([
+        { id: 1, name: "Morning Announcements", status: "active" },
+        { id: 2, name: "Product Showcase", status: "draft" },
+        { id: 3, name: "Emergency Alerts", status: "active" },
+      ])
     }
   }
 
@@ -195,6 +228,45 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
                   </Link>
                 )
               })}
+
+              {/* Playlists Section */}
+              {pathname.startsWith("/dashboard/playlists") && (
+                <div className="mt-6 pt-4 border-t">
+                  <div className="flex items-center justify-between px-3 mb-2">
+                    <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Playlists</span>
+                    <Link href="/dashboard/playlists">
+                      <Button variant="ghost" size="sm" className="h-6 w-6 p-0">
+                        <Plus className="h-3 w-3" />
+                      </Button>
+                    </Link>
+                  </div>
+                  <div className="space-y-1">
+                    {playlists.map((playlist) => {
+                      const playlistPath = `/dashboard/playlists/${playlist.id}/edit`
+                      const isPlaylistActive = pathname === playlistPath
+                      return (
+                        <Link
+                          key={playlist.id}
+                          href={playlistPath}
+                          className={`flex items-center px-3 py-2 rounded-lg text-sm transition-colors ${
+                            isPlaylistActive
+                              ? "bg-primary text-primary-foreground"
+                              : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
+                          }`}
+                          onClick={() => setSidebarOpen(false)}
+                        >
+                          <div
+                            className={`w-2 h-2 rounded-full mr-3 ${
+                              playlist.status === "active" ? "bg-green-500" : "bg-gray-400"
+                            }`}
+                          />
+                          <span className="truncate">{playlist.name}</span>
+                        </Link>
+                      )
+                    })}
+                  </div>
+                </div>
+              )}
             </nav>
             <div className="border-t p-4">
               <div className="flex items-center mb-4">
@@ -242,6 +314,44 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
                 </Link>
               )
             })}
+
+            {/* Playlists Section */}
+            {pathname.startsWith("/dashboard/playlists") && (
+              <div className="mt-6 pt-4 border-t">
+                <div className="flex items-center justify-between px-3 mb-2">
+                  <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Playlists</span>
+                  <Link href="/dashboard/playlists">
+                    <Button variant="ghost" size="sm" className="h-6 w-6 p-0">
+                      <Plus className="h-3 w-3" />
+                    </Button>
+                  </Link>
+                </div>
+                <div className="space-y-1">
+                  {playlists.map((playlist) => {
+                    const playlistPath = `/dashboard/playlists/${playlist.id}/edit`
+                    const isPlaylistActive = pathname === playlistPath
+                    return (
+                      <Link
+                        key={playlist.id}
+                        href={playlistPath}
+                        className={`flex items-center px-3 py-2 rounded-lg text-sm transition-colors ${
+                          isPlaylistActive
+                            ? "bg-primary text-primary-foreground"
+                            : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
+                        }`}
+                      >
+                        <div
+                          className={`w-2 h-2 rounded-full mr-3 ${
+                            playlist.status === "active" ? "bg-green-500" : "bg-gray-400"
+                          }`}
+                        />
+                        <span className="truncate">{playlist.name}</span>
+                      </Link>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
           </nav>
           <div className="border-t p-4">
             <div className="flex items-center mb-4">

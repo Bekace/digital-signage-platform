@@ -48,10 +48,17 @@ export default function PlaylistsPage() {
       const response = await fetch("/api/playlists")
       if (response.ok) {
         const data = await response.json()
-        setPlaylists(data.playlists || [])
+        const playlistsData = data.playlists || []
+        setPlaylists(playlistsData)
+
+        // Redirect to first playlist's edit page if playlists exist
+        if (playlistsData.length > 0) {
+          router.push(`/dashboard/playlists/${playlistsData[0].id}/edit`)
+          return
+        }
       } else {
         // Fallback to mock data
-        setPlaylists([
+        const mockPlaylists = [
           {
             id: 1,
             name: "New Playlist",
@@ -70,7 +77,12 @@ export default function PlaylistsPage() {
             updated_at: new Date().toISOString(),
             item_count: 5,
           },
-        ])
+        ]
+        setPlaylists(mockPlaylists)
+
+        // Redirect to first playlist's edit page
+        router.push(`/dashboard/playlists/${mockPlaylists[0].id}/edit`)
+        return
       }
     } catch (error) {
       console.error("Failed to fetch playlists:", error)
@@ -82,6 +94,10 @@ export default function PlaylistsPage() {
     } finally {
       setLoading(false)
     }
+  }
+
+  const handleCreatePlaylist = () => {
+    setShowCreateDialog(true)
   }
 
   const handleEdit = (playlist: Playlist) => {
@@ -144,6 +160,20 @@ export default function PlaylistsPage() {
     totalItems: playlists.reduce((sum, p) => sum + (p.item_count || 0), 0),
   }
 
+  // Show loading state while fetching
+  if (loading) {
+    return (
+      <DashboardLayout>
+        <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
+            <p className="text-gray-600">Loading playlists...</p>
+          </div>
+        </div>
+      </DashboardLayout>
+    )
+  }
+
   return (
     <DashboardLayout>
       <div className="space-y-6">
@@ -153,7 +183,7 @@ export default function PlaylistsPage() {
             <h1 className="text-3xl font-bold tracking-tight">Playlists</h1>
             <p className="text-gray-600">Manage your digital signage playlists</p>
           </div>
-          <Button onClick={() => setShowCreateDialog(true)}>
+          <Button onClick={handleCreatePlaylist}>
             <Plus className="h-4 w-4 mr-2" />
             Create Playlist
           </Button>
@@ -212,39 +242,19 @@ export default function PlaylistsPage() {
           </div>
         </div>
 
-        {/* Playlists Grid */}
-        {loading ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {[...Array(6)].map((_, i) => (
-              <Card key={i} className="animate-pulse">
-                <CardHeader>
-                  <div className="h-4 bg-gray-200 rounded w-3/4"></div>
-                  <div className="h-3 bg-gray-200 rounded w-1/2"></div>
-                </CardHeader>
-                <CardContent>
-                  <div className="h-3 bg-gray-200 rounded w-full mb-2"></div>
-                  <div className="h-3 bg-gray-200 rounded w-2/3"></div>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-        ) : filteredPlaylists.length === 0 ? (
+        {/* Empty State */}
+        {playlists.length === 0 ? (
           <div className="text-center py-12">
             <FileText className="h-12 w-12 mx-auto mb-4 text-gray-400" />
-            <h3 className="text-lg font-semibold text-gray-600 mb-2">
-              {searchQuery ? "No playlists found" : "No playlists yet"}
-            </h3>
-            <p className="text-gray-500 mb-4">
-              {searchQuery ? "Try adjusting your search terms" : "Create your first playlist to get started"}
-            </p>
-            {!searchQuery && (
-              <Button onClick={() => setShowCreateDialog(true)}>
-                <Plus className="h-4 w-4 mr-2" />
-                Create Playlist
-              </Button>
-            )}
+            <h3 className="text-lg font-semibold text-gray-600 mb-2">No playlists yet</h3>
+            <p className="text-gray-500 mb-4">Create your first playlist to get started</p>
+            <Button onClick={handleCreatePlaylist}>
+              <Plus className="h-4 w-4 mr-2" />
+              Create Playlist
+            </Button>
           </div>
         ) : (
+          /* Playlists Grid */
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {filteredPlaylists.map((playlist) => (
               <Card key={playlist.id} className="hover:shadow-lg transition-shadow">
