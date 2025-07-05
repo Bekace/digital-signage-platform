@@ -26,17 +26,41 @@ export default function PlaylistsPage() {
   const [showCreateDialog, setShowCreateDialog] = useState(false)
   const [playlists, setPlaylists] = useState<Playlist[]>([])
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
 
   const fetchPlaylists = async () => {
     try {
-      console.log("🎵 [FRONTEND] Fetching playlists...")
-      const response = await fetch("/api/playlists")
+      setLoading(true)
+      setError(null)
+
+      console.log("🎵 [FRONTEND] Starting playlist fetch...")
+      console.log("🎵 [FRONTEND] Current URL:", window.location.href)
+      console.log("🎵 [FRONTEND] Document cookies:", document.cookie)
+
+      const response = await fetch("/api/playlists", {
+        method: "GET",
+        credentials: "include", // Important: include cookies
+        headers: {
+          "Content-Type": "application/json",
+        },
+      })
 
       console.log("🎵 [FRONTEND] Response status:", response.status)
+      console.log("🎵 [FRONTEND] Response headers:", Object.fromEntries(response.headers.entries()))
 
       if (!response.ok) {
         const errorText = await response.text()
         console.error("🎵 [FRONTEND] Response not OK:", errorText)
+
+        if (response.status === 401) {
+          setError("Authentication required. Please log in again.")
+          // Redirect to login after a delay
+          setTimeout(() => {
+            window.location.href = "/login"
+          }, 2000)
+          return
+        }
+
         throw new Error(`HTTP ${response.status}: ${errorText}`)
       }
 
@@ -46,15 +70,27 @@ export default function PlaylistsPage() {
       if (data.success && Array.isArray(data.playlists)) {
         setPlaylists(data.playlists)
         console.log("🎵 [FRONTEND] Successfully loaded", data.playlists.length, "playlists")
+
+        if (data.playlists.length > 0) {
+          toast({
+            title: "Playlists loaded",
+            description: `Found ${data.playlists.length} playlist${data.playlists.length === 1 ? "" : "s"}`,
+          })
+        }
       } else {
         console.error("🎵 [FRONTEND] Invalid response format:", data)
-        throw new Error(data.error || "Invalid response format")
+        const errorMsg = data.error || "Invalid response format"
+        setError(errorMsg)
+        throw new Error(errorMsg)
       }
     } catch (error) {
       console.error("🎵 [FRONTEND] Failed to fetch playlists:", error)
+      const errorMessage = error instanceof Error ? error.message : "Failed to load playlists"
+      setError(errorMessage)
+
       toast({
-        title: "Error",
-        description: error instanceof Error ? error.message : "Failed to load playlists",
+        title: "Error loading playlists",
+        description: errorMessage,
         variant: "destructive",
       })
     } finally {
@@ -88,7 +124,44 @@ export default function PlaylistsPage() {
     return (
       <DashboardLayout>
         <div className="space-y-6">
-          <div className="text-center">Loading playlists...</div>
+          <div className="flex items-center justify-center py-12">
+            <div className="text-center">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
+              <p className="text-gray-600">Loading playlists...</p>
+            </div>
+          </div>
+        </div>
+      </DashboardLayout>
+    )
+  }
+
+  if (error) {
+    return (
+      <DashboardLayout>
+        <div className="space-y-6">
+          <div className="flex justify-between items-center">
+            <div>
+              <h1 className="text-3xl font-bold">Playlists</h1>
+              <p className="text-gray-600">Create and manage content playlists for your screens</p>
+            </div>
+            <Button onClick={() => setShowCreateDialog(true)}>
+              <Plus className="h-4 w-4 mr-2" />
+              Create Playlist
+            </Button>
+          </div>
+
+          <Card>
+            <CardContent className="text-center py-8">
+              <div className="text-red-500 mb-4">
+                <Play className="h-12 w-12 mx-auto mb-2" />
+                <h3 className="text-lg font-medium mb-2">Error Loading Playlists</h3>
+                <p className="text-sm">{error}</p>
+              </div>
+              <Button onClick={fetchPlaylists} variant="outline">
+                Try Again
+              </Button>
+            </CardContent>
+          </Card>
         </div>
       </DashboardLayout>
     )
