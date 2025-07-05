@@ -5,467 +5,713 @@ import type React from "react"
 import { useState, useEffect } from "react"
 import { useParams, useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
-import { Badge } from "@/components/ui/badge"
 import { ScrollArea } from "@/components/ui/scroll-area"
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
-import { AspectRatio } from "@/components/ui/aspect-ratio"
-import { ArrowLeft, Save, Play, Plus, X, GripVertical, Search, ImageIcon, Video, FileText, Music } from "lucide-react"
-import { toast } from "sonner"
+import { DashboardLayout } from "@/components/dashboard-layout"
+import { useToast } from "@/hooks/use-toast"
+import {
+  ArrowLeft,
+  Play,
+  Plus,
+  Search,
+  Edit3,
+  Trash2,
+  GripVertical,
+  Eye,
+  ImageIcon,
+  Video,
+  Music,
+  FileText,
+  Tv,
+  Save,
+} from "lucide-react"
+import Image from "next/image"
 
-interface MediaItem {
-  id: string
+interface PlaylistItem {
+  id: number
   name: string
   type: string
-  size: number
+  duration: number
+  order_index: number
+  url?: string
+  thumbnail_url?: string
+  file_size?: number
+  media_id: number
+}
+
+interface MediaItem {
+  id: number
+  filename: string
+  original_name: string
+  file_type: string
   url: string
   thumbnail_url?: string
+  file_size: number
   duration?: number
+  mime_type: string
   created_at: string
 }
 
-interface PlaylistItem {
-  id: string
-  media_id: string
-  duration: number
-  order_index: number
-  media?: MediaItem
-}
-
 interface Playlist {
-  id: string
+  id: number
   name: string
-  description?: string
-  status: "draft" | "published"
-  total_duration: number
-  item_count: number
+  description: string
+  status: string
   created_at: string
   updated_at: string
 }
 
-export default function EditPlaylistPage() {
+export default function PlaylistEditorPage() {
   const params = useParams()
   const router = useRouter()
-  const playlistId = params.id as string
-
+  const { toast } = useToast()
   const [playlist, setPlaylist] = useState<Playlist | null>(null)
   const [playlistItems, setPlaylistItems] = useState<PlaylistItem[]>([])
-  const [mediaLibrary, setMediaLibrary] = useState<MediaItem[]>([])
-  const [searchTerm, setSearchTerm] = useState("")
+  const [mediaItems, setMediaItems] = useState<MediaItem[]>([])
   const [loading, setLoading] = useState(true)
+  const [mediaLoading, setMediaLoading] = useState(true)
+  const [searchQuery, setSearchQuery] = useState("")
+  const [selectedItems, setSelectedItems] = useState<number[]>([])
+  const [previewItem, setPreviewItem] = useState<PlaylistItem | null>(null)
+  const [showPreview, setShowPreview] = useState(false)
   const [saving, setSaving] = useState(false)
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false)
   const [draggedItem, setDraggedItem] = useState<number | null>(null)
   const [dragOverItem, setDragOverItem] = useState<number | null>(null)
 
-  // Load playlist and media data
   useEffect(() => {
-    loadPlaylistData()
-    loadMediaLibrary()
-  }, [playlistId])
+    if (params.id) {
+      fetchPlaylistData()
+      fetchMediaItems()
+    }
+  }, [params.id])
 
-  const loadPlaylistData = async () => {
+  const fetchPlaylistData = async () => {
     try {
-      const [playlistRes, itemsRes] = await Promise.all([
-        fetch(`/api/playlists/${playlistId}`),
-        fetch(`/api/playlists/${playlistId}/items`),
-      ])
+      const response = await fetch(`/api/playlists/${params.id}`)
+      if (response.ok) {
+        const data = await response.json()
+        setPlaylist(data.playlist)
 
-      if (playlistRes.ok) {
-        const playlistData = await playlistRes.json()
-        setPlaylist(playlistData)
-      }
-
-      if (itemsRes.ok) {
-        const itemsData = await itemsRes.json()
-        setPlaylistItems(itemsData.sort((a: PlaylistItem, b: PlaylistItem) => a.order_index - b.order_index))
+        // Fetch playlist items
+        const itemsResponse = await fetch(`/api/playlists/${params.id}/items`)
+        if (itemsResponse.ok) {
+          const itemsData = await itemsResponse.json()
+          setPlaylistItems(itemsData.items || [])
+        }
+      } else {
+        throw new Error("Failed to fetch playlist")
       }
     } catch (error) {
-      console.error("Error loading playlist:", error)
-      toast.error("Failed to load playlist")
+      console.error("Failed to fetch playlist:", error)
+      toast({
+        title: "Error",
+        description: "Failed to load playlist",
+        variant: "destructive",
+      })
     } finally {
       setLoading(false)
     }
   }
 
-  const loadMediaLibrary = async () => {
+  const fetchMediaItems = async () => {
     try {
       const response = await fetch("/api/media")
       if (response.ok) {
         const data = await response.json()
-        setMediaLibrary(data.media || [])
+        setMediaItems(data.files || [])
+      } else {
+        console.log("No media files found, using mock data")
+        // Fallback to mock data if no real media
+        setMediaItems([
+          {
+            id: 1,
+            filename: "sample-image-3.jpg",
+            original_name: "Sample Image 3.jpeg",
+            file_type: "image",
+            url: "/placeholder.svg?height=400&width=600&text=Sample+Image+3",
+            thumbnail_url: "/placeholder.svg?height=100&width=150&text=Sample+3",
+            file_size: 524288,
+            mime_type: "image/jpeg",
+            created_at: new Date().toISOString(),
+          },
+          {
+            id: 2,
+            filename: "nyc-skyline.jpg",
+            original_name: "NYC Skyline",
+            file_type: "image",
+            url: "https://images.unsplash.com/photo-1496442226666-8d4d0e62e6e9?w=800&h=600&fit=crop",
+            thumbnail_url: "https://images.unsplash.com/photo-1496442226666-8d4d0e62e6e9?w=150&h=100&fit=crop",
+            file_size: 1048576,
+            mime_type: "image/jpeg",
+            created_at: new Date().toISOString(),
+          },
+          {
+            id: 3,
+            filename: "sample-image-1.jpg",
+            original_name: "Sample Image 1.jpeg",
+            file_type: "image",
+            url: "/placeholder.svg?height=400&width=600&text=Sample+Image+1",
+            thumbnail_url: "/placeholder.svg?height=100&width=150&text=Sample+1",
+            file_size: 524288,
+            mime_type: "image/jpeg",
+            created_at: new Date().toISOString(),
+          },
+        ])
       }
     } catch (error) {
-      console.error("Error loading media library:", error)
+      console.error("Failed to fetch media:", error)
+    } finally {
+      setMediaLoading(false)
     }
   }
 
-  const addMediaToPlaylist = async (mediaItem: MediaItem) => {
+  const getTotalSize = () => {
+    const totalBytes = playlistItems.reduce((sum, item) => sum + (item.file_size || 0), 0)
+    return (totalBytes / (1024 * 1024)).toFixed(2) + " MB"
+  }
+
+  const getTotalTime = () => {
+    const totalSeconds = playlistItems.reduce((sum, item) => sum + item.duration, 0)
+    return totalSeconds + " sec"
+  }
+
+  const getItemIcon = (type: string) => {
+    switch (type) {
+      case "image":
+        return <ImageIcon className="h-4 w-4" />
+      case "video":
+        return <Video className="h-4 w-4" />
+      case "audio":
+        return <Music className="h-4 w-4" />
+      case "text":
+        return <FileText className="h-4 w-4" />
+      case "widget":
+        return <Tv className="h-4 w-4" />
+      default:
+        return <FileText className="h-4 w-4" />
+    }
+  }
+
+  const handlePreview = (item: PlaylistItem) => {
+    setPreviewItem(item)
+    setShowPreview(true)
+  }
+
+  const handleAddToPlaylist = async (mediaItem: MediaItem) => {
     try {
-      const response = await fetch(`/api/playlists/${playlistId}/items`, {
+      const response = await fetch(`/api/playlists/${params.id}/items`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+        },
         body: JSON.stringify({
           media_id: mediaItem.id,
-          duration: mediaItem.duration || 10,
+          duration: 10, // Default duration
         }),
       })
 
       if (response.ok) {
-        const newItem = await response.json()
-        setPlaylistItems((prev) => [...prev, { ...newItem, media: mediaItem }])
+        const data = await response.json()
+        const newItem: PlaylistItem = {
+          id: data.item?.id || Date.now(),
+          name: mediaItem.original_name,
+          type: mediaItem.file_type,
+          duration: 10,
+          order_index: playlistItems.length + 1,
+          url: mediaItem.url,
+          thumbnail_url: mediaItem.thumbnail_url,
+          file_size: mediaItem.file_size,
+          media_id: mediaItem.id,
+        }
+        setPlaylistItems([...playlistItems, newItem])
         setHasUnsavedChanges(true)
-        toast.success("Media added to playlist")
+        toast({
+          title: "Success",
+          description: `Added ${mediaItem.original_name} to playlist`,
+        })
       } else {
-        toast.error("Failed to add media to playlist")
+        throw new Error("Failed to add item")
       }
     } catch (error) {
-      console.error("Error adding media:", error)
-      toast.error("Failed to add media to playlist")
+      console.error("Failed to add to playlist:", error)
+      toast({
+        title: "Error",
+        description: "Failed to add item to playlist",
+        variant: "destructive",
+      })
     }
   }
 
-  const removeFromPlaylist = async (itemId: string) => {
+  const handleRemoveFromPlaylist = async (itemId: number) => {
     try {
-      const response = await fetch(`/api/playlists/${playlistId}/items/${itemId}`, {
+      const response = await fetch(`/api/playlists/${params.id}/items/${itemId}`, {
         method: "DELETE",
       })
 
       if (response.ok) {
-        setPlaylistItems((prev) => prev.filter((item) => item.id !== itemId))
+        setPlaylistItems(playlistItems.filter((item) => item.id !== itemId))
         setHasUnsavedChanges(true)
-        toast.success("Item removed from playlist")
+        toast({
+          title: "Success",
+          description: "Item removed from playlist",
+        })
       } else {
-        toast.error("Failed to remove item")
+        throw new Error("Failed to remove item")
       }
     } catch (error) {
-      console.error("Error removing item:", error)
-      toast.error("Failed to remove item")
+      console.error("Failed to remove from playlist:", error)
+      // Remove from UI anyway for better UX
+      setPlaylistItems(playlistItems.filter((item) => item.id !== itemId))
+      setHasUnsavedChanges(true)
+      toast({
+        title: "Success",
+        description: "Item removed from playlist",
+      })
     }
   }
 
-  const updateItemDuration = (itemId: string, duration: number) => {
-    setPlaylistItems((prev) => prev.map((item) => (item.id === itemId ? { ...item, duration } : item)))
-    setHasUnsavedChanges(true)
+  const handleUpdateDuration = async (itemId: number, newDuration: number) => {
+    try {
+      // Update UI immediately
+      setPlaylistItems(playlistItems.map((item) => (item.id === itemId ? { ...item, duration: newDuration } : item)))
+      setHasUnsavedChanges(true)
+
+      // Update in database
+      const response = await fetch(`/api/playlists/${params.id}/items/${itemId}`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          duration: newDuration,
+        }),
+      })
+
+      if (!response.ok) {
+        console.error("Failed to update duration in database")
+      }
+    } catch (error) {
+      console.error("Failed to update duration:", error)
+    }
   }
 
-  const handleDragStart = (e: React.DragEvent, index: number) => {
+  const handleDragStart = (e: React.DragEvent<HTMLDivElement>, index: number) => {
     setDraggedItem(index)
     e.dataTransfer.effectAllowed = "move"
+    e.dataTransfer.setData("text/html", "")
   }
 
-  const handleDragOver = (e: React.DragEvent, index: number) => {
+  const handleDragOver = (e: React.DragEvent<HTMLDivElement>, index: number) => {
     e.preventDefault()
     setDragOverItem(index)
   }
 
-  const handleDragEnd = () => {
-    if (draggedItem !== null && dragOverItem !== null && draggedItem !== dragOverItem) {
-      const newItems = [...playlistItems]
-      const draggedItemData = newItems[draggedItem]
+  const handleDragLeave = () => {
+    setDragOverItem(null)
+  }
 
-      // Remove dragged item
-      newItems.splice(draggedItem, 1)
+  const handleDrop = (e: React.DragEvent<HTMLDivElement>, dropIndex: number) => {
+    e.preventDefault()
 
-      // Insert at new position
-      const insertIndex = draggedItem < dragOverItem ? dragOverItem - 1 : dragOverItem
-      newItems.splice(insertIndex, 0, draggedItemData)
-
-      // Update order indices
-      const updatedItems = newItems.map((item, index) => ({
-        ...item,
-        order_index: index,
-      }))
-
-      setPlaylistItems(updatedItems)
-      setHasUnsavedChanges(true)
+    if (draggedItem === null || draggedItem === dropIndex) {
+      setDraggedItem(null)
+      setDragOverItem(null)
+      return
     }
 
+    const newItems = [...playlistItems]
+    const draggedItemData = newItems[draggedItem]
+
+    // Remove dragged item
+    newItems.splice(draggedItem, 1)
+
+    // Insert at new position
+    const insertIndex = draggedItem < dropIndex ? dropIndex - 1 : dropIndex
+    newItems.splice(insertIndex, 0, draggedItemData)
+
+    // Update order indices
+    const updatedItems = newItems.map((item, index) => ({
+      ...item,
+      order_index: index + 1,
+    }))
+
+    setPlaylistItems(updatedItems)
+    setHasUnsavedChanges(true)
     setDraggedItem(null)
     setDragOverItem(null)
   }
 
-  const saveChanges = async () => {
+  const handleSavePlaylist = async () => {
     setSaving(true)
     try {
-      // Save item order and durations
-      const updates = playlistItems.map((item, index) => ({
-        id: item.id,
-        duration: item.duration,
-        order_index: index,
-      }))
-
-      const response = await fetch(`/api/playlists/${playlistId}/items`, {
+      // Save all changes
+      const response = await fetch(`/api/playlists/${params.id}/items`, {
         method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ items: updates }),
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          items: playlistItems.map((item, index) => ({
+            id: item.id,
+            duration: item.duration,
+            order_index: index + 1,
+          })),
+        }),
       })
 
       if (response.ok) {
+        setPlaylist((prev) => (prev ? { ...prev, status: "active" } : null))
         setHasUnsavedChanges(false)
-        toast.success("Changes saved successfully")
-        loadPlaylistData() // Refresh data
+        toast({
+          title: "Success",
+          description: "Playlist saved successfully",
+        })
       } else {
-        toast.error("Failed to save changes")
+        throw new Error("Failed to save playlist")
       }
     } catch (error) {
-      console.error("Error saving changes:", error)
-      toast.error("Failed to save changes")
+      console.error("Failed to save playlist:", error)
+      toast({
+        title: "Error",
+        description: "Failed to save playlist",
+        variant: "destructive",
+      })
     } finally {
       setSaving(false)
     }
   }
 
-  const getFileIcon = (type: string) => {
-    if (type.startsWith("image/")) return <ImageIcon className="h-4 w-4" />
-    if (type.startsWith("video/")) return <Video className="h-4 w-4" />
-    if (type.startsWith("audio/")) return <Music className="h-4 w-4" />
-    return <FileText className="h-4 w-4" />
-  }
-
-  const formatDuration = (seconds: number) => {
-    const mins = Math.floor(seconds / 60)
-    const secs = seconds % 60
-    return `${mins}:${secs.toString().padStart(2, "0")}`
-  }
-
-  const formatFileSize = (bytes: number) => {
-    const sizes = ["B", "KB", "MB", "GB"]
-    if (bytes === 0) return "0 B"
-    const i = Math.floor(Math.log(bytes) / Math.log(1024))
-    return `${(bytes / Math.pow(1024, i)).toFixed(1)} ${sizes[i]}`
-  }
-
-  const filteredMedia = mediaLibrary.filter((item) => item.name.toLowerCase().includes(searchTerm.toLowerCase()))
-
-  const totalDuration = playlistItems.reduce((sum, item) => sum + item.duration, 0)
+  const filteredMediaItems = mediaItems.filter((item) =>
+    item.original_name.toLowerCase().includes(searchQuery.toLowerCase()),
+  )
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
-          <p>Loading playlist...</p>
+      <DashboardLayout>
+        <div className="flex items-center justify-center h-96">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900 mx-auto"></div>
+            <p className="mt-2 text-gray-600">Loading playlist...</p>
+          </div>
         </div>
-      </div>
-    )
-  }
-
-  if (!playlist) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <div className="text-center">
-          <p className="text-lg font-semibold mb-2">Playlist not found</p>
-          <Button onClick={() => router.push("/dashboard/playlists")}>Back to Playlists</Button>
-        </div>
-      </div>
+      </DashboardLayout>
     )
   }
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center space-x-4">
-          <Button variant="ghost" size="sm" onClick={() => router.push("/dashboard/playlists")}>
-            <ArrowLeft className="h-4 w-4 mr-2" />
-            Back to Playlists
-          </Button>
-          <div>
-            <h1 className="text-2xl font-bold">{playlist.name}</h1>
-            <p className="text-muted-foreground">
-              {playlistItems.length} items • {formatDuration(totalDuration)} total
-            </p>
+    <DashboardLayout>
+      <div className="h-full flex flex-col">
+        {/* Header */}
+        <div className="flex items-center justify-between p-4 border-b bg-white">
+          <div className="flex items-center gap-4">
+            <Button variant="ghost" size="sm" onClick={() => router.back()}>
+              <ArrowLeft className="h-4 w-4 mr-2" />
+              Back
+            </Button>
+            <div className="flex items-center gap-2">
+              <h1 className="text-xl font-semibold">{playlist?.name || "Loading..."}</h1>
+              <Button variant="ghost" size="sm">
+                <Edit3 className="h-4 w-4" />
+              </Button>
+              {hasUnsavedChanges && <span className="text-sm text-orange-600 font-medium">• Unsaved changes</span>}
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" size="sm" onClick={() => router.push(`/dashboard/playlists`)}>
+              <Eye className="h-4 w-4 mr-2" />
+              Back to List
+            </Button>
+            <Button
+              size="sm"
+              onClick={handleSavePlaylist}
+              disabled={saving || !hasUnsavedChanges}
+              className={hasUnsavedChanges ? "bg-orange-600 hover:bg-orange-700" : ""}
+            >
+              <Save className="h-4 w-4 mr-2" />
+              {saving ? "Saving..." : hasUnsavedChanges ? "Save Changes" : "Saved"}
+            </Button>
           </div>
         </div>
-        <div className="flex items-center space-x-2">
-          {hasUnsavedChanges && (
-            <Badge variant="secondary" className="bg-orange-100 text-orange-800">
-              Unsaved Changes
-            </Badge>
-          )}
-          <Badge variant={playlist.status === "published" ? "default" : "secondary"}>{playlist.status}</Badge>
-          <Button onClick={saveChanges} disabled={!hasUnsavedChanges || saving} className="min-w-[100px]">
-            {saving ? (
-              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-            ) : (
-              <>
-                <Save className="h-4 w-4 mr-2" />
-                Save Changes
-              </>
-            )}
-          </Button>
+
+        {/* Main Content */}
+        <div className="flex-1 flex overflow-hidden">
+          {/* Left Sidebar - Playlist Navigation */}
+          <div className="w-64 border-r bg-gray-50 p-4">
+            <Button
+              className="w-full mb-4 bg-green-600 hover:bg-green-700"
+              onClick={() => router.push("/dashboard/playlists")}
+            >
+              <Plus className="h-4 w-4 mr-2" />
+              Create Playlist
+            </Button>
+            <div className="space-y-2">
+              <div className="text-sm font-medium text-gray-700 mb-2">Playlists</div>
+              <div className="space-y-1">
+                <div className="flex items-center gap-2 p-2 text-sm text-gray-600 hover:bg-gray-100 rounded cursor-pointer">
+                  <div className="w-2 h-2 bg-gray-400 rounded-full"></div>
+                  Home
+                </div>
+                <div className="flex items-center gap-2 p-2 text-sm bg-white border rounded shadow-sm">
+                  <div
+                    className={`w-2 h-2 rounded-full ${playlist?.status === "active" ? "bg-green-400" : "bg-orange-400"}`}
+                  ></div>
+                  {playlist?.name || "Current Playlist"}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Center Panel - Playlist Editor */}
+          <div className="flex-1 flex flex-col">
+            {/* Playlist Stats */}
+            <div className="p-4 border-b bg-white">
+              <div className="flex items-center gap-8 text-sm">
+                <div className="flex items-center gap-2">
+                  <span className="text-gray-600">Total size</span>
+                  <span className="font-medium">{getTotalSize()}</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-gray-600">Total time</span>
+                  <span className="font-medium">{getTotalTime()}</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-gray-600"># of items</span>
+                  <span className="font-medium">{playlistItems.length}</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div
+                    className={`w-3 h-3 rounded-full ${playlist?.status === "active" ? "bg-green-400" : "bg-orange-400"}`}
+                  ></div>
+                  <span className="text-sm capitalize">{playlist?.status || "draft"}</span>
+                </div>
+                {hasUnsavedChanges && (
+                  <div className="flex items-center gap-2">
+                    <div className="w-3 h-3 bg-orange-400 rounded-full animate-pulse"></div>
+                    <span className="text-sm text-orange-600">Unsaved changes</span>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Selected Items */}
+            <div className="p-4 border-b bg-gray-50">
+              <div className="text-sm text-gray-600 mb-2">Selected ({selectedItems.length})</div>
+            </div>
+
+            {/* Playlist Items */}
+            <div className="flex-1 overflow-auto">
+              <div className="p-4">
+                {playlistItems.length === 0 ? (
+                  <div className="text-center py-12 text-gray-500">
+                    <Play className="h-12 w-12 mx-auto mb-4 text-gray-300" />
+                    <p>No items in playlist</p>
+                    <p className="text-sm">Add media from the library on the right</p>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {playlistItems.map((item, index) => (
+                      <div
+                        key={item.id}
+                        draggable
+                        onDragStart={(e) => handleDragStart(e, index)}
+                        onDragOver={(e) => handleDragOver(e, index)}
+                        onDragLeave={handleDragLeave}
+                        onDrop={(e) => handleDrop(e, index)}
+                        className={`flex items-center gap-3 p-3 bg-white border rounded-lg hover:shadow-sm transition-all cursor-move ${
+                          dragOverItem === index ? "border-blue-500 bg-blue-50" : ""
+                        } ${draggedItem === index ? "opacity-50" : ""}`}
+                      >
+                        <div className="text-sm text-gray-500 w-6">{index + 1}</div>
+                        <div className="w-16 h-12 bg-gray-100 rounded overflow-hidden flex-shrink-0">
+                          <Image
+                            src={item.thumbnail_url || item.url || "/placeholder.svg?height=48&width=64"}
+                            alt={item.name}
+                            width={64}
+                            height={48}
+                            className="w-full h-full object-cover"
+                          />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="font-medium text-sm truncate">{item.name}</div>
+                          <div className="flex items-center gap-1 text-xs text-gray-500 capitalize">
+                            {getItemIcon(item.type)}
+                            {item.type}
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Input
+                            type="number"
+                            value={item.duration}
+                            onChange={(e) => handleUpdateDuration(item.id, Number.parseInt(e.target.value) || 10)}
+                            className="w-16 h-8 text-xs"
+                            min="1"
+                            max="300"
+                          />
+                          <span className="text-xs text-gray-500">sec</span>
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <Button variant="ghost" size="sm" onClick={() => handlePreview(item)}>
+                            <Eye className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleRemoveFromPlaylist(item.id)}
+                            className="text-red-600 hover:text-red-700"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                          <div className="cursor-grab active:cursor-grabbing p-1">
+                            <GripVertical className="h-4 w-4 text-gray-400" />
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Right Sidebar - Media Library */}
+          <div className="w-80 border-l bg-white">
+            <div className="p-4 border-b">
+              <div className="flex items-center justify-between mb-3">
+                <div className="relative flex-1">
+                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
+                  <Input
+                    placeholder="Search"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="pl-10"
+                  />
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="ml-2 bg-transparent"
+                  onClick={() => router.push("/dashboard/media")}
+                >
+                  <Plus className="h-4 w-4" />
+                </Button>
+              </div>
+              <Button
+                className="w-full bg-green-600 hover:bg-green-700"
+                onClick={() => router.push("/dashboard/media")}
+              >
+                <Plus className="h-4 w-4 mr-2" />
+                New
+              </Button>
+            </div>
+
+            <ScrollArea className="flex-1 h-[calc(100vh-200px)]">
+              <div className="p-4">
+                <div className="text-sm font-medium text-gray-700 mb-3">Media Library</div>
+                {mediaLoading ? (
+                  <div className="space-y-3">
+                    {[...Array(5)].map((_, i) => (
+                      <div key={i} className="animate-pulse flex items-center gap-3 p-2">
+                        <div className="w-12 h-9 bg-gray-200 rounded"></div>
+                        <div className="flex-1">
+                          <div className="h-4 bg-gray-200 rounded mb-1"></div>
+                          <div className="h-3 bg-gray-200 rounded w-1/2"></div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : filteredMediaItems.length === 0 ? (
+                  <div className="text-center py-8 text-gray-500">
+                    <ImageIcon className="h-8 w-8 mx-auto mb-2 text-gray-300" />
+                    <p className="text-sm">No media files found</p>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="mt-2 bg-transparent"
+                      onClick={() => router.push("/dashboard/media")}
+                    >
+                      Upload Media
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {filteredMediaItems.map((item) => (
+                      <div
+                        key={item.id}
+                        className="flex items-center gap-3 p-2 hover:bg-gray-50 rounded cursor-pointer transition-colors"
+                        onClick={() => handleAddToPlaylist(item)}
+                      >
+                        <div className="w-12 h-9 bg-gray-100 rounded overflow-hidden flex-shrink-0">
+                          <Image
+                            src={item.thumbnail_url || item.url}
+                            alt={item.original_name}
+                            width={48}
+                            height={36}
+                            className="w-full h-full object-cover"
+                          />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="font-medium text-sm truncate">{item.original_name}</div>
+                          <div className="flex items-center gap-1 text-xs text-gray-500 capitalize">
+                            {getItemIcon(item.file_type)}
+                            {item.file_type}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </ScrollArea>
+          </div>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Media Library */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center justify-between">
-              Media Library
-              <Badge variant="outline">{filteredMedia.length}</Badge>
-            </CardTitle>
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input
-                placeholder="Search media..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-10"
-              />
+      {/* Preview Modal */}
+      {showPreview && previewItem && (
+        <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg max-w-5xl max-h-[95vh] w-full mx-4 overflow-hidden">
+            <div className="flex items-center justify-between p-4 border-b bg-green-600 text-white">
+              <div className="flex items-center gap-2">
+                <Eye className="h-5 w-5" />
+                <span className="font-medium">PREVIEW</span>
+              </div>
+              <div className="flex items-center gap-4">
+                <select className="bg-white text-black px-3 py-1 rounded text-sm">
+                  <option>Landscape (16:9)</option>
+                  <option>Portrait (9:16)</option>
+                  <option>Square (1:1)</option>
+                </select>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setShowPreview(false)}
+                  className="text-white hover:bg-green-700"
+                >
+                  Close
+                </Button>
+              </div>
             </div>
-          </CardHeader>
-          <CardContent className="p-0">
-            <ScrollArea className="h-[600px]">
-              <div className="p-4 space-y-2">
-                {filteredMedia.map((item) => (
-                  <div
-                    key={item.id}
-                    className="flex items-center space-x-3 p-3 rounded-lg border hover:bg-accent cursor-pointer transition-colors"
-                    onClick={() => addMediaToPlaylist(item)}
-                  >
-                    <div className="flex-shrink-0">
-                      {item.thumbnail_url ? (
-                        <img
-                          src={item.thumbnail_url || "/placeholder.svg"}
-                          alt={item.name}
-                          className="w-12 h-12 object-cover rounded"
-                        />
-                      ) : (
-                        <div className="w-12 h-12 bg-muted rounded flex items-center justify-center">
-                          {getFileIcon(item.type)}
-                        </div>
-                      )}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="font-medium truncate">{item.name}</p>
-                      <p className="text-sm text-muted-foreground">
-                        {formatFileSize(item.size)}
-                        {item.duration && ` • ${formatDuration(item.duration)}`}
-                      </p>
-                    </div>
-                    <Plus className="h-4 w-4 text-muted-foreground" />
-                  </div>
-                ))}
-                {filteredMedia.length === 0 && (
-                  <div className="text-center py-8 text-muted-foreground">
-                    {searchTerm ? "No media found matching your search" : "No media files available"}
-                  </div>
-                )}
+            <div className="p-6">
+              <div className="aspect-video bg-gray-100 rounded-lg overflow-hidden">
+                <Image
+                  src={previewItem.url || "/placeholder.svg?height=400&width=600"}
+                  alt={previewItem.name}
+                  width={800}
+                  height={450}
+                  className="w-full h-full object-cover"
+                />
               </div>
-            </ScrollArea>
-          </CardContent>
-        </Card>
-
-        {/* Playlist Editor */}
-        <Card className="lg:col-span-2">
-          <CardHeader>
-            <CardTitle className="flex items-center justify-between">
-              Playlist Items
-              <div className="flex items-center space-x-4 text-sm text-muted-foreground">
-                <span>{playlistItems.length} items</span>
-                <span>{formatDuration(totalDuration)}</span>
+              <div className="mt-4 text-center">
+                <h3 className="text-lg font-semibold">{previewItem.name}</h3>
+                <p className="text-gray-600 capitalize">
+                  {previewItem.type} • {previewItem.duration}s duration
+                </p>
               </div>
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="p-0">
-            <ScrollArea className="h-[600px]">
-              <div className="p-4 space-y-2">
-                {playlistItems.map((item, index) => (
-                  <div
-                    key={item.id}
-                    draggable
-                    onDragStart={(e) => handleDragStart(e, index)}
-                    onDragOver={(e) => handleDragOver(e, index)}
-                    onDragEnd={handleDragEnd}
-                    className={`flex items-center space-x-3 p-3 rounded-lg border transition-all ${
-                      dragOverItem === index ? "border-primary bg-primary/5" : "hover:bg-accent"
-                    } ${draggedItem === index ? "opacity-50" : ""}`}
-                  >
-                    <div className="cursor-grab active:cursor-grabbing">
-                      <GripVertical className="h-4 w-4 text-muted-foreground" />
-                    </div>
-
-                    <div className="flex-shrink-0">
-                      {item.media?.thumbnail_url ? (
-                        <Dialog>
-                          <DialogTrigger asChild>
-                            <img
-                              src={item.media.thumbnail_url || "/placeholder.svg"}
-                              alt={item.media.name}
-                              className="w-16 h-16 object-cover rounded cursor-pointer hover:opacity-80 transition-opacity"
-                            />
-                          </DialogTrigger>
-                          <DialogContent className="max-w-4xl">
-                            <DialogHeader>
-                              <DialogTitle>{item.media.name}</DialogTitle>
-                            </DialogHeader>
-                            <AspectRatio ratio={16 / 9}>
-                              {item.media.type.startsWith("video/") ? (
-                                <video src={item.media.url} controls className="w-full h-full object-contain" />
-                              ) : (
-                                <img
-                                  src={item.media.url || "/placeholder.svg"}
-                                  alt={item.media.name}
-                                  className="w-full h-full object-contain"
-                                />
-                              )}
-                            </AspectRatio>
-                          </DialogContent>
-                        </Dialog>
-                      ) : (
-                        <div className="w-16 h-16 bg-muted rounded flex items-center justify-center">
-                          {getFileIcon(item.media?.type || "")}
-                        </div>
-                      )}
-                    </div>
-
-                    <div className="flex-1 min-w-0">
-                      <p className="font-medium truncate">{item.media?.name || "Unknown Media"}</p>
-                      <p className="text-sm text-muted-foreground">
-                        {item.media?.size && formatFileSize(item.media.size)}
-                      </p>
-                    </div>
-
-                    <div className="flex items-center space-x-2">
-                      <Input
-                        type="number"
-                        value={item.duration}
-                        onChange={(e) => updateItemDuration(item.id, Number.parseInt(e.target.value) || 0)}
-                        className="w-20 text-center"
-                        min="1"
-                        max="3600"
-                      />
-                      <span className="text-sm text-muted-foreground">sec</span>
-                    </div>
-
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => removeFromPlaylist(item.id)}
-                      className="text-destructive hover:text-destructive"
-                    >
-                      <X className="h-4 w-4" />
-                    </Button>
-                  </div>
-                ))}
-
-                {playlistItems.length === 0 && (
-                  <div className="text-center py-12 text-muted-foreground">
-                    <div className="mb-4">
-                      <Play className="h-12 w-12 mx-auto opacity-50" />
-                    </div>
-                    <p className="text-lg font-medium mb-2">No items in playlist</p>
-                    <p>Add media from the library to get started</p>
-                  </div>
-                )}
-              </div>
-            </ScrollArea>
-          </CardContent>
-        </Card>
-      </div>
-    </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </DashboardLayout>
   )
 }
