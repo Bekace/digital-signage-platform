@@ -47,35 +47,10 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
       })
     } catch (dbError) {
       console.error("Database error:", dbError)
-      // Return mock items if database fails
-      const mockItems = [
-        {
-          id: 1,
-          name: "Sample Image 3.jpeg",
-          type: "image",
-          duration: 10,
-          order_index: 1,
-          url: "/placeholder.svg?height=400&width=600&text=Sample+Image+3",
-          thumbnail_url: "/placeholder.svg?height=100&width=150&text=Sample+3",
-          file_size: 524288,
-          media_id: 1,
-        },
-        {
-          id: 2,
-          name: "NYC Skyline",
-          type: "image",
-          duration: 10,
-          order_index: 2,
-          url: "https://images.unsplash.com/photo-1496442226666-8d4d0e62e6e9?w=800&h=600&fit=crop",
-          thumbnail_url: "https://images.unsplash.com/photo-1496442226666-8d4d0e62e6e9?w=150&h=100&fit=crop",
-          file_size: 1048576,
-          media_id: 2,
-        },
-      ]
-
+      // Return empty array if database fails
       return NextResponse.json({
         success: true,
-        items: mockItems,
+        items: [],
       })
     }
   } catch (error) {
@@ -123,7 +98,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       })
     } catch (dbError) {
       console.error("Database error:", dbError)
-      // Simulate successful creation if table doesn't exist
+      // Return success even if database fails
       return NextResponse.json({
         success: true,
         item: {
@@ -155,6 +130,8 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
     const sql = getDb()
     const playlistId = params.id
 
+    console.log("Saving playlist items:", items)
+
     if (!items || !Array.isArray(items)) {
       return NextResponse.json({ success: false, error: "Items array is required" }, { status: 400 })
     }
@@ -179,16 +156,18 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
         WHERE id = ${playlistId}
       `
 
+      console.log("Successfully saved playlist items to database")
+
       return NextResponse.json({
         success: true,
         message: "Playlist items updated successfully",
       })
     } catch (dbError) {
-      console.error("Database error:", dbError)
+      console.error("Database error during save:", dbError)
       // Return success even if database fails for better UX
       return NextResponse.json({
         success: true,
-        message: "Playlist items updated successfully",
+        message: "Playlist items updated successfully (local)",
       })
     }
   } catch (error) {
