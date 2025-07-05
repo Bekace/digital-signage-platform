@@ -15,6 +15,7 @@ interface Playlist {
   status: string
   created_at: string
   updated_at: string
+  item_count?: number
 }
 
 interface EditPlaylistDialogProps {
@@ -27,7 +28,7 @@ interface EditPlaylistDialogProps {
 export function EditPlaylistDialog({ open, onOpenChange, playlist, onPlaylistUpdated }: EditPlaylistDialogProps) {
   const [name, setName] = useState("")
   const [description, setDescription] = useState("")
-  const [saving, setSaving] = useState(false)
+  const [updating, setUpdating] = useState(false)
 
   useEffect(() => {
     if (playlist) {
@@ -36,10 +37,10 @@ export function EditPlaylistDialog({ open, onOpenChange, playlist, onPlaylistUpd
     }
   }, [playlist])
 
-  const handleSave = async () => {
+  const handleUpdate = async () => {
     if (!playlist || !name.trim()) return
 
-    setSaving(true)
+    setUpdating(true)
     try {
       const response = await fetch(`/api/playlists/${playlist.id}`, {
         method: "PATCH",
@@ -70,7 +71,7 @@ export function EditPlaylistDialog({ open, onOpenChange, playlist, onPlaylistUpd
         variant: "destructive",
       })
     } finally {
-      setSaving(false)
+      setUpdating(false)
     }
   }
 
@@ -82,13 +83,18 @@ export function EditPlaylistDialog({ open, onOpenChange, playlist, onPlaylistUpd
         </DialogHeader>
         <div className="space-y-4 py-4">
           <div className="space-y-2">
-            <Label htmlFor="name">Name</Label>
-            <Input id="name" value={name} onChange={(e) => setName(e.target.value)} placeholder="Enter playlist name" />
+            <Label htmlFor="edit-name">Name</Label>
+            <Input
+              id="edit-name"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="Enter playlist name"
+            />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="description">Description</Label>
+            <Label htmlFor="edit-description">Description</Label>
             <Textarea
-              id="description"
+              id="edit-description"
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               placeholder="Enter playlist description"
@@ -97,11 +103,11 @@ export function EditPlaylistDialog({ open, onOpenChange, playlist, onPlaylistUpd
           </div>
         </div>
         <div className="flex justify-end space-x-2">
-          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={saving}>
+          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={updating}>
             Cancel
           </Button>
-          <Button onClick={handleSave} disabled={saving || !name.trim()}>
-            {saving ? "Saving..." : "Save Changes"}
+          <Button onClick={handleUpdate} disabled={updating || !name.trim()}>
+            {updating ? "Updating..." : "Update Playlist"}
           </Button>
         </div>
       </DialogContent>

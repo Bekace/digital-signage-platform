@@ -1,17 +1,28 @@
 "use client"
 
 import { useState } from "react"
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
-import { Button } from "@/components/ui/button"
-import { Alert, AlertDescription } from "@/components/ui/alert"
-import { CheckCircle, AlertCircle, Upload } from "lucide-react"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
+import { Badge } from "@/components/ui/badge"
 import { toast } from "@/hooks/use-toast"
+import { Upload, UploadCloud } from "lucide-react"
 
 interface Playlist {
   id: number
   name: string
   description: string
   status: string
+  created_at: string
+  updated_at: string
+  item_count?: number
 }
 
 interface PublishPlaylistDialogProps {
@@ -34,26 +45,26 @@ export function PublishPlaylistDialog({
 
     setPublishing(true)
     try {
-      const response = await fetch(`/api/playlists/${playlist.id}/publish`, {
+      const action = playlist.status === "active" ? "unpublish" : "publish"
+      const response = await fetch(`/api/playlists/${playlist.id}/${action}`, {
         method: "POST",
       })
 
       if (response.ok) {
         toast({
           title: "Success",
-          description: "Playlist published successfully",
+          description: `Playlist ${action}ed successfully`,
         })
         onPlaylistPublished()
         onOpenChange(false)
       } else {
-        const error = await response.json()
-        throw new Error(error.message || "Failed to publish playlist")
+        throw new Error(`Failed to ${action} playlist`)
       }
     } catch (error) {
       console.error("Publish error:", error)
       toast({
         title: "Error",
-        description: error instanceof Error ? error.message : "Failed to publish playlist",
+        description: "Failed to update playlist status",
         variant: "destructive",
       })
     } finally {
@@ -61,46 +72,62 @@ export function PublishPlaylistDialog({
     }
   }
 
+  if (!playlist) return null
+
+  const isPublishing = playlist.status === "draft"
+  const action = isPublishing ? "publish" : "unpublish"
+  const actionTitle = isPublishing ? "Publish" : "Unpublish"
+
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[425px]">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <Upload className="h-5 w-5" />
-            Publish Playlist
-          </DialogTitle>
-        </DialogHeader>
-        <div className="space-y-4 py-4">
-          <div>
-            <h4 className="font-medium mb-2">Publishing "{playlist?.name}"</h4>
-            <p className="text-sm text-gray-600">
-              Once published, this playlist will be available for assignment to screens and devices.
-            </p>
-          </div>
+    <AlertDialog open={open} onOpenChange={onOpenChange}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle className="flex items-center gap-2">
+            {isPublishing ? <Upload className="h-5 w-5" /> : <UploadCloud className="h-5 w-5" />}
+            {actionTitle} Playlist
+          </AlertDialogTitle>
+          <AlertDialogDescription>
+            <div className="space-y-3">
+              <div>
+                Are you sure you want to {action} "{playlist.name}"?
+              </div>
 
-          <Alert>
-            <CheckCircle className="h-4 w-4" />
-            <AlertDescription>
-              Published playlists can be assigned to screens and will be visible to all users in your organization.
-            </AlertDescription>
-          </Alert>
+              <div className="bg-gray-50 p-3 rounded-lg space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-medium">Current Status:</span>
+                  <Badge variant={playlist.status === "active" ? "default" : "secondary"}>
+                    {playlist.status === "active" ? "Published" : "Draft"}
+                  </Badge>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-medium">Items:</span>
+                  <span className="text-sm">{playlist.item_count || 0}</span>
+                </div>
+              </div>
 
-          <Alert>
-            <AlertCircle className="h-4 w-4" />
-            <AlertDescription>
-              Make sure your playlist contains the media items you want before publishing.
-            </AlertDescription>
-          </Alert>
-        </div>
-        <div className="flex justify-end space-x-2">
-          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={publishing}>
-            Cancel
-          </Button>
-          <Button onClick={handlePublish} disabled={publishing}>
-            {publishing ? "Publishing..." : "Publish Playlist"}
-          </Button>
-        </div>
-      </DialogContent>
-    </Dialog>
+              {isPublishing ? (
+                <div className="text-sm text-green-700 bg-green-50 p-2 rounded">
+                  Publishing will make this playlist available to all assigned screens.
+                </div>
+              ) : (
+                <div className="text-sm text-orange-700 bg-orange-50 p-2 rounded">
+                  Unpublishing will remove this playlist from all screens and set it to draft mode.
+                </div>
+              )}
+            </div>
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel disabled={publishing}>Cancel</AlertDialogCancel>
+          <AlertDialogAction
+            onClick={handlePublish}
+            disabled={publishing}
+            className={isPublishing ? "bg-green-600 hover:bg-green-700" : "bg-orange-600 hover:bg-orange-700"}
+          >
+            {publishing ? `${actionTitle}ing...` : `${actionTitle} Playlist`}
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
   )
 }

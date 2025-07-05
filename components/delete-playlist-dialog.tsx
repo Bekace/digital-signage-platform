@@ -18,6 +18,9 @@ interface Playlist {
   name: string
   description: string
   status: string
+  created_at: string
+  updated_at: string
+  item_count?: number
 }
 
 interface DeletePlaylistDialogProps {
@@ -61,23 +64,26 @@ export function DeletePlaylistDialog({ open, onOpenChange, playlist, onPlaylistD
     }
   }
 
+  if (!playlist) return null
+
   return (
     <AlertDialog open={open} onOpenChange={onOpenChange}>
       <AlertDialogContent>
         <AlertDialogHeader>
           <AlertDialogTitle>Delete Playlist</AlertDialogTitle>
           <AlertDialogDescription>
-            Are you sure you want to delete "{playlist?.name}"? This action cannot be undone and will remove all
-            associated media items from this playlist.
+            Are you sure you want to delete "{playlist.name}"? This action cannot be undone and will remove all playlist
+            items.
+            {playlist.item_count && playlist.item_count > 0 && (
+              <span className="block mt-2 font-medium text-red-600">
+                This playlist contains {playlist.item_count} item{playlist.item_count !== 1 ? "s" : ""}.
+              </span>
+            )}
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
           <AlertDialogCancel disabled={deleting}>Cancel</AlertDialogCancel>
-          <AlertDialogAction
-            onClick={handleDelete}
-            disabled={deleting}
-            className="bg-red-600 hover:bg-red-700 focus:ring-red-600"
-          >
+          <AlertDialogAction onClick={handleDelete} disabled={deleting} className="bg-red-600 hover:bg-red-700">
             {deleting ? "Deleting..." : "Delete Playlist"}
           </AlertDialogAction>
         </AlertDialogFooter>
