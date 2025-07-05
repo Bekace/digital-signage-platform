@@ -11,15 +11,14 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
-import { toast } from "@/hooks/use-toast"
+import { useToast } from "@/hooks/use-toast"
+import { Loader2 } from "lucide-react"
 
 interface Playlist {
   id: number
   name: string
   description: string
   status: string
-  created_at: string
-  updated_at: string
   item_count?: number
 }
 
@@ -31,12 +30,13 @@ interface DeletePlaylistDialogProps {
 }
 
 export function DeletePlaylistDialog({ open, onOpenChange, playlist, onPlaylistDeleted }: DeletePlaylistDialogProps) {
-  const [deleting, setDeleting] = useState(false)
+  const [loading, setLoading] = useState(false)
+  const { toast } = useToast()
 
   const handleDelete = async () => {
     if (!playlist) return
 
-    setDeleting(true)
+    setLoading(true)
     try {
       const response = await fetch(`/api/playlists/${playlist.id}`, {
         method: "DELETE",
@@ -53,18 +53,15 @@ export function DeletePlaylistDialog({ open, onOpenChange, playlist, onPlaylistD
         throw new Error("Failed to delete playlist")
       }
     } catch (error) {
-      console.error("Delete error:", error)
       toast({
         title: "Error",
         description: "Failed to delete playlist",
         variant: "destructive",
       })
     } finally {
-      setDeleting(false)
+      setLoading(false)
     }
   }
-
-  if (!playlist) return null
 
   return (
     <AlertDialog open={open} onOpenChange={onOpenChange}>
@@ -72,19 +69,21 @@ export function DeletePlaylistDialog({ open, onOpenChange, playlist, onPlaylistD
         <AlertDialogHeader>
           <AlertDialogTitle>Delete Playlist</AlertDialogTitle>
           <AlertDialogDescription>
-            Are you sure you want to delete "{playlist.name}"? This action cannot be undone and will remove all playlist
-            items.
-            {playlist.item_count && playlist.item_count > 0 && (
-              <span className="block mt-2 font-medium text-red-600">
-                This playlist contains {playlist.item_count} item{playlist.item_count !== 1 ? "s" : ""}.
+            Are you sure you want to delete "{playlist?.name}"?
+            {playlist?.item_count && playlist.item_count > 0 && (
+              <span className="block mt-2 text-red-600 font-medium">
+                This playlist contains {playlist.item_count} item{playlist.item_count !== 1 ? "s" : ""} that will also
+                be removed.
               </span>
             )}
+            This action cannot be undone.
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <AlertDialogCancel disabled={deleting}>Cancel</AlertDialogCancel>
-          <AlertDialogAction onClick={handleDelete} disabled={deleting} className="bg-red-600 hover:bg-red-700">
-            {deleting ? "Deleting..." : "Delete Playlist"}
+          <AlertDialogCancel>Cancel</AlertDialogCancel>
+          <AlertDialogAction onClick={handleDelete} disabled={loading} className="bg-red-600 hover:bg-red-700">
+            {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+            Delete Playlist
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>
