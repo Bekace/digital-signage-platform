@@ -1,51 +1,61 @@
-import { type NextRequest, NextResponse } from "next/server"
-import { getDb } from "@/lib/db"
+import { NextResponse } from "next/server"
 import { getCurrentUser } from "@/lib/auth"
+import { getDb } from "@/lib/db"
 
-export async function POST(request: NextRequest, { params }: { params: { deviceId: string } }) {
+export async function POST(request: Request, { params }: { params: { deviceId: string } }) {
   try {
+    console.log(`Playback Control API: Starting request for device ${params.deviceId}`)
+
     const user = await getCurrentUser()
     if (!user) {
-      return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 })
+      return NextResponse.json({ success: false, error: "Authentication required" }, { status: 401 })
     }
 
     const body = await request.json()
     const { action } = body
 
-    if (!action || !["play", "pause"].includes(action)) {
-      return NextResponse.json({ success: false, error: "Invalid action" }, { status: 400 })
+    if (!action || !["playing", "paused"].includes(action)) {
+      return NextResponse.json(
+        { success: false, error: "Invalid action. Must be 'playing' or 'paused'" },
+        { status: 400 },
+      )
     }
 
     const sql = getDb()
 
-    // Update device status
-    const newStatus = action === "play" ? "playing" : "paused"
-    const updatedDevices = await sql`
-      UPDATE devices 
-      SET 
-        status = ${newStatus},
-        last_seen = CURRENT_TIMESTAMP,
-        updated_at = CURRENT_TIMESTAMP
+    // Check if device exists and belongs to user
+    const devices = await sql`
+      SELECT id, name FROM devices 
       WHERE id = ${params.deviceId} AND user_id = ${user.id}
-      RETURNING *
+      LIMIT 1
     `
 
-    if (updatedDevices.length === 0) {
+    if (devices.length === 0) {
       return NextResponse.json({ success: false, error: "Device not found" }, { status: 404 })
     }
 
+    // Update device status
+    await sql`
+      UPDATE devices 
+      SET 
+        status = ${action},
+        updated_at = CURRENT_TIMESTAMP
+      WHERE id = ${params.deviceId} AND user_id = ${user.id}
+    `
+
+    console.log(`Playback Control API: Device ${params.deviceId} status updated to ${action}`)
+
     return NextResponse.json({
       success: true,
-      message: `Playback ${action}d successfully`,
-      device: updatedDevices[0],
+      message: `Device playback ${action}`,
+      status: action,
     })
   } catch (error) {
-    console.error("Playback control error:", error)
+    console.error("Playback Control API error:", error)
     return NextResponse.json(
       {
         success: false,
-        error: "Failed to control playback",
-        details: error instanceof Error ? error.message : "Unknown error",
+        error: error instanceof Error ? error.message : "Failed to control playback",
       },
       { status: 500 },
     )

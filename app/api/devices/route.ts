@@ -1,78 +1,74 @@
-import { type NextRequest, NextResponse } from "next/server"
-import { getDb } from "@/lib/db"
+import { NextResponse } from "next/server"
 import { getCurrentUser } from "@/lib/auth"
+import { getDb } from "@/lib/db"
 
-export async function GET(request: NextRequest) {
+export async function GET() {
   try {
-    console.log("🔍 [DEVICES API] Starting device fetch...")
+    console.log("Devices API: Starting request")
 
     const user = await getCurrentUser()
+    console.log("Devices API: User check result:", user ? `User ${user.email}` : "No user")
+
     if (!user) {
-      console.log("🔍 [DEVICES API] No authenticated user")
-      return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 })
+      console.log("Devices API: Authentication failed")
+      return NextResponse.json({ success: false, error: "Authentication required" }, { status: 401 })
     }
 
-    console.log("🔍 [DEVICES API] User authenticated:", user.email)
     const sql = getDb()
+    console.log("Devices API: Database connection established")
 
-    // Fetch devices without playlist information for now
-    const devices = await sql`
-      SELECT 
-        id,
-        name,
-        COALESCE(type, 'monitor') as type,
-        COALESCE(status, 'offline') as status,
-        location,
-        COALESCE(last_seen, created_at) as last_seen,
-        code,
-        created_at,
-        orientation,
-        brightness,
-        volume,
-        auto_restart,
-        restart_time,
-        notes,
-        user_id
-      FROM devices 
-      WHERE user_id = ${user.id}
-      ORDER BY created_at DESC
-    `
+    // First check if the required columns exist
+    try {
+      const devices = await sql`
+        SELECT 
+          id,
+          name,
+          COALESCE(type, 'monitor') as type,
+          COALESCE(status, 'offline') as status,
+          COALESCE(location, 'Office') as location,
+          COALESCE(resolution, '1920x1080') as resolution,
+          COALESCE(last_seen, created_at) as last_seen,
+          created_at,
+          user_id
+        FROM devices 
+        WHERE user_id = ${user.id}
+        ORDER BY created_at DESC
+      `
 
-    console.log("🔍 [DEVICES API] Found devices:", devices.length)
+      console.log(`Devices API: Found ${devices.length} devices for user ${user.id}`)
 
-    // Format devices for frontend
-    const formattedDevices = devices.map((device) => ({
-      id: device.id,
-      name: device.name,
-      type: device.type,
-      status: device.status,
-      location: device.location,
-      lastSeen: device.last_seen,
-      resolution: "1920x1080", // Default resolution
-      orientation: device.orientation,
-      brightness: device.brightness,
-      volume: device.volume,
-      autoRestart: device.auto_restart,
-      restartTime: device.restart_time,
-      notes: device.notes,
-      last_seen: device.last_seen,
-      code: device.code,
-      created_at: device.created_at,
-      // Will add playlist info later when table is created
-      current_playlist: null,
-    }))
-
-    return NextResponse.json({
-      success: true,
-      devices: formattedDevices,
-    })
+      return NextResponse.json({
+        success: true,
+        devices: devices.map((device) => ({
+          id: device.id.toString(),
+          name: device.name,
+          type: device.type,
+          status: device.status,
+          location: device.location,
+          resolution: device.resolution,
+          lastSeen: device.last_seen,
+          createdAt: device.created_at,
+        })),
+      })
+    } catch (columnError) {
+      console.error("Column error - database schema needs fixing:", columnError)
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Database schema needs updating. Please run the database fix at /fix-database",
+          schemaError: true,
+          details: columnError instanceof Error ? columnError.message : "Column missing",
+        },
+        { status: 500 },
+      )
+    }
   } catch (error) {
-    console.error("🔍 [DEVICES API] Error:", error)
+    console.error("Devices API error:", error)
     return NextResponse.json(
       {
         success: false,
-        error: "Failed to fetch devices",
-        details: error instanceof Error ? error.message : "Unknown error",
+        error: error instanceof Error ? error.message : "Failed to fetch devices",
+        details: process.env.NODE_ENV === "development" ? error : undefined,
       },
       { status: 500 },
     )

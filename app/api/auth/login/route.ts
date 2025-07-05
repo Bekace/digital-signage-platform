@@ -72,18 +72,9 @@ export async function POST(request: NextRequest) {
       token,
     })
 
-    // Set multiple cookie formats to ensure compatibility
+    // Set HTTP-only cookie
     response.cookies.set("auth-token", token, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "lax",
-      maxAge: 7 * 24 * 60 * 60, // 7 days
-      path: "/",
-    })
-
-    // Also set a non-httpOnly version for client-side access
-    response.cookies.set("user-session", "active", {
-      httpOnly: false,
       secure: process.env.NODE_ENV === "production",
       sameSite: "lax",
       maxAge: 7 * 24 * 60 * 60, // 7 days
