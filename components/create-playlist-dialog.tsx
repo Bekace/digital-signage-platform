@@ -1,8 +1,10 @@
 "use client"
 
+import type React from "react"
+
 import { useState } from "react"
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
@@ -11,18 +13,28 @@ import { toast } from "@/hooks/use-toast"
 interface CreatePlaylistDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
-  onPlaylistCreated: () => void
+  onPlaylistCreated?: () => void
 }
 
 export function CreatePlaylistDialog({ open, onOpenChange, onPlaylistCreated }: CreatePlaylistDialogProps) {
   const [name, setName] = useState("")
   const [description, setDescription] = useState("")
-  const [creating, setCreating] = useState(false)
+  const [loading, setLoading] = useState(false)
 
-  const handleCreate = async () => {
-    if (!name.trim()) return
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
 
-    setCreating(true)
+    if (!name.trim()) {
+      toast({
+        title: "Error",
+        description: "Playlist name is required",
+        variant: "destructive",
+      })
+      return
+    }
+
+    setLoading(true)
+
     try {
       const response = await fetch("/api/playlists", {
         method: "POST",
@@ -40,38 +52,46 @@ export function CreatePlaylistDialog({ open, onOpenChange, onPlaylistCreated }: 
           title: "Success",
           description: "Playlist created successfully",
         })
-        onPlaylistCreated()
-        onOpenChange(false)
         setName("")
         setDescription("")
+        onOpenChange(false)
+        onPlaylistCreated?.()
       } else {
-        throw new Error("Failed to create playlist")
+        const error = await response.json()
+        throw new Error(error.error || "Failed to create playlist")
       }
     } catch (error) {
-      console.error("Create error:", error)
+      console.error("Create playlist error:", error)
       toast({
         title: "Error",
-        description: "Failed to create playlist",
+        description: error.message || "Failed to create playlist",
         variant: "destructive",
       })
     } finally {
-      setCreating(false)
+      setLoading(false)
     }
   }
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[425px]">
+      <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>Create New Playlist</DialogTitle>
+          <DialogDescription>Create a new playlist to organize your media content</DialogDescription>
         </DialogHeader>
-        <div className="space-y-4 py-4">
+        <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-2">
-            <Label htmlFor="name">Name</Label>
-            <Input id="name" value={name} onChange={(e) => setName(e.target.value)} placeholder="Enter playlist name" />
+            <Label htmlFor="name">Playlist Name</Label>
+            <Input
+              id="name"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="Enter playlist name"
+              required
+            />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="description">Description</Label>
+            <Label htmlFor="description">Description (Optional)</Label>
             <Textarea
               id="description"
               value={description}
@@ -80,15 +100,15 @@ export function CreatePlaylistDialog({ open, onOpenChange, onPlaylistCreated }: 
               rows={3}
             />
           </div>
-        </div>
-        <div className="flex justify-end space-x-2">
-          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={creating}>
-            Cancel
-          </Button>
-          <Button onClick={handleCreate} disabled={creating || !name.trim()}>
-            {creating ? "Creating..." : "Create Playlist"}
-          </Button>
-        </div>
+          <div className="flex justify-end space-x-2">
+            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+              Cancel
+            </Button>
+            <Button type="submit" disabled={loading}>
+              {loading ? "Creating..." : "Create Playlist"}
+            </Button>
+          </div>
+        </form>
       </DialogContent>
     </Dialog>
   )

@@ -7,9 +7,8 @@ import { Badge } from "@/components/ui/badge"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Skeleton } from "@/components/ui/skeleton"
 import { AddScreenDialog } from "@/components/add-screen-dialog"
-import { ScreenSettingsDialog } from "@/components/screen-settings-dialog"
 import { DashboardLayout } from "@/components/dashboard-layout"
-import { Monitor, Smartphone, Tv, MoreHorizontal, Trash2, AlertCircle, Play, Pause } from "lucide-react"
+import { Monitor, Smartphone, Tv, MoreHorizontal, Trash2, Settings, AlertCircle } from "lucide-react"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { useToast } from "@/hooks/use-toast"
 
@@ -21,12 +20,6 @@ interface Device {
   location?: string
   lastSeen: string
   resolution?: string
-  orientation?: string
-  brightness?: number
-  volume?: number
-  autoRestart?: boolean
-  restartTime?: string
-  notes?: string
 }
 
 function ScreensContent() {
@@ -102,37 +95,6 @@ function ScreensContent() {
     }
   }
 
-  const toggleDevicePlayback = async (deviceId: string, currentStatus: string) => {
-    try {
-      const newStatus = currentStatus === "playing" ? "paused" : "playing"
-      const response = await fetch(`/api/devices/${deviceId}/playback`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        credentials: "include",
-        body: JSON.stringify({ action: newStatus }),
-      })
-
-      const data = await response.json()
-
-      if (data.success) {
-        setDevices((prev) => prev.map((device) => (device.id === deviceId ? { ...device, status: newStatus } : device)))
-        toast({
-          title: `Playback ${newStatus}`,
-          description: `Device is now ${newStatus}`,
-        })
-      }
-    } catch (error) {
-      console.error("Toggle playback error:", error)
-      toast({
-        title: "Error",
-        description: "Failed to toggle playback",
-        variant: "destructive",
-      })
-    }
-  }
-
   useEffect(() => {
     fetchDevices()
   }, [])
@@ -151,10 +113,7 @@ function ScreensContent() {
   const getStatusColor = (status: string) => {
     switch (status) {
       case "online":
-      case "playing":
         return "bg-green-500"
-      case "paused":
-        return "bg-yellow-500"
       case "offline":
         return "bg-red-500"
       default:
@@ -162,23 +121,9 @@ function ScreensContent() {
     }
   }
 
-  const getStatusVariant = (status: string) => {
-    switch (status) {
-      case "online":
-      case "playing":
-        return "default"
-      case "paused":
-        return "secondary"
-      case "offline":
-        return "destructive"
-      default:
-        return "secondary"
-    }
-  }
-
   const stats = {
     total: devices.length,
-    online: devices.filter((d) => d.status === "online" || d.status === "playing").length,
+    online: devices.filter((d) => d.status === "online").length,
     offline: devices.filter((d) => d.status === "offline").length,
     playing: devices.filter((d) => d.status === "playing").length,
   }
@@ -298,18 +243,9 @@ function ScreensContent() {
                       </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end">
-                      <DropdownMenuItem onClick={() => toggleDevicePlayback(device.id, device.status)}>
-                        {device.status === "playing" ? (
-                          <>
-                            <Pause className="mr-2 h-4 w-4" />
-                            Pause
-                          </>
-                        ) : (
-                          <>
-                            <Play className="mr-2 h-4 w-4" />
-                            Play
-                          </>
-                        )}
+                      <DropdownMenuItem>
+                        <Settings className="mr-2 h-4 w-4" />
+                        Settings
                       </DropdownMenuItem>
                       <DropdownMenuItem className="text-red-600" onClick={() => deleteDevice(device.id, device.name)}>
                         <Trash2 className="mr-2 h-4 w-4" />
@@ -319,17 +255,15 @@ function ScreensContent() {
                   </DropdownMenu>
                 </CardHeader>
                 <CardContent>
-                  <div className="flex items-center justify-between mb-3">
-                    <Badge variant={getStatusVariant(device.status)}>
+                  <div className="flex items-center justify-between">
+                    <Badge variant={device.status === "online" ? "default" : "secondary"}>
                       <div className={`h-2 w-2 rounded-full mr-2 ${getStatusColor(device.status)}`}></div>
                       {device.status}
                     </Badge>
                     <span className="text-sm text-gray-500">{device.resolution || "1920x1080"}</span>
                   </div>
-
-                  <div className="flex items-center justify-between">
-                    <div className="text-xs text-gray-500">Last seen: {new Date(device.lastSeen).toLocaleString()}</div>
-                    <ScreenSettingsDialog device={device} onDeviceUpdated={fetchDevices} />
+                  <div className="mt-2 text-xs text-gray-500">
+                    Last seen: {new Date(device.lastSeen).toLocaleString()}
                   </div>
                 </CardContent>
               </Card>
