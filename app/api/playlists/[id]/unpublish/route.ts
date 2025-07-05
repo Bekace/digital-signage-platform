@@ -4,45 +4,32 @@ import { getCurrentUser } from "@/lib/auth"
 
 export async function POST(request: NextRequest, { params }: { params: { id: string } }) {
   try {
-    console.log("📤 [UNPUBLISH PLAYLIST] Starting unpublish process...")
-
     const user = await getCurrentUser()
     if (!user) {
       return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 })
     }
 
     const playlistId = Number.parseInt(params.id)
-    if (isNaN(playlistId)) {
-      return NextResponse.json({ success: false, error: "Invalid playlist ID" }, { status: 400 })
-    }
-
     const sql = getDb()
 
-    // Check if playlist exists and belongs to user
-    const playlist = await sql`
-      SELECT id, name, status FROM playlists 
-      WHERE id = ${playlistId} AND user_id = ${user.id}
-    `
-
-    if (playlist.length === 0) {
-      return NextResponse.json({ success: false, error: "Playlist not found" }, { status: 404 })
-    }
-
     // Update playlist status to draft
-    await sql`
+    const result = await sql`
       UPDATE playlists 
       SET status = 'draft', updated_at = NOW()
       WHERE id = ${playlistId} AND user_id = ${user.id}
+      RETURNING id, name, status
     `
 
-    console.log("📤 [UNPUBLISH PLAYLIST] Playlist unpublished successfully")
+    if (result.length === 0) {
+      return NextResponse.json({ success: false, error: "Playlist not found" }, { status: 404 })
+    }
 
     return NextResponse.json({
       success: true,
-      message: "Playlist unpublished successfully",
+      playlist: result[0],
     })
   } catch (error) {
-    console.error("📤 [UNPUBLISH PLAYLIST] Error:", error)
+    console.error("Unpublish playlist error:", error)
     return NextResponse.json(
       {
         success: false,

@@ -23,6 +23,7 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
     }
 
     // Get playlist items (for now return empty array since we don't have media items yet)
+    // In the future, this would join with media table
     const items = []
 
     return NextResponse.json({

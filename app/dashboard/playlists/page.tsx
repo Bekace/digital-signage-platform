@@ -19,6 +19,9 @@ import {
 import { Plus, Search, Filter, MoreVertical, Play, Edit, Copy, Trash2, Eye } from "lucide-react"
 import { DashboardLayout } from "@/components/dashboard-layout"
 import { CreatePlaylistDialog } from "@/components/create-playlist-dialog"
+import { EditPlaylistDialog } from "@/components/edit-playlist-dialog"
+import { PreviewPlaylistDialog } from "@/components/preview-playlist-dialog"
+import { toast } from "@/hooks/use-toast"
 
 interface Playlist {
   id: number
@@ -34,6 +37,9 @@ export default function PlaylistsPage() {
   const [playlists, setPlaylists] = useState<Playlist[]>([])
   const [loading, setLoading] = useState(true)
   const [showCreateDialog, setShowCreateDialog] = useState(false)
+  const [showEditDialog, setShowEditDialog] = useState(false)
+  const [showPreviewDialog, setShowPreviewDialog] = useState(false)
+  const [selectedPlaylist, setSelectedPlaylist] = useState<Playlist | null>(null)
   const [searchTerm, setSearchTerm] = useState("")
   const [deletePlaylist, setDeletePlaylist] = useState<Playlist | null>(null)
   const [deleting, setDeleting] = useState(false)
@@ -60,6 +66,22 @@ export default function PlaylistsPage() {
     fetchPlaylists()
   }
 
+  const handleEditClick = (playlist: Playlist) => {
+    setSelectedPlaylist(playlist)
+    setShowEditDialog(true)
+  }
+
+  const handlePreviewClick = (playlist: Playlist) => {
+    setSelectedPlaylist(playlist)
+    setShowPreviewDialog(true)
+  }
+
+  const handlePlaylistUpdated = () => {
+    fetchPlaylists()
+    setShowEditDialog(false)
+    setSelectedPlaylist(null)
+  }
+
   const handlePublishToggle = async (playlist: Playlist) => {
     try {
       const newStatus = playlist.status === "active" ? "draft" : "active"
@@ -71,9 +93,20 @@ export default function PlaylistsPage() {
 
       if (response.ok) {
         setPlaylists((prev) => prev.map((p) => (p.id === playlist.id ? { ...p, status: newStatus } : p)))
+        toast({
+          title: "Success",
+          description: `Playlist ${newStatus === "active" ? "published" : "unpublished"} successfully`,
+        })
+      } else {
+        throw new Error(`Failed to ${endpoint} playlist`)
       }
     } catch (error) {
       console.error("Failed to toggle playlist status:", error)
+      toast({
+        title: "Error",
+        description: error instanceof Error ? error.message : "Failed to update playlist",
+        variant: "destructive",
+      })
     }
   }
 
@@ -85,9 +118,20 @@ export default function PlaylistsPage() {
 
       if (response.ok) {
         fetchPlaylists()
+        toast({
+          title: "Success",
+          description: "Playlist duplicated successfully",
+        })
+      } else {
+        throw new Error("Failed to duplicate playlist")
       }
     } catch (error) {
       console.error("Failed to duplicate playlist:", error)
+      toast({
+        title: "Error",
+        description: "Failed to duplicate playlist",
+        variant: "destructive",
+      })
     }
   }
 
@@ -103,9 +147,20 @@ export default function PlaylistsPage() {
       if (response.ok) {
         setPlaylists((prev) => prev.filter((p) => p.id !== deletePlaylist.id))
         setDeletePlaylist(null)
+        toast({
+          title: "Success",
+          description: "Playlist deleted successfully",
+        })
+      } else {
+        throw new Error("Failed to delete playlist")
       }
     } catch (error) {
       console.error("Failed to delete playlist:", error)
+      toast({
+        title: "Error",
+        description: "Failed to delete playlist",
+        variant: "destructive",
+      })
     } finally {
       setDeleting(false)
     }
@@ -249,11 +304,11 @@ export default function PlaylistsPage() {
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
-                        <DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => handleEditClick(playlist)}>
                           <Edit className="h-4 w-4 mr-2" />
                           Edit
                         </DropdownMenuItem>
-                        <DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => handlePreviewClick(playlist)}>
                           <Eye className="h-4 w-4 mr-2" />
                           Preview
                         </DropdownMenuItem>
@@ -285,7 +340,7 @@ export default function PlaylistsPage() {
                       <span className="text-sm text-gray-500">{playlist.item_count || 0} items</span>
                     </div>
                     <div className="flex gap-2">
-                      <Button variant="outline" size="sm">
+                      <Button variant="outline" size="sm" onClick={() => handleEditClick(playlist)}>
                         <Edit className="h-4 w-4 mr-1" />
                         Edit
                       </Button>
@@ -311,6 +366,19 @@ export default function PlaylistsPage() {
           open={showCreateDialog}
           onOpenChange={setShowCreateDialog}
           onCreateComplete={handleCreateComplete}
+        />
+
+        <EditPlaylistDialog
+          open={showEditDialog}
+          onOpenChange={setShowEditDialog}
+          playlist={selectedPlaylist}
+          onPlaylistUpdated={handlePlaylistUpdated}
+        />
+
+        <PreviewPlaylistDialog
+          open={showPreviewDialog}
+          onOpenChange={setShowPreviewDialog}
+          playlist={selectedPlaylist}
         />
 
         <AlertDialog open={!!deletePlaylist} onOpenChange={() => setDeletePlaylist(null)}>

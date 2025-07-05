@@ -58,8 +58,13 @@ export async function DELETE(request: NextRequest, { params }: { params: { id: s
     const playlistId = Number.parseInt(params.id)
     const sql = getDb()
 
-    // Delete playlist items first
-    await sql`DELETE FROM playlist_items WHERE playlist_id = ${playlistId}`
+    // Delete playlist items first (if they exist)
+    try {
+      await sql`DELETE FROM playlist_items WHERE playlist_id = ${playlistId}`
+    } catch (error) {
+      // Table might not exist yet, ignore error
+      console.log("playlist_items table doesn't exist yet")
+    }
 
     // Delete playlist
     const result = await sql`

@@ -21,7 +21,7 @@ interface EditPlaylistDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   playlist: Playlist | null
-  onPlaylistUpdated?: () => void
+  onPlaylistUpdated: () => void
 }
 
 export function EditPlaylistDialog({ open, onOpenChange, playlist, onPlaylistUpdated }: EditPlaylistDialogProps) {
@@ -32,7 +32,7 @@ export function EditPlaylistDialog({ open, onOpenChange, playlist, onPlaylistUpd
   useEffect(() => {
     if (playlist) {
       setName(playlist.name)
-      setDescription(playlist.description)
+      setDescription(playlist.description || "")
     }
   }, [playlist])
 
@@ -68,7 +68,7 @@ export function EditPlaylistDialog({ open, onOpenChange, playlist, onPlaylistUpd
           description: "Playlist updated successfully",
         })
         onOpenChange(false)
-        onPlaylistUpdated?.()
+        onPlaylistUpdated()
       } else {
         const error = await response.json()
         throw new Error(error.error || "Failed to update playlist")
