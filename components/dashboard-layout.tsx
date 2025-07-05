@@ -229,8 +229,8 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
                 )
               })}
 
-              {/* Playlists Section */}
-              {pathname.startsWith("/dashboard/playlists") && (
+              {/* Playlists Section - Only show individual playlists when NOT on main playlists page */}
+              {pathname.startsWith("/dashboard/playlists/") && pathname !== "/dashboard/playlists" && (
                 <div className="mt-6 pt-4 border-t">
                   <div className="flex items-center justify-between px-3 mb-2">
                     <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Playlists</span>
@@ -315,8 +315,8 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
               )
             })}
 
-            {/* Playlists Section */}
-            {pathname.startsWith("/dashboard/playlists") && (
+            {/* Playlists Section - Only show individual playlists when NOT on main playlists page */}
+            {pathname.startsWith("/dashboard/playlists/") && pathname !== "/dashboard/playlists" && (
               <div className="mt-6 pt-4 border-t">
                 <div className="flex items-center justify-between px-3 mb-2">
                   <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Playlists</span>
