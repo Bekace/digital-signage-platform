@@ -24,6 +24,18 @@ import {
   Save,
 } from "lucide-react"
 import Image from "next/image"
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from "@dnd-kit/core"
+import { arrayMove, SortableContext, sortableKeyboardCoordinates, verticalListSortingStrategy } from "@dnd-kit/sortable"
+import { useSortable } from "@dnd-kit/sortable"
+import { CSS } from "@dnd-kit/utilities"
 
 interface PlaylistItem {
   id: number
@@ -59,6 +71,93 @@ interface Playlist {
   updated_at: string
 }
 
+function SortablePlaylistItem({
+  item,
+  index,
+  onPreview,
+  onRemove,
+  onUpdateDuration,
+}: {
+  item: PlaylistItem
+  index: number
+  onPreview: (item: PlaylistItem) => void
+  onRemove: (id: number) => void
+  onUpdateDuration: (id: number, duration: number) => void
+}) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: item.id })
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+  }
+
+  const getItemIcon = (type: string) => {
+    switch (type) {
+      case "image":
+        return <ImageIcon className="h-4 w-4" />
+      case "video":
+        return <Video className="h-4 w-4" />
+      case "audio":
+        return <Music className="h-4 w-4" />
+      case "text":
+        return <FileText className="h-4 w-4" />
+      case "widget":
+        return <Tv className="h-4 w-4" />
+      default:
+        return <FileText className="h-4 w-4" />
+    }
+  }
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      className="flex items-center gap-3 p-3 bg-white border rounded-lg hover:shadow-sm"
+    >
+      <div className="text-sm text-gray-500 w-6">{index + 1}</div>
+      <div className="w-16 h-12 bg-gray-100 rounded overflow-hidden flex-shrink-0">
+        <Image
+          src={item.thumbnail_url || item.url || "/placeholder.svg?height=48&width=64"}
+          alt={item.name}
+          width={64}
+          height={48}
+          className="w-full h-full object-cover"
+        />
+      </div>
+      <div className="flex-1 min-w-0">
+        <div className="font-medium text-sm truncate">{item.name}</div>
+        <div className="flex items-center gap-1 text-xs text-gray-500 capitalize">
+          {getItemIcon(item.type)}
+          {item.type}
+        </div>
+      </div>
+      <div className="flex items-center gap-2">
+        <Input
+          type="number"
+          value={item.duration}
+          onChange={(e) => onUpdateDuration(item.id, Number.parseInt(e.target.value) || 10)}
+          className="w-16 h-8 text-xs"
+          min="1"
+          max="300"
+        />
+        <span className="text-xs text-gray-500">sec</span>
+      </div>
+      <div className="flex items-center gap-1">
+        <Button variant="ghost" size="sm" onClick={() => onPreview(item)}>
+          <Eye className="h-4 w-4" />
+        </Button>
+        <Button variant="ghost" size="sm" onClick={() => onRemove(item.id)} className="text-red-600 hover:text-red-700">
+          <Trash2 className="h-4 w-4" />
+        </Button>
+        <Button variant="ghost" size="sm" className="cursor-grab active:cursor-grabbing" {...attributes} {...listeners}>
+          <GripVertical className="h-4 w-4" />
+        </Button>
+      </div>
+    </div>
+  )
+}
+
 export default function PlaylistEditorPage() {
   const params = useParams()
   const router = useRouter()
@@ -73,6 +172,14 @@ export default function PlaylistEditorPage() {
   const [previewItem, setPreviewItem] = useState<PlaylistItem | null>(null)
   const [showPreview, setShowPreview] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false)
+
+  const sensors = useSensors(
+    useSensor(PointerSensor),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    }),
+  )
 
   useEffect(() => {
     if (params.id) {
@@ -221,6 +328,7 @@ export default function PlaylistEditorPage() {
           media_id: mediaItem.id,
         }
         setPlaylistItems([...playlistItems, newItem])
+        setHasUnsavedChanges(true)
         toast({
           title: "Success",
           description: `Added ${mediaItem.original_name} to playlist`,
@@ -246,6 +354,7 @@ export default function PlaylistEditorPage() {
 
       if (response.ok) {
         setPlaylistItems(playlistItems.filter((item) => item.id !== itemId))
+        setHasUnsavedChanges(true)
         toast({
           title: "Success",
           description: "Item removed from playlist",
@@ -257,6 +366,7 @@ export default function PlaylistEditorPage() {
       console.error("Failed to remove from playlist:", error)
       // Remove from UI anyway for better UX
       setPlaylistItems(playlistItems.filter((item) => item.id !== itemId))
+      setHasUnsavedChanges(true)
       toast({
         title: "Success",
         description: "Item removed from playlist",
@@ -266,6 +376,11 @@ export default function PlaylistEditorPage() {
 
   const handleUpdateDuration = async (itemId: number, newDuration: number) => {
     try {
+      // Update UI immediately
+      setPlaylistItems(playlistItems.map((item) => (item.id === itemId ? { ...item, duration: newDuration } : item)))
+      setHasUnsavedChanges(true)
+
+      // Update in database
       const response = await fetch(`/api/playlists/${params.id}/items/${itemId}`, {
         method: "PATCH",
         headers: {
@@ -276,21 +391,56 @@ export default function PlaylistEditorPage() {
         }),
       })
 
-      if (response.ok) {
-        setPlaylistItems(playlistItems.map((item) => (item.id === itemId ? { ...item, duration: newDuration } : item)))
-        toast({
-          title: "Success",
-          description: "Duration updated",
-        })
+      if (!response.ok) {
+        console.error("Failed to update duration in database")
       }
     } catch (error) {
       console.error("Failed to update duration:", error)
     }
   }
 
+  const handleDragEnd = async (event: DragEndEvent) => {
+    const { active, over } = event
+
+    if (active.id !== over?.id) {
+      const oldIndex = playlistItems.findIndex((item) => item.id === active.id)
+      const newIndex = playlistItems.findIndex((item) => item.id === over?.id)
+
+      const newItems = arrayMove(playlistItems, oldIndex, newIndex)
+
+      // Update order_index for all items
+      const updatedItems = newItems.map((item, index) => ({
+        ...item,
+        order_index: index + 1,
+      }))
+
+      setPlaylistItems(updatedItems)
+      setHasUnsavedChanges(true)
+
+      // Update order in database
+      try {
+        await fetch(`/api/playlists/${params.id}/reorder`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            items: updatedItems.map((item) => ({
+              id: item.id,
+              order_index: item.order_index,
+            })),
+          }),
+        })
+      } catch (error) {
+        console.error("Failed to update order:", error)
+      }
+    }
+  }
+
   const handleSavePlaylist = async () => {
     setSaving(true)
     try {
+      // Save all changes
       const response = await fetch(`/api/playlists/${params.id}`, {
         method: "PATCH",
         headers: {
@@ -303,6 +453,7 @@ export default function PlaylistEditorPage() {
 
       if (response.ok) {
         setPlaylist((prev) => (prev ? { ...prev, status: "active" } : null))
+        setHasUnsavedChanges(false)
         toast({
           title: "Success",
           description: "Playlist saved and published",
@@ -354,6 +505,7 @@ export default function PlaylistEditorPage() {
               <Button variant="ghost" size="sm">
                 <Edit3 className="h-4 w-4" />
               </Button>
+              {hasUnsavedChanges && <span className="text-sm text-orange-600 font-medium">• Unsaved changes</span>}
             </div>
           </div>
           <div className="flex items-center gap-2">
@@ -361,9 +513,14 @@ export default function PlaylistEditorPage() {
               <Eye className="h-4 w-4 mr-2" />
               Back to List
             </Button>
-            <Button size="sm" onClick={handleSavePlaylist} disabled={saving}>
+            <Button
+              size="sm"
+              onClick={handleSavePlaylist}
+              disabled={saving || !hasUnsavedChanges}
+              className={hasUnsavedChanges ? "bg-orange-600 hover:bg-orange-700" : ""}
+            >
               <Save className="h-4 w-4 mr-2" />
-              {saving ? "Saving..." : "Save & Publish"}
+              {saving ? "Saving..." : hasUnsavedChanges ? "Save Changes" : "Saved"}
             </Button>
           </div>
         </div>
@@ -387,7 +544,9 @@ export default function PlaylistEditorPage() {
                   Home
                 </div>
                 <div className="flex items-center gap-2 p-2 text-sm bg-white border rounded shadow-sm">
-                  <div className="w-2 h-2 bg-orange-400 rounded-full"></div>
+                  <div
+                    className={`w-2 h-2 rounded-full ${playlist?.status === "active" ? "bg-green-400" : "bg-orange-400"}`}
+                  ></div>
                   {playlist?.name || "Current Playlist"}
                 </div>
               </div>
@@ -417,6 +576,12 @@ export default function PlaylistEditorPage() {
                   ></div>
                   <span className="text-sm capitalize">{playlist?.status || "draft"}</span>
                 </div>
+                {hasUnsavedChanges && (
+                  <div className="flex items-center gap-2">
+                    <div className="w-3 h-3 bg-orange-400 rounded-full animate-pulse"></div>
+                    <span className="text-sm text-orange-600">Unsaved changes</span>
+                  </div>
+                )}
               </div>
             </div>
 
@@ -435,59 +600,25 @@ export default function PlaylistEditorPage() {
                     <p className="text-sm">Add media from the library on the right</p>
                   </div>
                 ) : (
-                  <div className="space-y-2">
-                    {playlistItems.map((item, index) => (
-                      <div
-                        key={item.id}
-                        className="flex items-center gap-3 p-3 bg-white border rounded-lg hover:shadow-sm"
-                      >
-                        <div className="text-sm text-gray-500 w-6">{index + 1}</div>
-                        <div className="w-16 h-12 bg-gray-100 rounded overflow-hidden flex-shrink-0">
-                          <Image
-                            src={item.thumbnail_url || item.url || "/placeholder.svg?height=48&width=64"}
-                            alt={item.name}
-                            width={64}
-                            height={48}
-                            className="w-full h-full object-cover"
+                  <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+                    <SortableContext
+                      items={playlistItems.map((item) => item.id)}
+                      strategy={verticalListSortingStrategy}
+                    >
+                      <div className="space-y-2">
+                        {playlistItems.map((item, index) => (
+                          <SortablePlaylistItem
+                            key={item.id}
+                            item={item}
+                            index={index}
+                            onPreview={handlePreview}
+                            onRemove={handleRemoveFromPlaylist}
+                            onUpdateDuration={handleUpdateDuration}
                           />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="font-medium text-sm truncate">{item.name}</div>
-                          <div className="flex items-center gap-1 text-xs text-gray-500 capitalize">
-                            {getItemIcon(item.type)}
-                            {item.type}
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <Input
-                            type="number"
-                            value={item.duration}
-                            onChange={(e) => handleUpdateDuration(item.id, Number.parseInt(e.target.value) || 10)}
-                            className="w-16 h-8 text-xs"
-                            min="1"
-                            max="300"
-                          />
-                          <span className="text-xs text-gray-500">sec</span>
-                        </div>
-                        <div className="flex items-center gap-1">
-                          <Button variant="ghost" size="sm" onClick={() => handlePreview(item)}>
-                            <Eye className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => handleRemoveFromPlaylist(item.id)}
-                            className="text-red-600 hover:text-red-700"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                          <Button variant="ghost" size="sm" className="cursor-grab">
-                            <GripVertical className="h-4 w-4" />
-                          </Button>
-                        </div>
+                        ))}
                       </div>
-                    ))}
-                  </div>
+                    </SortableContext>
+                  </DndContext>
                 )}
               </div>
             </div>
