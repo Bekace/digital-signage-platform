@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -8,24 +8,41 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { toast } from "@/hooks/use-toast"
 
-interface CreatePlaylistDialogProps {
-  open: boolean
-  onOpenChange: (open: boolean) => void
-  onPlaylistCreated: () => void
+interface Playlist {
+  id: number
+  name: string
+  description: string
+  status: string
+  created_at: string
+  updated_at: string
 }
 
-export function CreatePlaylistDialog({ open, onOpenChange, onPlaylistCreated }: CreatePlaylistDialogProps) {
+interface EditPlaylistDialogProps {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  playlist: Playlist | null
+  onPlaylistUpdated: () => void
+}
+
+export function EditPlaylistDialog({ open, onOpenChange, playlist, onPlaylistUpdated }: EditPlaylistDialogProps) {
   const [name, setName] = useState("")
   const [description, setDescription] = useState("")
-  const [creating, setCreating] = useState(false)
+  const [saving, setSaving] = useState(false)
 
-  const handleCreate = async () => {
-    if (!name.trim()) return
+  useEffect(() => {
+    if (playlist) {
+      setName(playlist.name)
+      setDescription(playlist.description || "")
+    }
+  }, [playlist])
 
-    setCreating(true)
+  const handleSave = async () => {
+    if (!playlist || !name.trim()) return
+
+    setSaving(true)
     try {
-      const response = await fetch("/api/playlists", {
-        method: "POST",
+      const response = await fetch(`/api/playlists/${playlist.id}`, {
+        method: "PATCH",
         headers: {
           "Content-Type": "application/json",
         },
@@ -38,24 +55,22 @@ export function CreatePlaylistDialog({ open, onOpenChange, onPlaylistCreated }: 
       if (response.ok) {
         toast({
           title: "Success",
-          description: "Playlist created successfully",
+          description: "Playlist updated successfully",
         })
-        onPlaylistCreated()
+        onPlaylistUpdated()
         onOpenChange(false)
-        setName("")
-        setDescription("")
       } else {
-        throw new Error("Failed to create playlist")
+        throw new Error("Failed to update playlist")
       }
     } catch (error) {
-      console.error("Create error:", error)
+      console.error("Update error:", error)
       toast({
         title: "Error",
-        description: "Failed to create playlist",
+        description: "Failed to update playlist",
         variant: "destructive",
       })
     } finally {
-      setCreating(false)
+      setSaving(false)
     }
   }
 
@@ -63,7 +78,7 @@ export function CreatePlaylistDialog({ open, onOpenChange, onPlaylistCreated }: 
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[425px]">
         <DialogHeader>
-          <DialogTitle>Create New Playlist</DialogTitle>
+          <DialogTitle>Edit Playlist</DialogTitle>
         </DialogHeader>
         <div className="space-y-4 py-4">
           <div className="space-y-2">
@@ -82,11 +97,11 @@ export function CreatePlaylistDialog({ open, onOpenChange, onPlaylistCreated }: 
           </div>
         </div>
         <div className="flex justify-end space-x-2">
-          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={creating}>
+          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={saving}>
             Cancel
           </Button>
-          <Button onClick={handleCreate} disabled={creating || !name.trim()}>
-            {creating ? "Creating..." : "Create Playlist"}
+          <Button onClick={handleSave} disabled={saving || !name.trim()}>
+            {saving ? "Saving..." : "Save Changes"}
           </Button>
         </div>
       </DialogContent>

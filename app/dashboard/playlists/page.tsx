@@ -1,31 +1,62 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { Plus, Play, MoreHorizontal, Edit, Trash2, Copy, Clock, Monitor } from "lucide-react"
-
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Badge } from "@/components/ui/badge"
-import { DashboardLayout } from "@/components/dashboard-layout"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
+import { Input } from "@/components/ui/input"
 import { CreatePlaylistDialog } from "@/components/create-playlist-dialog"
+import { EditPlaylistDialog } from "@/components/edit-playlist-dialog"
+import { PreviewPlaylistDialog } from "@/components/preview-playlist-dialog"
+import { DeletePlaylistDialog } from "@/components/delete-playlist-dialog"
+import { PublishPlaylistDialog } from "@/components/publish-playlist-dialog"
 import { toast } from "@/hooks/use-toast"
+import {
+  Plus,
+  Search,
+  MoreHorizontal,
+  Edit,
+  Eye,
+  Copy,
+  Trash2,
+  Upload,
+  UploadCloud,
+  Calendar,
+  Clock,
+  Play,
+} from "lucide-react"
 
 interface Playlist {
   id: number
   name: string
   description: string
-  items: number
-  duration: string
   status: string
-  screens: string[]
-  lastModified: string
+  created_at: string
+  updated_at: string
+  item_count?: number
 }
 
 export default function PlaylistsPage() {
-  const [showCreateDialog, setShowCreateDialog] = useState(false)
   const [playlists, setPlaylists] = useState<Playlist[]>([])
   const [loading, setLoading] = useState(true)
+  const [searchTerm, setSearchTerm] = useState("")
+  const [createDialogOpen, setCreateDialogOpen] = useState(false)
+  const [editDialogOpen, setEditDialogOpen] = useState(false)
+  const [previewDialogOpen, setPreviewDialogOpen] = useState(false)
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
+  const [publishDialogOpen, setPublishDialogOpen] = useState(false)
+  const [selectedPlaylist, setSelectedPlaylist] = useState<Playlist | null>(null)
+
+  useEffect(() => {
+    fetchPlaylists()
+  }, [])
 
   const fetchPlaylists = async () => {
     try {
@@ -33,8 +64,6 @@ export default function PlaylistsPage() {
       if (response.ok) {
         const data = await response.json()
         setPlaylists(data.playlists || [])
-      } else {
-        throw new Error("Failed to fetch playlists")
       }
     } catch (error) {
       console.error("Failed to fetch playlists:", error)
@@ -48,204 +77,267 @@ export default function PlaylistsPage() {
     }
   }
 
-  useEffect(() => {
-    fetchPlaylists()
-  }, [])
+  const handleEdit = (playlist: Playlist) => {
+    setSelectedPlaylist(playlist)
+    setEditDialogOpen(true)
+  }
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case "active":
-        return "bg-green-100 text-green-800"
-      case "scheduled":
-        return "bg-blue-100 text-blue-800"
-      case "draft":
-        return "bg-gray-100 text-gray-800"
-      default:
-        return "bg-gray-100 text-gray-800"
+  const handlePreview = (playlist: Playlist) => {
+    setSelectedPlaylist(playlist)
+    setPreviewDialogOpen(true)
+  }
+
+  const handleDelete = (playlist: Playlist) => {
+    setSelectedPlaylist(playlist)
+    setDeleteDialogOpen(true)
+  }
+
+  const handleDuplicate = async (playlist: Playlist) => {
+    try {
+      const response = await fetch(`/api/playlists/${playlist.id}/duplicate`, {
+        method: "POST",
+      })
+
+      if (response.ok) {
+        toast({
+          title: "Success",
+          description: "Playlist duplicated successfully",
+        })
+        fetchPlaylists()
+      } else {
+        throw new Error("Failed to duplicate playlist")
+      }
+    } catch (error) {
+      console.error("Duplicate error:", error)
+      toast({
+        title: "Error",
+        description: "Failed to duplicate playlist",
+        variant: "destructive",
+      })
     }
   }
 
-  const handlePlaylistCreated = () => {
-    fetchPlaylists()
-    setShowCreateDialog(false)
+  const handlePublish = (playlist: Playlist) => {
+    setSelectedPlaylist(playlist)
+    setPublishDialogOpen(true)
+  }
+
+  const handleUnpublish = async (playlist: Playlist) => {
+    try {
+      const response = await fetch(`/api/playlists/${playlist.id}/unpublish`, {
+        method: "POST",
+      })
+
+      if (response.ok) {
+        toast({
+          title: "Success",
+          description: "Playlist unpublished successfully",
+        })
+        fetchPlaylists()
+      } else {
+        throw new Error("Failed to unpublish playlist")
+      }
+    } catch (error) {
+      console.error("Unpublish error:", error)
+      toast({
+        title: "Error",
+        description: "Failed to unpublish playlist",
+        variant: "destructive",
+      })
+    }
+  }
+
+  const filteredPlaylists = playlists.filter((playlist) =>
+    playlist.name.toLowerCase().includes(searchTerm.toLowerCase()),
+  )
+
+  const formatDate = (dateString: string) => {
+    return new Date(dateString).toLocaleDateString("en-US", {
+      year: "numeric",
+      month: "short",
+      day: "numeric",
+    })
   }
 
   if (loading) {
     return (
-      <DashboardLayout>
-        <div className="space-y-6">
-          <div className="text-center">Loading playlists...</div>
+      <div className="space-y-6">
+        <div className="flex justify-between items-center">
+          <div>
+            <h1 className="text-3xl font-bold">Playlists</h1>
+            <p className="text-gray-600">Manage your content playlists</p>
+          </div>
         </div>
-      </DashboardLayout>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {[...Array(6)].map((_, i) => (
+            <Card key={i} className="animate-pulse">
+              <CardHeader>
+                <div className="h-4 bg-gray-200 rounded w-3/4"></div>
+                <div className="h-3 bg-gray-200 rounded w-1/2"></div>
+              </CardHeader>
+              <CardContent>
+                <div className="h-3 bg-gray-200 rounded w-full mb-2"></div>
+                <div className="h-3 bg-gray-200 rounded w-2/3"></div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      </div>
     )
   }
 
   return (
-    <DashboardLayout>
-      <div className="space-y-6">
-        <div className="flex justify-between items-center">
-          <div>
-            <h1 className="text-3xl font-bold">Playlists ----bekace</h1>
-            <p className="text-gray-600">Create and manage content playlists for your screens</p>
-          </div>
-          <Button onClick={() => setShowCreateDialog(true)}>
-            <Plus className="h-4 w-4 mr-2" />
-            Create Playlist
-          </Button>
+    <div className="space-y-6">
+      <div className="flex justify-between items-center">
+        <div>
+          <h1 className="text-3xl font-bold">Playlists</h1>
+          <p className="text-gray-600">Manage your content playlists</p>
         </div>
+        <Button onClick={() => setCreateDialogOpen(true)}>
+          <Plus className="h-4 w-4 mr-2" />
+          Create Playlist
+        </Button>
+      </div>
 
-        {/* Stats */}
-        <div className="grid gap-4 md:grid-cols-4">
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Total Playlists</CardTitle>
-              <Play className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{playlists.length}</div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Active</CardTitle>
-              <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold text-green-600">
-                {playlists.filter((p) => p.status === "active").length}
-              </div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Scheduled</CardTitle>
-              <Clock className="h-4 w-4 text-blue-500" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold text-blue-600">
-                {playlists.filter((p) => p.status === "scheduled").length}
-              </div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Drafts</CardTitle>
-              <Edit className="h-4 w-4 text-gray-500" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold text-gray-600">
-                {playlists.filter((p) => p.status === "draft").length}
-              </div>
-            </CardContent>
-          </Card>
+      <div className="flex items-center space-x-4">
+        <div className="relative flex-1 max-w-sm">
+          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
+          <Input
+            placeholder="Search playlists..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="pl-10"
+          />
         </div>
+      </div>
 
-        {/* Playlists Grid */}
-        {playlists.length === 0 ? (
-          <Card>
-            <CardContent className="text-center py-8">
-              <Play className="h-12 w-12 mx-auto text-gray-400 mb-4" />
-              <h3 className="text-lg font-medium text-gray-900 mb-2">No playlists yet</h3>
-              <p className="text-gray-500 mb-4">Create your first playlist to get started</p>
-              <Button onClick={() => setShowCreateDialog(true)}>
-                <Plus className="h-4 w-4 mr-2" />
-                Create Playlist
-              </Button>
-            </CardContent>
-          </Card>
-        ) : (
-          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-            {playlists.map((playlist) => (
-              <Card key={playlist.id} className="hover:shadow-md transition-shadow">
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <div className="flex items-center space-x-2">
-                    <Play className="h-5 w-5" />
-                    <CardTitle className="text-lg">{playlist.name}</CardTitle>
+      {filteredPlaylists.length === 0 ? (
+        <Card className="p-12 text-center">
+          <Play className="h-12 w-12 mx-auto mb-4 text-gray-400" />
+          <h3 className="text-lg font-semibold mb-2">No playlists found</h3>
+          <p className="text-gray-600 mb-4">
+            {searchTerm ? "No playlists match your search." : "Create your first playlist to get started."}
+          </p>
+          {!searchTerm && (
+            <Button onClick={() => setCreateDialogOpen(true)}>
+              <Plus className="h-4 w-4 mr-2" />
+              Create Playlist
+            </Button>
+          )}
+        </Card>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {filteredPlaylists.map((playlist) => (
+            <Card key={playlist.id} className="hover:shadow-lg transition-shadow">
+              <CardHeader className="pb-3">
+                <div className="flex items-start justify-between">
+                  <div className="flex-1">
+                    <CardTitle className="text-lg mb-1">{playlist.name}</CardTitle>
+                    <CardDescription className="line-clamp-2">
+                      {playlist.description || "No description"}
+                    </CardDescription>
                   </div>
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
-                      <Button variant="ghost" className="h-8 w-8 p-0">
+                      <Button variant="ghost" size="sm">
                         <MoreHorizontal className="h-4 w-4" />
                       </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end">
-                      <DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => handleEdit(playlist)}>
                         <Edit className="h-4 w-4 mr-2" />
                         Edit
                       </DropdownMenuItem>
-                      <DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => handlePreview(playlist)}>
+                        <Eye className="h-4 w-4 mr-2" />
+                        Preview
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => handleDuplicate(playlist)}>
                         <Copy className="h-4 w-4 mr-2" />
                         Duplicate
                       </DropdownMenuItem>
-                      <DropdownMenuItem className="text-red-600">
+                      <DropdownMenuSeparator />
+                      {playlist.status === "active" ? (
+                        <DropdownMenuItem onClick={() => handleUnpublish(playlist)}>
+                          <UploadCloud className="h-4 w-4 mr-2" />
+                          Unpublish
+                        </DropdownMenuItem>
+                      ) : (
+                        <DropdownMenuItem onClick={() => handlePublish(playlist)}>
+                          <Upload className="h-4 w-4 mr-2" />
+                          Publish
+                        </DropdownMenuItem>
+                      )}
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem onClick={() => handleDelete(playlist)} className="text-red-600">
                         <Trash2 className="h-4 w-4 mr-2" />
                         Delete
                       </DropdownMenuItem>
                     </DropdownMenuContent>
                   </DropdownMenu>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <CardDescription>{playlist.description}</CardDescription>
-
-                  <div className="flex justify-between items-center">
-                    <Badge className={getStatusColor(playlist.status)}>
-                      {playlist.status.charAt(0).toUpperCase() + playlist.status.slice(1)}
-                    </Badge>
+                </div>
+              </CardHeader>
+              <CardContent className="pt-0">
+                <div className="flex items-center justify-between mb-3">
+                  <Badge variant={playlist.status === "active" ? "default" : "secondary"}>
+                    {playlist.status === "active" ? "Published" : "Draft"}
+                  </Badge>
+                  <span className="text-sm text-gray-500">{playlist.item_count || 0} items</span>
+                </div>
+                <div className="flex items-center text-sm text-gray-500 space-x-4">
+                  <div className="flex items-center">
+                    <Calendar className="h-3 w-3 mr-1" />
+                    {formatDate(playlist.created_at)}
                   </div>
-
-                  <div className="space-y-2 text-sm">
-                    <div className="flex justify-between">
-                      <span className="text-gray-600">Items:</span>
-                      <span>{playlist.items}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-gray-600">Duration:</span>
-                      <span>{playlist.duration}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-gray-600">Screens:</span>
-                      <span>{playlist.screens.length}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-gray-600">Modified:</span>
-                      <span>{playlist.lastModified}</span>
-                    </div>
+                  <div className="flex items-center">
+                    <Clock className="h-3 w-3 mr-1" />
+                    {formatDate(playlist.updated_at)}
                   </div>
+                </div>
+                <div className="flex space-x-2 mt-4">
+                  <Button variant="outline" size="sm" onClick={() => handlePreview(playlist)} className="flex-1">
+                    <Eye className="h-3 w-3 mr-1" />
+                    Preview
+                  </Button>
+                  <Button variant="outline" size="sm" onClick={() => handleEdit(playlist)} className="flex-1">
+                    <Edit className="h-3 w-3 mr-1" />
+                    Edit
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
 
-                  {playlist.screens.length > 0 && (
-                    <div className="space-y-2">
-                      <div className="text-sm font-medium">Active on:</div>
-                      <div className="flex flex-wrap gap-1">
-                        {playlist.screens.map((screen, index) => (
-                          <Badge key={index} variant="outline" className="text-xs">
-                            <Monitor className="h-3 w-3 mr-1" />
-                            {screen}
-                          </Badge>
-                        ))}
-                      </div>
-                    </div>
-                  )}
+      <CreatePlaylistDialog
+        open={createDialogOpen}
+        onOpenChange={setCreateDialogOpen}
+        onPlaylistCreated={fetchPlaylists}
+      />
 
-                  <div className="flex space-x-2">
-                    <Button variant="outline" size="sm" className="flex-1 bg-transparent">
-                      Edit
-                    </Button>
-                    <Button size="sm" className="flex-1">
-                      {playlist.status === "draft" ? "Publish" : "Preview"}
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-        )}
+      <EditPlaylistDialog
+        open={editDialogOpen}
+        onOpenChange={setEditDialogOpen}
+        playlist={selectedPlaylist}
+        onPlaylistUpdated={fetchPlaylists}
+      />
 
-        <CreatePlaylistDialog
-          open={showCreateDialog}
-          onOpenChange={setShowCreateDialog}
-          onPlaylistCreated={handlePlaylistCreated}
-        />
-      </div>
-    </DashboardLayout>
+      <PreviewPlaylistDialog open={previewDialogOpen} onOpenChange={setPreviewDialogOpen} playlist={selectedPlaylist} />
+
+      <DeletePlaylistDialog
+        open={deleteDialogOpen}
+        onOpenChange={setDeleteDialogOpen}
+        playlist={selectedPlaylist}
+        onPlaylistDeleted={fetchPlaylists}
+      />
+
+      <PublishPlaylistDialog
+        open={publishDialogOpen}
+        onOpenChange={setPublishDialogOpen}
+        playlist={selectedPlaylist}
+        onPlaylistPublished={fetchPlaylists}
+      />
+    </div>
   )
 }
