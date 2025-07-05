@@ -12,7 +12,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 })
     }
 
-    console.log("🎵 [PLAYLISTS API] User authenticated:", user.email)
+    console.log("🎵 [PLAYLISTS API] User authenticated:", user.email, "ID:", user.id)
     const sql = getDb()
 
     // Fetch playlists with item count
@@ -29,7 +29,7 @@ export async function GET(request: NextRequest) {
         p.selected_days,
         p.created_at,
         p.updated_at,
-        COALESCE(COUNT(pi.id), 0)::text as item_count
+        COALESCE(COUNT(pi.id), 0)::int as item_count
       FROM playlists p
       LEFT JOIN playlist_items pi ON p.id = pi.playlist_id
       WHERE p.user_id = ${user.id}
@@ -38,24 +38,32 @@ export async function GET(request: NextRequest) {
       ORDER BY p.updated_at DESC
     `
 
+    console.log("🎵 [PLAYLISTS API] Raw query result:", playlists)
     console.log("🎵 [PLAYLISTS API] Found playlists:", playlists.length)
 
     // Format playlists for frontend
-    const formattedPlaylists = playlists.map((playlist) => ({
-      id: playlist.id,
-      name: playlist.name,
-      description: playlist.description,
-      items: Number.parseInt(playlist.item_count) || 0,
-      duration: "0:00",
-      status: playlist.status,
-      screens: [],
-      lastModified: new Date(playlist.updated_at).toLocaleDateString(),
-    }))
+    const formattedPlaylists = playlists.map((playlist) => {
+      const formatted = {
+        id: playlist.id,
+        name: playlist.name || "Untitled Playlist",
+        description: playlist.description || "",
+        items: playlist.item_count || 0,
+        duration: "0:00", // TODO: Calculate actual duration
+        status: playlist.status || "draft",
+        screens: [], // TODO: Get actual screen assignments
+        lastModified: playlist.updated_at ? new Date(playlist.updated_at).toLocaleDateString() : "Unknown",
+      }
+      console.log("🎵 [PLAYLISTS API] Formatted playlist:", formatted)
+      return formatted
+    })
 
-    return NextResponse.json({
+    const response = {
       success: true,
       playlists: formattedPlaylists,
-    })
+    }
+
+    console.log("🎵 [PLAYLISTS API] Final response:", response)
+    return NextResponse.json(response)
   } catch (error) {
     console.error("🎵 [PLAYLISTS API] Error:", error)
     return NextResponse.json(

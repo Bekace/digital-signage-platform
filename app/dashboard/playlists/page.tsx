@@ -29,18 +29,32 @@ export default function PlaylistsPage() {
 
   const fetchPlaylists = async () => {
     try {
+      console.log("🎵 [FRONTEND] Fetching playlists...")
       const response = await fetch("/api/playlists")
-      if (response.ok) {
-        const data = await response.json()
-        setPlaylists(data.playlists || [])
+
+      console.log("🎵 [FRONTEND] Response status:", response.status)
+
+      if (!response.ok) {
+        const errorText = await response.text()
+        console.error("🎵 [FRONTEND] Response not OK:", errorText)
+        throw new Error(`HTTP ${response.status}: ${errorText}`)
+      }
+
+      const data = await response.json()
+      console.log("🎵 [FRONTEND] Response data:", data)
+
+      if (data.success && Array.isArray(data.playlists)) {
+        setPlaylists(data.playlists)
+        console.log("🎵 [FRONTEND] Successfully loaded", data.playlists.length, "playlists")
       } else {
-        throw new Error("Failed to fetch playlists")
+        console.error("🎵 [FRONTEND] Invalid response format:", data)
+        throw new Error(data.error || "Invalid response format")
       }
     } catch (error) {
-      console.error("Failed to fetch playlists:", error)
+      console.error("🎵 [FRONTEND] Failed to fetch playlists:", error)
       toast({
         title: "Error",
-        description: "Failed to load playlists",
+        description: error instanceof Error ? error.message : "Failed to load playlists",
         variant: "destructive",
       })
     } finally {
@@ -85,7 +99,7 @@ export default function PlaylistsPage() {
       <div className="space-y-6">
         <div className="flex justify-between items-center">
           <div>
-            <h1 className="text-3xl font-bold">Playlists ----bekace</h1>
+            <h1 className="text-3xl font-bold">Playlists</h1>
             <p className="text-gray-600">Create and manage content playlists for your screens</p>
           </div>
           <Button onClick={() => setShowCreateDialog(true)}>
