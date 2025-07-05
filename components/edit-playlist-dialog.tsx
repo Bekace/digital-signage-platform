@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { useToast } from "@/hooks/use-toast"
-import { Edit, Save, X } from "lucide-react"
+import { Edit, Save, X, Loader2 } from "lucide-react"
 
 interface Playlist {
   id: number
@@ -35,15 +35,15 @@ export function EditPlaylistDialog({ open, onOpenChange, playlist, onPlaylistUpd
   const { toast } = useToast()
 
   useEffect(() => {
-    if (playlist) {
+    if (playlist && open) {
       setName(playlist.name)
       setDescription(playlist.description || "")
     }
-  }, [playlist])
+  }, [playlist, open])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!playlist) return
+    if (!playlist || !name.trim()) return
 
     setLoading(true)
     try {
@@ -66,13 +66,14 @@ export function EditPlaylistDialog({ open, onOpenChange, playlist, onPlaylistUpd
         onPlaylistUpdated()
         onOpenChange(false)
       } else {
-        throw new Error("Failed to update playlist")
+        const errorData = await response.json()
+        throw new Error(errorData.error || "Failed to update playlist")
       }
     } catch (error) {
       console.error("Update error:", error)
       toast({
         title: "Error",
-        description: "Failed to update playlist",
+        description: error instanceof Error ? error.message : "Failed to update playlist",
         variant: "destructive",
       })
     } finally {
@@ -94,28 +95,30 @@ export function EditPlaylistDialog({ open, onOpenChange, playlist, onPlaylistUpd
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Edit className="h-5 w-5" />
-            Edit Playlist
+            Edit Playlist Details
           </DialogTitle>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-2">
-            <Label htmlFor="name">Playlist Name</Label>
+            <Label htmlFor="edit-name">Playlist Name</Label>
             <Input
-              id="name"
+              id="edit-name"
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder="Enter playlist name"
               required
+              disabled={loading}
             />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="description">Description</Label>
+            <Label htmlFor="edit-description">Description</Label>
             <Textarea
-              id="description"
+              id="edit-description"
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               placeholder="Enter playlist description (optional)"
               rows={3}
+              disabled={loading}
             />
           </div>
           <div className="flex justify-end space-x-2 pt-4">
@@ -124,8 +127,17 @@ export function EditPlaylistDialog({ open, onOpenChange, playlist, onPlaylistUpd
               Cancel
             </Button>
             <Button type="submit" disabled={loading || !name.trim()}>
-              <Save className="h-4 w-4 mr-2" />
-              {loading ? "Saving..." : "Save Changes"}
+              {loading ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Saving...
+                </>
+              ) : (
+                <>
+                  <Save className="h-4 w-4 mr-2" />
+                  Save Changes
+                </>
+              )}
             </Button>
           </div>
         </form>

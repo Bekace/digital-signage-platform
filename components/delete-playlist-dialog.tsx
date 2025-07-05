@@ -3,9 +3,8 @@
 import { useState } from "react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
-import { Alert, AlertDescription } from "@/components/ui/alert"
 import { useToast } from "@/hooks/use-toast"
-import { Trash2, AlertTriangle, X } from "lucide-react"
+import { Trash2, AlertTriangle, X, Loader2 } from "lucide-react"
 
 interface Playlist {
   id: number
@@ -40,18 +39,19 @@ export function DeletePlaylistDialog({ open, onOpenChange, playlist, onPlaylistD
       if (response.ok) {
         toast({
           title: "Success",
-          description: "Playlist deleted successfully",
+          description: `Playlist "${playlist.name}" has been deleted`,
         })
         onPlaylistDeleted()
         onOpenChange(false)
       } else {
-        throw new Error("Failed to delete playlist")
+        const errorData = await response.json()
+        throw new Error(errorData.error || "Failed to delete playlist")
       }
     } catch (error) {
       console.error("Delete error:", error)
       toast({
         title: "Error",
-        description: "Failed to delete playlist",
+        description: error instanceof Error ? error.message : "Failed to delete playlist",
         variant: "destructive",
       })
     } finally {
@@ -66,53 +66,54 @@ export function DeletePlaylistDialog({ open, onOpenChange, playlist, onPlaylistD
       <DialogContent className="sm:max-w-[500px]">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-red-600">
-            <Trash2 className="h-5 w-5" />
+            <AlertTriangle className="h-5 w-5" />
             Delete Playlist
           </DialogTitle>
           <DialogDescription>
-            Are you sure you want to delete this playlist? This action cannot be undone.
+            This action cannot be undone. This will permanently delete the playlist and all its content.
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4">
-          <div className="bg-gray-50 p-4 rounded-lg">
-            <h4 className="font-medium mb-2">{playlist.name}</h4>
-            {playlist.description && <p className="text-sm text-gray-600 mb-2">{playlist.description}</p>}
-            <div className="flex items-center gap-4 text-sm text-gray-500">
-              <span>{playlist.item_count || 0} items</span>
-              <span>Status: {playlist.status}</span>
+          <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+            <div className="flex items-start gap-3">
+              <Trash2 className="h-5 w-5 text-red-600 mt-0.5" />
+              <div>
+                <h4 className="font-medium text-red-800">You are about to delete:</h4>
+                <p className="text-red-700 mt-1">
+                  <strong>"{playlist.name}"</strong>
+                </p>
+                {playlist.item_count && playlist.item_count > 0 && (
+                  <p className="text-red-600 text-sm mt-2">
+                    This playlist contains {playlist.item_count} media item{playlist.item_count !== 1 ? "s" : ""}.
+                  </p>
+                )}
+                {playlist.status === "active" && (
+                  <p className="text-red-600 text-sm mt-1">This playlist is currently published and active.</p>
+                )}
+              </div>
             </div>
           </div>
 
-          {playlist.status === "active" && (
-            <Alert>
-              <AlertTriangle className="h-4 w-4" />
-              <AlertDescription>
-                This playlist is currently published and may be playing on screens. Deleting it will stop playback.
-              </AlertDescription>
-            </Alert>
-          )}
-
-          {(playlist.item_count || 0) > 0 && (
-            <Alert>
-              <AlertTriangle className="h-4 w-4" />
-              <AlertDescription>
-                This playlist contains {playlist.item_count} media items. The items themselves will not be deleted, only
-                removed from this playlist.
-              </AlertDescription>
-            </Alert>
-          )}
-        </div>
-
-        <div className="flex justify-end space-x-2 pt-4">
-          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={loading}>
-            <X className="h-4 w-4 mr-2" />
-            Cancel
-          </Button>
-          <Button variant="destructive" onClick={handleDelete} disabled={loading}>
-            <Trash2 className="h-4 w-4 mr-2" />
-            {loading ? "Deleting..." : "Delete Playlist"}
-          </Button>
+          <div className="flex justify-end space-x-2">
+            <Button variant="outline" onClick={() => onOpenChange(false)} disabled={loading}>
+              <X className="h-4 w-4 mr-2" />
+              Cancel
+            </Button>
+            <Button variant="destructive" onClick={handleDelete} disabled={loading}>
+              {loading ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Deleting...
+                </>
+              ) : (
+                <>
+                  <Trash2 className="h-4 w-4 mr-2" />
+                  Delete Playlist
+                </>
+              )}
+            </Button>
+          </div>
         </div>
       </DialogContent>
     </Dialog>

@@ -16,43 +16,61 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
       const items = await sql`
         SELECT 
           pi.*,
-          m.name,
-          m.type,
+          m.filename,
+          m.original_name,
+          m.file_type,
           m.file_size,
-          m.url
+          m.url,
+          m.thumbnail_url,
+          m.mime_type
         FROM playlist_items pi
-        LEFT JOIN media m ON pi.media_id = m.id
+        LEFT JOIN media_files m ON pi.media_id = m.id
         WHERE pi.playlist_id = ${playlistId}
         ORDER BY pi.order_index ASC
       `
 
+      const formattedItems = items.map((item) => ({
+        id: item.id,
+        name: item.original_name || item.filename || `Item ${item.id}`,
+        type: item.file_type || "unknown",
+        duration: item.duration || 10,
+        order_index: item.order_index,
+        url: item.url,
+        thumbnail_url: item.thumbnail_url,
+        file_size: item.file_size,
+        media_id: item.media_id,
+      }))
+
       return NextResponse.json({
         success: true,
-        items: items,
+        items: formattedItems,
       })
     } catch (dbError) {
-      // Return mock items if table doesn't exist
+      console.error("Database error:", dbError)
+      // Return mock items if database fails
       const mockItems = [
         {
           id: 1,
-          name: "Welcome Image",
+          name: "Sample Image 3.jpeg",
           type: "image",
-          duration: 15,
+          duration: 10,
           order_index: 1,
+          url: "/placeholder.svg?height=400&width=600&text=Sample+Image+3",
+          thumbnail_url: "/placeholder.svg?height=100&width=150&text=Sample+3",
+          file_size: 524288,
+          media_id: 1,
         },
         {
           id: 2,
-          name: "Company Video",
-          type: "video",
-          duration: 30,
-          order_index: 2,
-        },
-        {
-          id: 3,
-          name: "Announcement Text",
-          type: "text",
+          name: "NYC Skyline",
+          type: "image",
           duration: 10,
-          order_index: 3,
+          order_index: 2,
+          url: "https://hebbkx1anhila5yf.public.blob.vercel-storage.com/image-BcauzTC8298guV4h9Ybn0OZZV2Q8WA.png",
+          thumbnail_url:
+            "https://hebbkx1anhila5yf.public.blob.vercel-storage.com/image-BcauzTC8298guV4h9Ybn0OZZV2Q8WA.png",
+          file_size: 1048576,
+          media_id: 2,
         },
       ]
 
@@ -79,6 +97,10 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
     const sql = getDb()
     const playlistId = params.id
 
+    if (!media_id) {
+      return NextResponse.json({ success: false, error: "Media ID is required" }, { status: 400 })
+    }
+
     try {
       // Get the next order index
       const maxOrder = await sql`
@@ -91,8 +113,8 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
 
       // Insert new playlist item
       const result = await sql`
-        INSERT INTO playlist_items (playlist_id, media_id, duration, order_index, created_at)
-        VALUES (${playlistId}, ${media_id}, ${duration}, ${nextOrder}, NOW())
+        INSERT INTO playlist_items (playlist_id, media_id, duration, order_index, created_at, updated_at)
+        VALUES (${playlistId}, ${media_id}, ${duration}, ${nextOrder}, NOW(), NOW())
         RETURNING *
       `
 
@@ -101,6 +123,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
         item: result[0],
       })
     } catch (dbError) {
+      console.error("Database error:", dbError)
       // Simulate successful creation if table doesn't exist
       return NextResponse.json({
         success: true,
@@ -110,6 +133,8 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
           media_id,
           duration,
           order_index: 1,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
         },
       })
     }

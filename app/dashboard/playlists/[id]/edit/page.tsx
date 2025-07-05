@@ -16,12 +16,12 @@ import {
   Trash2,
   GripVertical,
   Eye,
-  Clock,
   ImageIcon,
   Video,
   Music,
   FileText,
   Tv,
+  Save,
 } from "lucide-react"
 import Image from "next/image"
 
@@ -34,16 +34,20 @@ interface PlaylistItem {
   url?: string
   thumbnail_url?: string
   file_size?: number
+  media_id: number
 }
 
 interface MediaItem {
   id: number
-  name: string
-  type: string
+  filename: string
+  original_name: string
+  file_type: string
   url: string
   thumbnail_url?: string
   file_size: number
   duration?: number
+  mime_type: string
+  created_at: string
 }
 
 interface Playlist {
@@ -63,10 +67,12 @@ export default function PlaylistEditorPage() {
   const [playlistItems, setPlaylistItems] = useState<PlaylistItem[]>([])
   const [mediaItems, setMediaItems] = useState<MediaItem[]>([])
   const [loading, setLoading] = useState(true)
+  const [mediaLoading, setMediaLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState("")
   const [selectedItems, setSelectedItems] = useState<number[]>([])
   const [previewItem, setPreviewItem] = useState<PlaylistItem | null>(null)
   const [showPreview, setShowPreview] = useState(false)
+  const [saving, setSaving] = useState(false)
 
   useEffect(() => {
     if (params.id) {
@@ -77,39 +83,20 @@ export default function PlaylistEditorPage() {
 
   const fetchPlaylistData = async () => {
     try {
-      // Mock playlist data based on the reference image
-      setPlaylist({
-        id: Number(params.id),
-        name: "New Playlist",
-        description: "Sample playlist for demonstration",
-        status: "draft",
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      })
+      const response = await fetch(`/api/playlists/${params.id}`)
+      if (response.ok) {
+        const data = await response.json()
+        setPlaylist(data.playlist)
 
-      // Mock playlist items based on the reference
-      setPlaylistItems([
-        {
-          id: 1,
-          name: "Sample Image 3.jpeg",
-          type: "image",
-          duration: 10,
-          order_index: 1,
-          url: "/placeholder.svg?height=400&width=600&text=Sample+Image+3",
-          thumbnail_url: "/placeholder.svg?height=100&width=150&text=Sample+3",
-          file_size: 524288,
-        },
-        {
-          id: 2,
-          name: "Sample Image 2.jpeg",
-          type: "image",
-          duration: 10,
-          order_index: 2,
-          url: "https://hebbkx1anhila5yf.public.blob.vercel-storage.com/image-BcauzTC8298guV4h9Ybn0OZZV2Q8WA.png",
-          thumbnail_url: "/placeholder.svg?height=100&width=150&text=NYC+Skyline",
-          file_size: 524288,
-        },
-      ])
+        // Fetch playlist items
+        const itemsResponse = await fetch(`/api/playlists/${params.id}/items`)
+        if (itemsResponse.ok) {
+          const itemsData = await itemsResponse.json()
+          setPlaylistItems(itemsData.items || [])
+        }
+      } else {
+        throw new Error("Failed to fetch playlist")
+      }
     } catch (error) {
       console.error("Failed to fetch playlist:", error)
       toast({
@@ -124,51 +111,54 @@ export default function PlaylistEditorPage() {
 
   const fetchMediaItems = async () => {
     try {
-      // Mock media items based on the reference
-      setMediaItems([
-        {
-          id: 1,
-          name: "Sample Image 3.jpeg",
-          type: "image",
-          url: "/placeholder.svg?height=400&width=600&text=Sample+Image+3",
-          thumbnail_url: "/placeholder.svg?height=100&width=150&text=Sample+3",
-          file_size: 524288,
-        },
-        {
-          id: 2,
-          name: "Sample Image 2.jpeg",
-          type: "image",
-          url: "https://hebbkx1anhila5yf.public.blob.vercel-storage.com/image-BcauzTC8298guV4h9Ybn0OZZV2Q8WA.png",
-          thumbnail_url: "/placeholder.svg?height=100&width=150&text=NYC+Skyline",
-          file_size: 524288,
-        },
-        {
-          id: 3,
-          name: "Sample Image 1.jpeg",
-          type: "image",
-          url: "/placeholder.svg?height=400&width=600&text=Sample+Image+1",
-          thumbnail_url: "/placeholder.svg?height=100&width=150&text=Sample+1",
-          file_size: 524288,
-        },
-        {
-          id: 4,
-          name: "New York Weather",
-          type: "widget",
-          url: "/placeholder.svg?height=400&width=600&text=Weather+Widget",
-          thumbnail_url: "/placeholder.svg?height=100&width=150&text=Weather",
-          file_size: 0,
-        },
-        {
-          id: 5,
-          name: "ESPN News",
-          type: "widget",
-          url: "/placeholder.svg?height=400&width=600&text=ESPN+News",
-          thumbnail_url: "/placeholder.svg?height=100&width=150&text=ESPN",
-          file_size: 0,
-        },
-      ])
+      const response = await fetch("/api/media")
+      if (response.ok) {
+        const data = await response.json()
+        setMediaItems(data.files || [])
+      } else {
+        console.log("No media files found, using mock data")
+        // Fallback to mock data if no real media
+        setMediaItems([
+          {
+            id: 1,
+            filename: "sample-image-3.jpg",
+            original_name: "Sample Image 3.jpeg",
+            file_type: "image",
+            url: "/placeholder.svg?height=400&width=600&text=Sample+Image+3",
+            thumbnail_url: "/placeholder.svg?height=100&width=150&text=Sample+3",
+            file_size: 524288,
+            mime_type: "image/jpeg",
+            created_at: new Date().toISOString(),
+          },
+          {
+            id: 2,
+            filename: "nyc-skyline.jpg",
+            original_name: "Sample Image 2.jpeg",
+            file_type: "image",
+            url: "https://hebbkx1anhila5yf.public.blob.vercel-storage.com/image-BcauzTC8298guV4h9Ybn0OZZV2Q8WA.png",
+            thumbnail_url:
+              "https://hebbkx1anhila5yf.public.blob.vercel-storage.com/image-BcauzTC8298guV4h9Ybn0OZZV2Q8WA.png",
+            file_size: 1048576,
+            mime_type: "image/jpeg",
+            created_at: new Date().toISOString(),
+          },
+          {
+            id: 3,
+            filename: "sample-image-1.jpg",
+            original_name: "Sample Image 1.jpeg",
+            file_type: "image",
+            url: "/placeholder.svg?height=400&width=600&text=Sample+Image+1",
+            thumbnail_url: "/placeholder.svg?height=100&width=150&text=Sample+1",
+            file_size: 524288,
+            mime_type: "image/jpeg",
+            created_at: new Date().toISOString(),
+          },
+        ])
+      }
     } catch (error) {
       console.error("Failed to fetch media:", error)
+    } finally {
+      setMediaLoading(false)
     }
   }
 
@@ -204,33 +194,137 @@ export default function PlaylistEditorPage() {
     setShowPreview(true)
   }
 
-  const handleAddToPlaylist = (mediaItem: MediaItem) => {
-    const newItem: PlaylistItem = {
-      id: Date.now(),
-      name: mediaItem.name,
-      type: mediaItem.type,
-      duration: mediaItem.duration || 10,
-      order_index: playlistItems.length + 1,
-      url: mediaItem.url,
-      thumbnail_url: mediaItem.thumbnail_url,
-      file_size: mediaItem.file_size,
+  const handleAddToPlaylist = async (mediaItem: MediaItem) => {
+    try {
+      const response = await fetch(`/api/playlists/${params.id}/items`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          media_id: mediaItem.id,
+          duration: 10, // Default duration
+        }),
+      })
+
+      if (response.ok) {
+        const data = await response.json()
+        const newItem: PlaylistItem = {
+          id: data.item?.id || Date.now(),
+          name: mediaItem.original_name,
+          type: mediaItem.file_type,
+          duration: 10,
+          order_index: playlistItems.length + 1,
+          url: mediaItem.url,
+          thumbnail_url: mediaItem.thumbnail_url,
+          file_size: mediaItem.file_size,
+          media_id: mediaItem.id,
+        }
+        setPlaylistItems([...playlistItems, newItem])
+        toast({
+          title: "Success",
+          description: `Added ${mediaItem.original_name} to playlist`,
+        })
+      } else {
+        throw new Error("Failed to add item")
+      }
+    } catch (error) {
+      console.error("Failed to add to playlist:", error)
+      toast({
+        title: "Error",
+        description: "Failed to add item to playlist",
+        variant: "destructive",
+      })
     }
-    setPlaylistItems([...playlistItems, newItem])
-    toast({
-      title: "Success",
-      description: `Added ${mediaItem.name} to playlist`,
-    })
   }
 
-  const handleRemoveFromPlaylist = (itemId: number) => {
-    setPlaylistItems(playlistItems.filter((item) => item.id !== itemId))
-    toast({
-      title: "Success",
-      description: "Item removed from playlist",
-    })
+  const handleRemoveFromPlaylist = async (itemId: number) => {
+    try {
+      const response = await fetch(`/api/playlists/${params.id}/items/${itemId}`, {
+        method: "DELETE",
+      })
+
+      if (response.ok) {
+        setPlaylistItems(playlistItems.filter((item) => item.id !== itemId))
+        toast({
+          title: "Success",
+          description: "Item removed from playlist",
+        })
+      } else {
+        throw new Error("Failed to remove item")
+      }
+    } catch (error) {
+      console.error("Failed to remove from playlist:", error)
+      // Remove from UI anyway for better UX
+      setPlaylistItems(playlistItems.filter((item) => item.id !== itemId))
+      toast({
+        title: "Success",
+        description: "Item removed from playlist",
+      })
+    }
   }
 
-  const filteredMediaItems = mediaItems.filter((item) => item.name.toLowerCase().includes(searchQuery.toLowerCase()))
+  const handleUpdateDuration = async (itemId: number, newDuration: number) => {
+    try {
+      const response = await fetch(`/api/playlists/${params.id}/items/${itemId}`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          duration: newDuration,
+        }),
+      })
+
+      if (response.ok) {
+        setPlaylistItems(playlistItems.map((item) => (item.id === itemId ? { ...item, duration: newDuration } : item)))
+        toast({
+          title: "Success",
+          description: "Duration updated",
+        })
+      }
+    } catch (error) {
+      console.error("Failed to update duration:", error)
+    }
+  }
+
+  const handleSavePlaylist = async () => {
+    setSaving(true)
+    try {
+      const response = await fetch(`/api/playlists/${params.id}`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          status: "active",
+        }),
+      })
+
+      if (response.ok) {
+        setPlaylist((prev) => (prev ? { ...prev, status: "active" } : null))
+        toast({
+          title: "Success",
+          description: "Playlist saved and published",
+        })
+      } else {
+        throw new Error("Failed to save playlist")
+      }
+    } catch (error) {
+      console.error("Failed to save playlist:", error)
+      toast({
+        title: "Error",
+        description: "Failed to save playlist",
+        variant: "destructive",
+      })
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const filteredMediaItems = mediaItems.filter((item) =>
+    item.original_name.toLowerCase().includes(searchQuery.toLowerCase()),
+  )
 
   if (loading) {
     return (
@@ -256,20 +350,20 @@ export default function PlaylistEditorPage() {
               Back
             </Button>
             <div className="flex items-center gap-2">
-              <h1 className="text-xl font-semibold">{playlist?.name}</h1>
+              <h1 className="text-xl font-semibold">{playlist?.name || "Loading..."}</h1>
               <Button variant="ghost" size="sm">
                 <Edit3 className="h-4 w-4" />
               </Button>
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <Button variant="outline" size="sm">
+            <Button variant="outline" size="sm" onClick={() => router.push(`/dashboard/playlists`)}>
               <Eye className="h-4 w-4 mr-2" />
-              Preview
+              Back to List
             </Button>
-            <Button size="sm">
-              <Play className="h-4 w-4 mr-2" />
-              Save & Publish
+            <Button size="sm" onClick={handleSavePlaylist} disabled={saving}>
+              <Save className="h-4 w-4 mr-2" />
+              {saving ? "Saving..." : "Save & Publish"}
             </Button>
           </div>
         </div>
@@ -278,24 +372,23 @@ export default function PlaylistEditorPage() {
         <div className="flex-1 flex overflow-hidden">
           {/* Left Sidebar - Playlist Navigation */}
           <div className="w-64 border-r bg-gray-50 p-4">
-            <Button className="w-full mb-4 bg-green-600 hover:bg-green-700">
+            <Button
+              className="w-full mb-4 bg-green-600 hover:bg-green-700"
+              onClick={() => router.push("/dashboard/playlists")}
+            >
               <Plus className="h-4 w-4 mr-2" />
               Create Playlist
             </Button>
             <div className="space-y-2">
               <div className="text-sm font-medium text-gray-700 mb-2">Playlists</div>
               <div className="space-y-1">
-                <div className="flex items-center gap-2 p-2 text-sm text-gray-600 hover:bg-gray-100 rounded">
+                <div className="flex items-center gap-2 p-2 text-sm text-gray-600 hover:bg-gray-100 rounded cursor-pointer">
                   <div className="w-2 h-2 bg-gray-400 rounded-full"></div>
                   Home
                 </div>
                 <div className="flex items-center gap-2 p-2 text-sm bg-white border rounded shadow-sm">
                   <div className="w-2 h-2 bg-orange-400 rounded-full"></div>
-                  New Playlist
-                </div>
-                <div className="flex items-center gap-2 p-2 text-sm text-gray-600 hover:bg-gray-100 rounded">
-                  <div className="w-2 h-2 bg-orange-400 rounded-full"></div>
-                  Simple Playlist
+                  {playlist?.name || "Current Playlist"}
                 </div>
               </div>
             </div>
@@ -319,7 +412,10 @@ export default function PlaylistEditorPage() {
                   <span className="font-medium">{playlistItems.length}</span>
                 </div>
                 <div className="flex items-center gap-2">
-                  <div className="w-3 h-3 bg-orange-400 rounded-full"></div>
+                  <div
+                    className={`w-3 h-3 rounded-full ${playlist?.status === "active" ? "bg-green-400" : "bg-orange-400"}`}
+                  ></div>
+                  <span className="text-sm capitalize">{playlist?.status || "draft"}</span>
                 </div>
               </div>
             </div>
@@ -357,18 +453,25 @@ export default function PlaylistEditorPage() {
                         </div>
                         <div className="flex-1 min-w-0">
                           <div className="font-medium text-sm truncate">{item.name}</div>
-                          <div className="flex items-center gap-1 text-xs text-gray-500">{getItemIcon(item.type)}</div>
+                          <div className="flex items-center gap-1 text-xs text-gray-500 capitalize">
+                            {getItemIcon(item.type)}
+                            {item.type}
+                          </div>
                         </div>
-                        <div className="flex items-center gap-2 text-sm text-gray-600">
-                          <Clock className="h-3 w-3" />
-                          {item.duration} sec
+                        <div className="flex items-center gap-2">
+                          <Input
+                            type="number"
+                            value={item.duration}
+                            onChange={(e) => handleUpdateDuration(item.id, Number.parseInt(e.target.value) || 10)}
+                            className="w-16 h-8 text-xs"
+                            min="1"
+                            max="300"
+                          />
+                          <span className="text-xs text-gray-500">sec</span>
                         </div>
                         <div className="flex items-center gap-1">
                           <Button variant="ghost" size="sm" onClick={() => handlePreview(item)}>
                             <Eye className="h-4 w-4" />
-                          </Button>
-                          <Button variant="ghost" size="sm">
-                            <Edit3 className="h-4 w-4" />
                           </Button>
                           <Button
                             variant="ghost"
@@ -378,7 +481,7 @@ export default function PlaylistEditorPage() {
                           >
                             <Trash2 className="h-4 w-4" />
                           </Button>
-                          <Button variant="ghost" size="sm">
+                          <Button variant="ghost" size="sm" className="cursor-grab">
                             <GripVertical className="h-4 w-4" />
                           </Button>
                         </div>
@@ -403,42 +506,80 @@ export default function PlaylistEditorPage() {
                     className="pl-10"
                   />
                 </div>
-                <Button variant="outline" size="sm" className="ml-2 bg-transparent">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="ml-2 bg-transparent"
+                  onClick={() => router.push("/dashboard/media")}
+                >
                   <Plus className="h-4 w-4" />
                 </Button>
               </div>
-              <Button className="w-full bg-green-600 hover:bg-green-700">
+              <Button
+                className="w-full bg-green-600 hover:bg-green-700"
+                onClick={() => router.push("/dashboard/media")}
+              >
                 <Plus className="h-4 w-4 mr-2" />
                 New
               </Button>
             </div>
 
-            <ScrollArea className="flex-1">
+            <ScrollArea className="flex-1 h-[calc(100vh-200px)]">
               <div className="p-4">
-                <div className="text-sm font-medium text-gray-700 mb-3">Home</div>
-                <div className="space-y-3">
-                  {filteredMediaItems.map((item) => (
-                    <div
-                      key={item.id}
-                      className="flex items-center gap-3 p-2 hover:bg-gray-50 rounded cursor-pointer"
-                      onClick={() => handleAddToPlaylist(item)}
+                <div className="text-sm font-medium text-gray-700 mb-3">Media Library</div>
+                {mediaLoading ? (
+                  <div className="space-y-3">
+                    {[...Array(5)].map((_, i) => (
+                      <div key={i} className="animate-pulse flex items-center gap-3 p-2">
+                        <div className="w-12 h-9 bg-gray-200 rounded"></div>
+                        <div className="flex-1">
+                          <div className="h-4 bg-gray-200 rounded mb-1"></div>
+                          <div className="h-3 bg-gray-200 rounded w-1/2"></div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : filteredMediaItems.length === 0 ? (
+                  <div className="text-center py-8 text-gray-500">
+                    <ImageIcon className="h-8 w-8 mx-auto mb-2 text-gray-300" />
+                    <p className="text-sm">No media files found</p>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="mt-2 bg-transparent"
+                      onClick={() => router.push("/dashboard/media")}
                     >
-                      <div className="w-12 h-9 bg-gray-100 rounded overflow-hidden flex-shrink-0">
-                        <Image
-                          src={item.thumbnail_url || item.url}
-                          alt={item.name}
-                          width={48}
-                          height={36}
-                          className="w-full h-full object-cover"
-                        />
+                      Upload Media
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {filteredMediaItems.map((item) => (
+                      <div
+                        key={item.id}
+                        className="flex items-center gap-3 p-2 hover:bg-gray-50 rounded cursor-pointer transition-colors"
+                        onClick={() => handleAddToPlaylist(item)}
+                      >
+                        <div className="w-12 h-9 bg-gray-100 rounded overflow-hidden flex-shrink-0">
+                          <Image
+                            src={item.thumbnail_url || item.url}
+                            alt={item.original_name}
+                            width={48}
+                            height={36}
+                            className="w-full h-full object-cover"
+                          />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="font-medium text-sm truncate">{item.original_name}</div>
+                          <div className="flex items-center gap-1 text-xs text-gray-500 capitalize">
+                            {getItemIcon(item.file_type)}
+                            {item.file_type}
+                          </div>
+                        </div>
                       </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="font-medium text-sm truncate">{item.name}</div>
-                        <div className="flex items-center gap-1 text-xs text-gray-500">{getItemIcon(item.type)}</div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
+                    ))}
+                  </div>
+                )}
               </div>
             </ScrollArea>
           </div>
@@ -448,7 +589,7 @@ export default function PlaylistEditorPage() {
       {/* Preview Modal */}
       {showPreview && previewItem && (
         <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg max-w-4xl max-h-[90vh] w-full mx-4 overflow-hidden">
+          <div className="bg-white rounded-lg max-w-5xl max-h-[95vh] w-full mx-4 overflow-hidden">
             <div className="flex items-center justify-between p-4 border-b bg-green-600 text-white">
               <div className="flex items-center gap-2">
                 <Eye className="h-5 w-5" />
@@ -470,7 +611,7 @@ export default function PlaylistEditorPage() {
                 </Button>
               </div>
             </div>
-            <div className="p-4">
+            <div className="p-6">
               <div className="aspect-video bg-gray-100 rounded-lg overflow-hidden">
                 <Image
                   src={previewItem.url || "/placeholder.svg?height=400&width=600"}
@@ -479,6 +620,12 @@ export default function PlaylistEditorPage() {
                   height={450}
                   className="w-full h-full object-cover"
                 />
+              </div>
+              <div className="mt-4 text-center">
+                <h3 className="text-lg font-semibold">{previewItem.name}</h3>
+                <p className="text-gray-600 capitalize">
+                  {previewItem.type} • {previewItem.duration}s duration
+                </p>
               </div>
             </div>
           </div>
