@@ -7,14 +7,14 @@ import { Badge } from "@/components/ui/badge"
 import { RefreshCw, Database, Monitor } from "lucide-react"
 
 interface Device {
-  id: string
+  id: number
   name: string
+  device_id: string
   type: string
   status: string
-  location?: string
-  current_playlist?: any
-  created_at: string
-  updated_at?: string
+  location: string
+  last_seen: string
+  current_playlist?: string
 }
 
 export default function DebugScreensPage() {
@@ -66,7 +66,7 @@ export default function DebugScreensPage() {
       <div className="grid gap-4 md:grid-cols-4">
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm">Total Screens</CardTitle>
+            <CardTitle className="text-sm">Total Devices</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{devices.length}</div>
@@ -103,12 +103,12 @@ export default function DebugScreensPage() {
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Monitor className="h-5 w-5" />
-            All Screens
+            All Devices
           </CardTitle>
         </CardHeader>
         <CardContent>
           {devices.length === 0 ? (
-            <p className="text-gray-500 text-center py-4">No screens found</p>
+            <p className="text-gray-500 text-center py-4">No devices found</p>
           ) : (
             <div className="space-y-3">
               {devices.map((device) => (
@@ -119,13 +119,12 @@ export default function DebugScreensPage() {
                       <p className="text-sm text-gray-600">{device.location || "No location"}</p>
                       <div className="flex items-center gap-4 text-xs text-gray-500 mt-1">
                         <span>ID: {device.id}</span>
+                        <span>Device ID: {device.device_id}</span>
                         <span>Type: {device.type}</span>
-                        <span>Created: {new Date(device.created_at).toLocaleDateString()}</span>
+                        <span>Last Seen: {device.last_seen || "Never"}</span>
                       </div>
                       {device.current_playlist && (
-                        <div className="text-xs text-blue-600 mt-1">
-                          Playlist: {JSON.stringify(device.current_playlist)}
-                        </div>
+                        <div className="text-xs text-blue-600 mt-1">Playlist: {device.current_playlist}</div>
                       )}
                     </div>
                     <div className="flex flex-col items-end gap-1">
@@ -135,9 +134,6 @@ export default function DebugScreensPage() {
                         }
                       >
                         {device.status}
-                      </Badge>
-                      <Badge variant="outline" className="text-xs">
-                        {device.type}
                       </Badge>
                     </div>
                   </div>

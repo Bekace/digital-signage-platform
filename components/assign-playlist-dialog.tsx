@@ -2,173 +2,155 @@
 
 import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Badge } from "@/components/ui/badge"
-import { Skeleton } from "@/components/ui/skeleton"
-import { useToast } from "@/hooks/use-toast"
-import { List, ImageIcon, Clock, CheckCircle, AlertCircle } from "lucide-react"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Play, Monitor, Clock, X } from "lucide-react"
+import { toast } from "@/hooks/use-toast"
 
 interface Device {
-  id: string
+  id: number
   name: string
-  current_playlist?: {
-    id: string
-    name: string
-    items: number
-  }
+  device_id: string
+  current_playlist?: string
 }
 
 interface Playlist {
   id: number
   name: string
-  description?: string
+  description: string
   status: string
   items: number
   duration: string
-  created_at: string
-  updated_at: string
 }
 
 interface AssignPlaylistDialogProps {
-  device: Device | null
   open: boolean
   onOpenChange: (open: boolean) => void
-  onAssignmentComplete: () => void
+  device: Device | null
+  onPlaylistAssigned?: () => void
 }
 
-export function AssignPlaylistDialog({ device, open, onOpenChange, onAssignmentComplete }: AssignPlaylistDialogProps) {
-  const { toast } = useToast()
+export function AssignPlaylistDialog({ open, onOpenChange, device, onPlaylistAssigned }: AssignPlaylistDialogProps) {
   const [playlists, setPlaylists] = useState<Playlist[]>([])
-  const [allPlaylists, setAllPlaylists] = useState<Playlist[]>([])
-  const [selectedPlaylist, setSelectedPlaylist] = useState<string | null>(null)
-  const [isLoading, setIsLoading] = useState(false)
-  const [isAssigning, setIsAssigning] = useState(false)
-  const [debugInfo, setDebugInfo] = useState<any>(null)
-
-  useEffect(() => {
-    if (open) {
-      fetchPlaylists()
-    }
-  }, [open])
+  const [loading, setLoading] = useState(false)
+  const [assigning, setAssigning] = useState(false)
 
   const fetchPlaylists = async () => {
-    setIsLoading(true)
+    if (!open) return
+
+    setLoading(true)
     try {
       console.log("🎵 Fetching playlists for assignment...")
-      const response = await fetch("/api/playlists", {
-        credentials: "include",
-      })
-
+      const response = await fetch("/api/playlists")
       const data = await response.json()
+
       console.log("🎵 Playlists API response:", data)
-      setDebugInfo(data)
 
       if (data.success) {
-        const allPlaylistsData = data.playlists || []
-        setAllPlaylists(allPlaylistsData)
+        const allPlaylists = data.playlists || []
+        // Filter for published playlists (status = 'active')
+        const publishedPlaylists = allPlaylists.filter((p: Playlist) => p.status === "active")
 
-        // Filter for published playlists - check for both "active" and "published" status
-        const publishedPlaylists = allPlaylistsData.filter(
-          (playlist: Playlist) => playlist.status === "active" || playlist.status === "published",
-        )
-
-        console.log("🎵 All playlists:", allPlaylistsData.length)
+        console.log("🎵 All playlists:", allPlaylists.length)
         console.log("🎵 Published playlists:", publishedPlaylists.length)
         console.log("🎵 Published playlist details:", publishedPlaylists)
 
         setPlaylists(publishedPlaylists)
       } else {
-        throw new Error(data.error || "Failed to fetch playlists")
+        console.error("🎵 Failed to fetch playlists:", data.error)
+        toast({
+          title: "Error",
+          description: "Failed to load playlists",
+          variant: "destructive",
+        })
       }
     } catch (error) {
-      console.error("🎵 Fetch playlists error:", error)
+      console.error("🎵 Playlist fetch error:", error)
       toast({
         title: "Error",
-        description: "Failed to load playlists. Please try again.",
+        description: "Failed to load playlists",
         variant: "destructive",
       })
     } finally {
-      setIsLoading(false)
+      setLoading(false)
     }
   }
 
-  const handleAssign = async () => {
-    if (!device || !selectedPlaylist) return
+  useEffect(() => {
+    fetchPlaylists()
+  }, [open])
 
-    setIsAssigning(true)
+  const handleAssignPlaylist = async (playlistId: number) => {
+    if (!device) return
+
+    setAssigning(true)
     try {
+      console.log("🎵 Assigning playlist", playlistId, "to device", device.id)
+
       const response = await fetch(`/api/devices/${device.id}/playlist`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        credentials: "include",
-        body: JSON.stringify({ playlistId: selectedPlaylist }),
+        body: JSON.stringify({
+          playlist_id: playlistId,
+        }),
       })
 
       const data = await response.json()
+      console.log("🎵 Assignment response:", data)
 
       if (data.success) {
         toast({
-          title: "Playlist assigned",
-          description: "The playlist has been successfully assigned to the device.",
+          title: "Success",
+          description: "Playlist assigned successfully",
         })
-        onAssignmentComplete()
         onOpenChange(false)
+        onPlaylistAssigned?.()
       } else {
         throw new Error(data.error || "Failed to assign playlist")
       }
     } catch (error) {
-      console.error("Assign playlist error:", error)
+      console.error("🎵 Assignment error:", error)
       toast({
         title: "Error",
-        description: "Failed to assign playlist. Please try again.",
+        description: error instanceof Error ? error.message : "Failed to assign playlist",
         variant: "destructive",
       })
     } finally {
-      setIsAssigning(false)
+      setAssigning(false)
     }
   }
 
-  const handleUnassign = async () => {
+  const handleUnassignPlaylist = async () => {
     if (!device) return
 
-    setIsAssigning(true)
+    setAssigning(true)
     try {
       const response = await fetch(`/api/devices/${device.id}/playlist`, {
         method: "DELETE",
-        credentials: "include",
       })
 
-      const data = await response.json()
-
-      if (data.success) {
+      if (response.ok) {
         toast({
-          title: "Playlist unassigned",
-          description: "The playlist has been removed from the device.",
+          title: "Success",
+          description: "Playlist unassigned successfully",
         })
-        onAssignmentComplete()
         onOpenChange(false)
+        onPlaylistAssigned?.()
       } else {
-        throw new Error(data.error || "Failed to unassign playlist")
+        throw new Error("Failed to unassign playlist")
       }
     } catch (error) {
-      console.error("Unassign playlist error:", error)
+      console.error("Unassign error:", error)
       toast({
         title: "Error",
-        description: "Failed to unassign playlist. Please try again.",
+        description: "Failed to unassign playlist",
         variant: "destructive",
       })
     } finally {
-      setIsAssigning(false)
+      setAssigning(false)
     }
   }
 
@@ -176,111 +158,71 @@ export function AssignPlaylistDialog({ device, open, onOpenChange, onAssignmentC
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <List className="h-5 w-5" />
-            Assign Playlist
+            <Monitor className="h-5 w-5" />
+            Assign Playlist to {device.name || "Device"}
           </DialogTitle>
-          <DialogDescription>Choose a playlist to assign to {device.name}</DialogDescription>
+          <DialogDescription>Choose a published playlist to display on this screen</DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4">
-          {/* Debug Info */}
-          {process.env.NODE_ENV === "development" && debugInfo && (
-            <Card className="border-yellow-200 bg-yellow-50">
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm flex items-center gap-2">
-                  <AlertCircle className="h-4 w-4 text-yellow-600" />
-                  Debug Info
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="text-xs">
-                <div>Total playlists: {allPlaylists.length}</div>
-                <div>Published playlists: {playlists.length}</div>
-                <div>Playlist statuses: {allPlaylists.map((p) => `${p.name}: ${p.status}`).join(", ")}</div>
-              </CardContent>
-            </Card>
-          )}
-
           {/* Current Assignment */}
           {device.current_playlist && (
             <Card className="border-blue-200 bg-blue-50">
               <CardHeader className="pb-3">
-                <CardTitle className="text-sm flex items-center gap-2">
-                  <CheckCircle className="h-4 w-4 text-blue-600" />
-                  Currently Assigned
+                <CardTitle className="text-sm flex items-center justify-between">
+                  <span>Currently Assigned</span>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleUnassignPlaylist}
+                    disabled={assigning}
+                    className="h-7 bg-transparent"
+                  >
+                    <X className="h-3 w-3 mr-1" />
+                    Unassign
+                  </Button>
                 </CardTitle>
               </CardHeader>
-              <CardContent>
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="font-medium">{device.current_playlist.name}</p>
-                    <p className="text-sm text-gray-600">{device.current_playlist.items} items</p>
-                  </div>
-                  <Button variant="outline" size="sm" onClick={handleUnassign} disabled={isAssigning}>
-                    {isAssigning ? "Removing..." : "Remove"}
-                  </Button>
-                </div>
+              <CardContent className="pt-0">
+                <p className="text-sm font-medium text-blue-800">{device.current_playlist}</p>
               </CardContent>
             </Card>
           )}
 
           {/* Available Playlists */}
-          <div>
-            <h3 className="text-sm font-medium mb-3">Available Playlists</h3>
+          <div className="space-y-3">
+            <h4 className="font-medium">Available Playlists</h4>
 
-            {isLoading ? (
-              <div className="space-y-3">
-                {[...Array(3)].map((_, i) => (
-                  <Skeleton key={i} className="h-20 w-full" />
-                ))}
+            {loading ? (
+              <div className="text-center py-8">
+                <div className="text-sm text-gray-500">Loading playlists...</div>
               </div>
             ) : playlists.length === 0 ? (
-              <Card>
-                <CardContent className="flex flex-col items-center justify-center py-8">
-                  <List className="h-8 w-8 text-gray-400 mb-2" />
-                  <p className="text-sm text-gray-600 text-center">
-                    No published playlists available.
-                    <br />
-                    {allPlaylists.length > 0 ? (
-                      <>Found {allPlaylists.length} playlists, but none are published.</>
-                    ) : (
-                      <>Create and publish a playlist first.</>
-                    )}
-                  </p>
-                  {allPlaylists.length > 0 && (
-                    <div className="mt-2 text-xs text-gray-500">
-                      Available playlists: {allPlaylists.map((p) => `${p.name} (${p.status})`).join(", ")}
-                    </div>
-                  )}
+              <Card className="border-yellow-200 bg-yellow-50">
+                <CardContent className="text-center py-6">
+                  <Play className="h-8 w-8 mx-auto text-yellow-600 mb-2" />
+                  <h3 className="font-medium text-yellow-800 mb-1">No published playlists available</h3>
+                  <p className="text-sm text-yellow-700">Create and publish a playlist first.</p>
                 </CardContent>
               </Card>
             ) : (
-              <div className="space-y-3 max-h-60 overflow-y-auto">
+              <div className="grid gap-3 max-h-60 overflow-y-auto">
                 {playlists.map((playlist) => (
-                  <Card
-                    key={playlist.id}
-                    className={`cursor-pointer transition-colors ${
-                      selectedPlaylist === playlist.id.toString()
-                        ? "border-blue-500 bg-blue-50"
-                        : "hover:border-gray-300"
-                    }`}
-                    onClick={() => setSelectedPlaylist(playlist.id.toString())}
-                  >
+                  <Card key={playlist.id} className="hover:shadow-sm transition-shadow">
                     <CardContent className="p-4">
                       <div className="flex items-center justify-between">
                         <div className="flex-1">
                           <div className="flex items-center gap-2 mb-1">
                             <h4 className="font-medium">{playlist.name}</h4>
-                            <Badge variant="default" className="text-xs">
-                              {playlist.status}
-                            </Badge>
+                            <Badge className="bg-green-100 text-green-800 text-xs">{playlist.status}</Badge>
                           </div>
                           {playlist.description && <p className="text-sm text-gray-600 mb-2">{playlist.description}</p>}
                           <div className="flex items-center gap-4 text-xs text-gray-500">
                             <span className="flex items-center gap-1">
-                              <ImageIcon className="h-3 w-3" />
+                              <Play className="h-3 w-3" />
                               {playlist.items} items
                             </span>
                             <span className="flex items-center gap-1">
@@ -289,9 +231,9 @@ export function AssignPlaylistDialog({ device, open, onOpenChange, onAssignmentC
                             </span>
                           </div>
                         </div>
-                        {selectedPlaylist === playlist.id.toString() && (
-                          <CheckCircle className="h-5 w-5 text-blue-600" />
-                        )}
+                        <Button onClick={() => handleAssignPlaylist(playlist.id)} disabled={assigning} size="sm">
+                          {assigning ? "Assigning..." : "Assign"}
+                        </Button>
                       </div>
                     </CardContent>
                   </Card>
@@ -301,14 +243,11 @@ export function AssignPlaylistDialog({ device, open, onOpenChange, onAssignmentC
           </div>
         </div>
 
-        <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isAssigning}>
-            Cancel
+        <div className="flex justify-end">
+          <Button variant="outline" onClick={() => onOpenChange(false)}>
+            Close
           </Button>
-          <Button onClick={handleAssign} disabled={!selectedPlaylist || isAssigning}>
-            {isAssigning ? "Assigning..." : "Assign Playlist"}
-          </Button>
-        </DialogFooter>
+        </div>
       </DialogContent>
     </Dialog>
   )
