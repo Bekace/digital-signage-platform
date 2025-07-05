@@ -14,7 +14,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Skeleton } from "@/components/ui/skeleton"
 import { useToast } from "@/hooks/use-toast"
-import { List, ImageIcon, Clock, CheckCircle } from "lucide-react"
+import { List, ImageIcon, Clock, CheckCircle, AlertCircle } from "lucide-react"
 
 interface Device {
   id: string
@@ -27,12 +27,12 @@ interface Device {
 }
 
 interface Playlist {
-  id: string
+  id: number
   name: string
   description?: string
-  status: "draft" | "published"
+  status: string
   items: number
-  duration: number
+  duration: string
   created_at: string
   updated_at: string
 }
@@ -47,9 +47,11 @@ interface AssignPlaylistDialogProps {
 export function AssignPlaylistDialog({ device, open, onOpenChange, onAssignmentComplete }: AssignPlaylistDialogProps) {
   const { toast } = useToast()
   const [playlists, setPlaylists] = useState<Playlist[]>([])
+  const [allPlaylists, setAllPlaylists] = useState<Playlist[]>([])
   const [selectedPlaylist, setSelectedPlaylist] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
   const [isAssigning, setIsAssigning] = useState(false)
+  const [debugInfo, setDebugInfo] = useState<any>(null)
 
   useEffect(() => {
     if (open) {
@@ -60,21 +62,34 @@ export function AssignPlaylistDialog({ device, open, onOpenChange, onAssignmentC
   const fetchPlaylists = async () => {
     setIsLoading(true)
     try {
+      console.log("🎵 Fetching playlists for assignment...")
       const response = await fetch("/api/playlists", {
         credentials: "include",
       })
 
       const data = await response.json()
+      console.log("🎵 Playlists API response:", data)
+      setDebugInfo(data)
 
       if (data.success) {
-        // Only show published playlists
-        const publishedPlaylists = data.playlists.filter((playlist: Playlist) => playlist.status === "published")
+        const allPlaylistsData = data.playlists || []
+        setAllPlaylists(allPlaylistsData)
+
+        // Filter for published playlists - check for both "active" and "published" status
+        const publishedPlaylists = allPlaylistsData.filter(
+          (playlist: Playlist) => playlist.status === "active" || playlist.status === "published",
+        )
+
+        console.log("🎵 All playlists:", allPlaylistsData.length)
+        console.log("🎵 Published playlists:", publishedPlaylists.length)
+        console.log("🎵 Published playlist details:", publishedPlaylists)
+
         setPlaylists(publishedPlaylists)
       } else {
         throw new Error(data.error || "Failed to fetch playlists")
       }
     } catch (error) {
-      console.error("Fetch playlists error:", error)
+      console.error("🎵 Fetch playlists error:", error)
       toast({
         title: "Error",
         description: "Failed to load playlists. Please try again.",
@@ -157,12 +172,6 @@ export function AssignPlaylistDialog({ device, open, onOpenChange, onAssignmentC
     }
   }
 
-  const formatDuration = (seconds: number) => {
-    const minutes = Math.floor(seconds / 60)
-    const remainingSeconds = seconds % 60
-    return `${minutes}:${remainingSeconds.toString().padStart(2, "0")}`
-  }
-
   if (!device) return null
 
   return (
@@ -177,6 +186,23 @@ export function AssignPlaylistDialog({ device, open, onOpenChange, onAssignmentC
         </DialogHeader>
 
         <div className="space-y-4">
+          {/* Debug Info */}
+          {process.env.NODE_ENV === "development" && debugInfo && (
+            <Card className="border-yellow-200 bg-yellow-50">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm flex items-center gap-2">
+                  <AlertCircle className="h-4 w-4 text-yellow-600" />
+                  Debug Info
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="text-xs">
+                <div>Total playlists: {allPlaylists.length}</div>
+                <div>Published playlists: {playlists.length}</div>
+                <div>Playlist statuses: {allPlaylists.map((p) => `${p.name}: ${p.status}`).join(", ")}</div>
+              </CardContent>
+            </Card>
+          )}
+
           {/* Current Assignment */}
           {device.current_playlist && (
             <Card className="border-blue-200 bg-blue-50">
@@ -217,8 +243,17 @@ export function AssignPlaylistDialog({ device, open, onOpenChange, onAssignmentC
                   <p className="text-sm text-gray-600 text-center">
                     No published playlists available.
                     <br />
-                    Create and publish a playlist first.
+                    {allPlaylists.length > 0 ? (
+                      <>Found {allPlaylists.length} playlists, but none are published.</>
+                    ) : (
+                      <>Create and publish a playlist first.</>
+                    )}
                   </p>
+                  {allPlaylists.length > 0 && (
+                    <div className="mt-2 text-xs text-gray-500">
+                      Available playlists: {allPlaylists.map((p) => `${p.name} (${p.status})`).join(", ")}
+                    </div>
+                  )}
                 </CardContent>
               </Card>
             ) : (
@@ -227,9 +262,11 @@ export function AssignPlaylistDialog({ device, open, onOpenChange, onAssignmentC
                   <Card
                     key={playlist.id}
                     className={`cursor-pointer transition-colors ${
-                      selectedPlaylist === playlist.id ? "border-blue-500 bg-blue-50" : "hover:border-gray-300"
+                      selectedPlaylist === playlist.id.toString()
+                        ? "border-blue-500 bg-blue-50"
+                        : "hover:border-gray-300"
                     }`}
-                    onClick={() => setSelectedPlaylist(playlist.id)}
+                    onClick={() => setSelectedPlaylist(playlist.id.toString())}
                   >
                     <CardContent className="p-4">
                       <div className="flex items-center justify-between">
@@ -237,7 +274,7 @@ export function AssignPlaylistDialog({ device, open, onOpenChange, onAssignmentC
                           <div className="flex items-center gap-2 mb-1">
                             <h4 className="font-medium">{playlist.name}</h4>
                             <Badge variant="default" className="text-xs">
-                              Published
+                              {playlist.status}
                             </Badge>
                           </div>
                           {playlist.description && <p className="text-sm text-gray-600 mb-2">{playlist.description}</p>}
@@ -248,11 +285,13 @@ export function AssignPlaylistDialog({ device, open, onOpenChange, onAssignmentC
                             </span>
                             <span className="flex items-center gap-1">
                               <Clock className="h-3 w-3" />
-                              {formatDuration(playlist.duration)}
+                              {playlist.duration}
                             </span>
                           </div>
                         </div>
-                        {selectedPlaylist === playlist.id && <CheckCircle className="h-5 w-5 text-blue-600" />}
+                        {selectedPlaylist === playlist.id.toString() && (
+                          <CheckCircle className="h-5 w-5 text-blue-600" />
+                        )}
                       </div>
                     </CardContent>
                   </Card>
