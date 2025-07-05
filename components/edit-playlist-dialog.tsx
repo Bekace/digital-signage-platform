@@ -3,19 +3,22 @@
 import type React from "react"
 
 import { useState, useEffect } from "react"
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { useToast } from "@/hooks/use-toast"
-import { Loader2 } from "lucide-react"
+import { Edit, Save, X } from "lucide-react"
 
 interface Playlist {
   id: number
   name: string
   description: string
   status: string
+  created_at: string
+  updated_at: string
+  item_count?: number
 }
 
 interface EditPlaylistDialogProps {
@@ -32,11 +35,11 @@ export function EditPlaylistDialog({ open, onOpenChange, playlist, onPlaylistUpd
   const { toast } = useToast()
 
   useEffect(() => {
-    if (playlist && open) {
+    if (playlist) {
       setName(playlist.name)
       setDescription(playlist.description || "")
     }
-  }, [playlist, open])
+  }, [playlist])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -46,8 +49,13 @@ export function EditPlaylistDialog({ open, onOpenChange, playlist, onPlaylistUpd
     try {
       const response = await fetch(`/api/playlists/${playlist.id}`, {
         method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, description }),
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          name: name.trim(),
+          description: description.trim(),
+        }),
       })
 
       if (response.ok) {
@@ -61,6 +69,7 @@ export function EditPlaylistDialog({ open, onOpenChange, playlist, onPlaylistUpd
         throw new Error("Failed to update playlist")
       }
     } catch (error) {
+      console.error("Update error:", error)
       toast({
         title: "Error",
         description: "Failed to update playlist",
@@ -71,44 +80,54 @@ export function EditPlaylistDialog({ open, onOpenChange, playlist, onPlaylistUpd
     }
   }
 
+  const handleClose = () => {
+    if (playlist) {
+      setName(playlist.name)
+      setDescription(playlist.description || "")
+    }
+    onOpenChange(false)
+  }
+
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[425px]">
+    <Dialog open={open} onOpenChange={handleClose}>
+      <DialogContent className="sm:max-w-[500px]">
         <DialogHeader>
-          <DialogTitle>Edit Playlist</DialogTitle>
+          <DialogTitle className="flex items-center gap-2">
+            <Edit className="h-5 w-5" />
+            Edit Playlist
+          </DialogTitle>
         </DialogHeader>
-        <form onSubmit={handleSubmit}>
-          <div className="grid gap-4 py-4">
-            <div className="grid gap-2">
-              <Label htmlFor="name">Name</Label>
-              <Input
-                id="name"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="Enter playlist name"
-                required
-              />
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="description">Description</Label>
-              <Textarea
-                id="description"
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                placeholder="Enter playlist description (optional)"
-                rows={3}
-              />
-            </div>
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div className="space-y-2">
+            <Label htmlFor="name">Playlist Name</Label>
+            <Input
+              id="name"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="Enter playlist name"
+              required
+            />
           </div>
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+          <div className="space-y-2">
+            <Label htmlFor="description">Description</Label>
+            <Textarea
+              id="description"
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              placeholder="Enter playlist description (optional)"
+              rows={3}
+            />
+          </div>
+          <div className="flex justify-end space-x-2 pt-4">
+            <Button type="button" variant="outline" onClick={handleClose} disabled={loading}>
+              <X className="h-4 w-4 mr-2" />
               Cancel
             </Button>
-            <Button type="submit" disabled={loading}>
-              {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              Update Playlist
+            <Button type="submit" disabled={loading || !name.trim()}>
+              <Save className="h-4 w-4 mr-2" />
+              {loading ? "Saving..." : "Save Changes"}
             </Button>
-          </DialogFooter>
+          </div>
         </form>
       </DialogContent>
     </Dialog>

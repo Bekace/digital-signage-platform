@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
+import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -19,7 +20,7 @@ import { PreviewPlaylistDialog } from "@/components/preview-playlist-dialog"
 import { DeletePlaylistDialog } from "@/components/delete-playlist-dialog"
 import { PublishPlaylistDialog } from "@/components/publish-playlist-dialog"
 import { useToast } from "@/hooks/use-toast"
-import { Plus, Search, MoreVertical, Edit, Eye, Copy, Trash2, Play, Pause, Clock, List } from "lucide-react"
+import { Plus, Search, MoreVertical, Edit, Eye, Copy, Trash2, Play, Pause, Clock, List, Settings } from "lucide-react"
 
 interface Playlist {
   id: number
@@ -32,6 +33,7 @@ interface Playlist {
 }
 
 export default function PlaylistsPage() {
+  const router = useRouter()
   const [playlists, setPlaylists] = useState<Playlist[]>([])
   const [loading, setLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState("")
@@ -116,6 +118,10 @@ export default function PlaylistsPage() {
   const handleEdit = (playlist: Playlist) => {
     setSelectedPlaylist(playlist)
     setEditDialogOpen(true)
+  }
+
+  const handleEditInEditor = (playlist: Playlist) => {
+    router.push(`/dashboard/playlists/${playlist.id}/edit`)
   }
 
   const handlePreview = (playlist: Playlist) => {
@@ -290,7 +296,11 @@ export default function PlaylistsPage() {
                       <DropdownMenuContent align="end">
                         <DropdownMenuItem onClick={() => handleEdit(playlist)}>
                           <Edit className="mr-2 h-4 w-4" />
-                          Edit
+                          Edit Details
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => handleEditInEditor(playlist)}>
+                          <Settings className="mr-2 h-4 w-4" />
+                          Edit Content
                         </DropdownMenuItem>
                         <DropdownMenuItem onClick={() => handlePreview(playlist)}>
                           <Eye className="mr-2 h-4 w-4" />
@@ -337,8 +347,8 @@ export default function PlaylistsPage() {
                         <Eye className="h-3 w-3 mr-1" />
                         Preview
                       </Button>
-                      <Button variant="outline" size="sm" onClick={() => handleEdit(playlist)}>
-                        <Edit className="h-3 w-3 mr-1" />
+                      <Button variant="outline" size="sm" onClick={() => handleEditInEditor(playlist)}>
+                        <Settings className="h-3 w-3 mr-1" />
                         Edit
                       </Button>
                     </div>
