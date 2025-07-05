@@ -1,145 +1,105 @@
 import { type NextRequest, NextResponse } from "next/server"
-import { getDb } from "@/lib/db"
-import { getCurrentUser } from "@/lib/auth"
+import { neon } from "@neondatabase/serverless"
+
+const sql = neon(process.env.DATABASE_URL!)
 
 export async function GET(request: NextRequest, { params }: { params: { id: string } }) {
   try {
-    const user = await getCurrentUser()
-    if (!user) {
-      return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 })
-    }
-
-    const sql = getDb()
     const playlistId = params.id
 
-    try {
-      const items = await sql`
-        SELECT 
-          pi.*,
-          m.filename,
-          m.original_name,
-          m.file_type,
-          m.file_size,
-          m.url,
-          m.thumbnail_url,
-          m.mime_type
-        FROM playlist_items pi
-        LEFT JOIN media_files m ON pi.media_id = m.id
-        WHERE pi.playlist_id = ${playlistId}
-        ORDER BY pi.order_index ASC
-      `
+    const items = await sql`
+      SELECT 
+        pi.*,
+        m.name as media_name,
+        m.type as media_type,
+        m.size as media_size,
+        m.url as media_url,
+        m.thumbnail_url as media_thumbnail_url,
+        m.duration as media_duration
+      FROM playlist_items pi
+      LEFT JOIN media m ON pi.media_id = m.id
+      WHERE pi.playlist_id = ${playlistId}
+      ORDER BY pi.order_index ASC
+    `
 
-      const formattedItems = items.map((item) => ({
-        id: item.id,
-        name: item.original_name || item.filename || `Item ${item.id}`,
-        type: item.file_type || "unknown",
-        duration: item.duration || 10,
-        order_index: item.order_index,
-        url: item.url,
-        thumbnail_url: item.thumbnail_url,
-        file_size: item.file_size,
-        media_id: item.media_id,
-      }))
+    const formattedItems = items.map((item) => ({
+      id: item.id,
+      media_id: item.media_id,
+      duration: item.duration,
+      order_index: item.order_index,
+      media: item.media_name
+        ? {
+            id: item.media_id,
+            name: item.media_name,
+            type: item.media_type,
+            size: item.media_size,
+            url: item.media_url,
+            thumbnail_url: item.media_thumbnail_url,
+            duration: item.media_duration,
+          }
+        : null,
+    }))
 
-      return NextResponse.json({
-        success: true,
-        items: formattedItems,
-      })
-    } catch (dbError) {
-      console.error("Database error:", dbError)
-      // Return mock items if database fails
-      const mockItems = [
-        {
-          id: 1,
-          name: "Sample Image 3.jpeg",
-          type: "image",
-          duration: 10,
-          order_index: 1,
-          url: "/placeholder.svg?height=400&width=600&text=Sample+Image+3",
-          thumbnail_url: "/placeholder.svg?height=100&width=150&text=Sample+3",
-          file_size: 524288,
-          media_id: 1,
-        },
-        {
-          id: 2,
-          name: "NYC Skyline",
-          type: "image",
-          duration: 10,
-          order_index: 2,
-          url: "https://hebbkx1anhila5yf.public.blob.vercel-storage.com/image-BcauzTC8298guV4h9Ybn0OZZV2Q8WA.png",
-          thumbnail_url:
-            "https://hebbkx1anhila5yf.public.blob.vercel-storage.com/image-BcauzTC8298guV4h9Ybn0OZZV2Q8WA.png",
-          file_size: 1048576,
-          media_id: 2,
-        },
-      ]
-
-      return NextResponse.json({
-        success: true,
-        items: mockItems,
-      })
-    }
+    return NextResponse.json(formattedItems)
   } catch (error) {
-    console.error("Playlist items GET error:", error)
-    return NextResponse.json({ success: false, error: "Failed to fetch playlist items" }, { status: 500 })
+    console.error("Error fetching playlist items:", error)
+    return NextResponse.json({ error: "Failed to fetch playlist items" }, { status: 500 })
   }
 }
 
 export async function POST(request: NextRequest, { params }: { params: { id: string } }) {
   try {
-    const user = await getCurrentUser()
-    if (!user) {
-      return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 })
-    }
-
-    const body = await request.json()
-    const { media_id, duration = 10 } = body
-    const sql = getDb()
+    const { media_id, duration = 10 } = await request.json()
     const playlistId = params.id
 
-    if (!media_id) {
-      return NextResponse.json({ success: false, error: "Media ID is required" }, { status: 400 })
-    }
+    // Get the next order index
+    const [{ max_order }] = await sql`
+      SELECT COALESCE(MAX(order_index), -1) + 1 as max_order
+      FROM playlist_items
+      WHERE playlist_id = ${playlistId}
+    `
 
-    try {
-      // Get the next order index
-      const maxOrder = await sql`
-        SELECT COALESCE(MAX(order_index), 0) as max_order
-        FROM playlist_items
-        WHERE playlist_id = ${playlistId}
-      `
+    // Insert the new item
+    const [newItem] = await sql`
+      INSERT INTO playlist_items (playlist_id, media_id, duration, order_index)
+      VALUES (${playlistId}, ${media_id}, ${duration}, ${max_order})
+      RETURNING *
+    `
 
-      const nextOrder = (maxOrder[0]?.max_order || 0) + 1
-
-      // Insert new playlist item
-      const result = await sql`
-        INSERT INTO playlist_items (playlist_id, media_id, duration, order_index, created_at, updated_at)
-        VALUES (${playlistId}, ${media_id}, ${duration}, ${nextOrder}, NOW(), NOW())
-        RETURNING *
-      `
-
-      return NextResponse.json({
-        success: true,
-        item: result[0],
-      })
-    } catch (dbError) {
-      console.error("Database error:", dbError)
-      // Simulate successful creation if table doesn't exist
-      return NextResponse.json({
-        success: true,
-        item: {
-          id: Date.now(),
-          playlist_id: playlistId,
-          media_id,
-          duration,
-          order_index: 1,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-        },
-      })
-    }
+    return NextResponse.json(newItem)
   } catch (error) {
-    console.error("Playlist items POST error:", error)
-    return NextResponse.json({ success: false, error: "Failed to add playlist item" }, { status: 500 })
+    console.error("Error adding playlist item:", error)
+    return NextResponse.json({ error: "Failed to add playlist item" }, { status: 500 })
+  }
+}
+
+export async function PUT(request: NextRequest, { params }: { params: { id: string } }) {
+  try {
+    const { items } = await request.json()
+    const playlistId = params.id
+
+    // Update each item's order and duration
+    for (const item of items) {
+      await sql`
+        UPDATE playlist_items 
+        SET order_index = ${item.order_index}, 
+            duration = ${item.duration},
+            updated_at = NOW()
+        WHERE id = ${item.id} 
+        AND playlist_id = ${playlistId}
+      `
+    }
+
+    // Update playlist's updated_at timestamp
+    await sql`
+      UPDATE playlists 
+      SET updated_at = NOW() 
+      WHERE id = ${playlistId}
+    `
+
+    return NextResponse.json({ success: true })
+  } catch (error) {
+    console.error("Error updating playlist items:", error)
+    return NextResponse.json({ error: "Failed to update playlist items" }, { status: 500 })
   }
 }

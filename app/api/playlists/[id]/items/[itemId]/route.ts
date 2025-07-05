@@ -1,80 +1,71 @@
 import { type NextRequest, NextResponse } from "next/server"
-import { getDb } from "@/lib/db"
-import { getCurrentUser } from "@/lib/auth"
+import { neon } from "@neondatabase/serverless"
 
-export async function PATCH(request: NextRequest, { params }: { params: { id: string; itemId: string } }) {
-  try {
-    const user = await getCurrentUser()
-    if (!user) {
-      return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 })
-    }
-
-    const body = await request.json()
-    const { duration } = body
-    const sql = getDb()
-    const playlistId = params.id
-    const itemId = params.itemId
-
-    try {
-      const result = await sql`
-        UPDATE playlist_items 
-        SET duration = ${duration}, updated_at = NOW()
-        WHERE id = ${itemId} AND playlist_id = ${playlistId}
-        RETURNING *
-      `
-
-      if (result.length === 0) {
-        return NextResponse.json({ success: false, error: "Item not found" }, { status: 404 })
-      }
-
-      return NextResponse.json({
-        success: true,
-        item: result[0],
-      })
-    } catch (dbError) {
-      console.error("Database error:", dbError)
-      return NextResponse.json({
-        success: true,
-        item: { id: itemId, duration },
-      })
-    }
-  } catch (error) {
-    console.error("Playlist item PATCH error:", error)
-    return NextResponse.json({ success: false, error: "Failed to update playlist item" }, { status: 500 })
-  }
-}
+const sql = neon(process.env.DATABASE_URL!)
 
 export async function DELETE(request: NextRequest, { params }: { params: { id: string; itemId: string } }) {
   try {
-    const user = await getCurrentUser()
-    if (!user) {
-      return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 })
-    }
-
-    const sql = getDb()
     const playlistId = params.id
     const itemId = params.itemId
 
-    try {
-      const result = await sql`
-        DELETE FROM playlist_items 
-        WHERE id = ${itemId} AND playlist_id = ${playlistId}
-        RETURNING *
-      `
+    // Delete the item
+    await sql`
+      DELETE FROM playlist_items 
+      WHERE id = ${itemId} 
+      AND playlist_id = ${playlistId}
+    `
 
-      return NextResponse.json({
-        success: true,
-        deleted: result.length > 0,
-      })
-    } catch (dbError) {
-      console.error("Database error:", dbError)
-      return NextResponse.json({
-        success: true,
-        deleted: true,
-      })
-    }
+    // Reorder remaining items
+    await sql`
+      UPDATE playlist_items 
+      SET order_index = order_index - 1
+      WHERE playlist_id = ${playlistId}
+      AND order_index > (
+        SELECT COALESCE(MAX(order_index), 0)
+        FROM playlist_items 
+        WHERE playlist_id = ${playlistId}
+      )
+    `
+
+    // Update playlist's updated_at timestamp
+    await sql`
+      UPDATE playlists 
+      SET updated_at = NOW() 
+      WHERE id = ${playlistId}
+    `
+
+    return NextResponse.json({ success: true })
   } catch (error) {
-    console.error("Playlist item DELETE error:", error)
-    return NextResponse.json({ success: false, error: "Failed to delete playlist item" }, { status: 500 })
+    console.error("Error deleting playlist item:", error)
+    return NextResponse.json({ error: "Failed to delete playlist item" }, { status: 500 })
+  }
+}
+
+export async function PUT(request: NextRequest, { params }: { params: { id: string; itemId: string } }) {
+  try {
+    const { duration } = await request.json()
+    const playlistId = params.id
+    const itemId = params.itemId
+
+    // Update the item
+    const [updatedItem] = await sql`
+      UPDATE playlist_items 
+      SET duration = ${duration}, updated_at = NOW()
+      WHERE id = ${itemId} 
+      AND playlist_id = ${playlistId}
+      RETURNING *
+    `
+
+    // Update playlist's updated_at timestamp
+    await sql`
+      UPDATE playlists 
+      SET updated_at = NOW() 
+      WHERE id = ${playlistId}
+    `
+
+    return NextResponse.json(updatedItem)
+  } catch (error) {
+    console.error("Error updating playlist item:", error)
+    return NextResponse.json({ error: "Failed to update playlist item" }, { status: 500 })
   }
 }
