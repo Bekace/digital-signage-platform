@@ -33,20 +33,17 @@ export default function PlaylistsPage() {
       setLoading(true)
       setError(null)
 
-      console.log("🎵 [FRONTEND] Starting playlist fetch...")
-      console.log("🎵 [FRONTEND] Current URL:", window.location.href)
-      console.log("🎵 [FRONTEND] Document cookies:", document.cookie)
+      console.log("🎵 [FRONTEND] Fetching playlists...")
 
       const response = await fetch("/api/playlists", {
         method: "GET",
-        credentials: "include", // Important: include cookies
+        credentials: "include",
         headers: {
           "Content-Type": "application/json",
         },
       })
 
       console.log("🎵 [FRONTEND] Response status:", response.status)
-      console.log("🎵 [FRONTEND] Response headers:", Object.fromEntries(response.headers.entries()))
 
       if (!response.ok) {
         const errorText = await response.text()
@@ -54,7 +51,6 @@ export default function PlaylistsPage() {
 
         if (response.status === 401) {
           setError("Authentication required. Please log in again.")
-          // Redirect to login after a delay
           setTimeout(() => {
             window.location.href = "/login"
           }, 2000)
@@ -141,7 +137,7 @@ export default function PlaylistsPage() {
         <div className="space-y-6">
           <div className="flex justify-between items-center">
             <div>
-              <h1 className="text-3xl font-bold">Playlists -------</h1>
+              <h1 className="text-3xl font-bold">Playlists - TEST FROM V0 CHAT</h1>
               <p className="text-gray-600">Create and manage content playlists for your screens</p>
             </div>
             <Button onClick={() => setShowCreateDialog(true)}>
@@ -172,7 +168,7 @@ export default function PlaylistsPage() {
       <div className="space-y-6">
         <div className="flex justify-between items-center">
           <div>
-            <h1 className="text-3xl font-bold">Playlists</h1>
+            <h1 className="text-3xl font-bold">Playlists - TEST FROM V0 CHAT</h1>
             <p className="text-gray-600">Create and manage content playlists for your screens</p>
           </div>
           <Button onClick={() => setShowCreateDialog(true)}>

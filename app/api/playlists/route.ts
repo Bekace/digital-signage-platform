@@ -5,18 +5,11 @@ import { getCurrentUser } from "@/lib/auth"
 export async function GET(request: NextRequest) {
   try {
     console.log("🎵 [PLAYLISTS API] Starting playlist fetch...")
-    console.log("🎵 [PLAYLISTS API] Request headers:", Object.fromEntries(request.headers.entries()))
 
     const user = await getCurrentUser()
     if (!user) {
       console.log("🎵 [PLAYLISTS API] No authenticated user")
-      return NextResponse.json(
-        {
-          success: false,
-          error: "Unauthorized - No valid session found",
-        },
-        { status: 401 },
-      )
+      return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 })
     }
 
     console.log("🎵 [PLAYLISTS API] User authenticated:", user.email, "ID:", user.id)
@@ -25,21 +18,13 @@ export async function GET(request: NextRequest) {
     // Test database connection first
     try {
       const testResult = await sql`SELECT 1 as test`
-      console.log("🎵 [PLAYLISTS API] Database connection test:", testResult)
+      console.log("🎵 [PLAYLISTS API] Database connection test passed")
     } catch (dbError) {
       console.error("🎵 [PLAYLISTS API] Database connection failed:", dbError)
-      return NextResponse.json(
-        {
-          success: false,
-          error: "Database connection failed",
-        },
-        { status: 500 },
-      )
+      return NextResponse.json({ success: false, error: "Database connection failed" }, { status: 500 })
     }
 
     // Fetch playlists with item count
-    console.log("🎵 [PLAYLISTS API] Querying playlists for user_id:", user.id)
-
     const playlists = await sql`
       SELECT 
         p.id,
@@ -62,53 +47,38 @@ export async function GET(request: NextRequest) {
       ORDER BY p.updated_at DESC
     `
 
-    console.log("🎵 [PLAYLISTS API] Raw query result:", playlists)
-    console.log("🎵 [PLAYLISTS API] Found playlists count:", playlists.length)
+    console.log("🎵 [PLAYLISTS API] Found playlists:", playlists.length)
 
     // Format playlists for frontend
     const formattedPlaylists = playlists.map((playlist) => {
       const itemCount =
         typeof playlist.item_count === "string" ? Number.parseInt(playlist.item_count) : playlist.item_count || 0
 
-      const formatted = {
+      return {
         id: Number(playlist.id),
         name: String(playlist.name || "Untitled Playlist"),
         description: String(playlist.description || ""),
         items: itemCount,
-        duration: "0:00", // TODO: Calculate actual duration based on playlist items
+        duration: "0:00",
         status: String(playlist.status || "draft"),
-        screens: [], // TODO: Get actual screen assignments from device_playlists table
+        screens: [],
         lastModified: playlist.updated_at ? new Date(playlist.updated_at).toLocaleDateString() : "Unknown",
       }
-      console.log("🎵 [PLAYLISTS API] Formatted playlist:", formatted)
-      return formatted
     })
 
-    const response = {
+    console.log("🎵 [PLAYLISTS API] Returning", formattedPlaylists.length, "formatted playlists")
+
+    return NextResponse.json({
       success: true,
       playlists: formattedPlaylists,
-      debug: {
-        user_id: user.id,
-        raw_count: playlists.length,
-        formatted_count: formattedPlaylists.length,
-      },
-    }
-
-    console.log("🎵 [PLAYLISTS API] Final response:", response)
-    return NextResponse.json(response)
+    })
   } catch (error) {
-    console.error("🎵 [PLAYLISTS API] Unexpected error:", error)
-    console.error("🎵 [PLAYLISTS API] Error stack:", error instanceof Error ? error.stack : "No stack")
-
+    console.error("🎵 [PLAYLISTS API] Error:", error)
     return NextResponse.json(
       {
         success: false,
         error: "Failed to fetch playlists",
         details: error instanceof Error ? error.message : "Unknown error",
-        debug: {
-          error_type: error instanceof Error ? error.constructor.name : typeof error,
-          timestamp: new Date().toISOString(),
-        },
       },
       { status: 500 },
     )
@@ -121,26 +91,14 @@ export async function POST(request: NextRequest) {
 
     const user = await getCurrentUser()
     if (!user) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: "Unauthorized",
-        },
-        { status: 401 },
-      )
+      return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 })
     }
 
     const body = await request.json()
     const { name, description } = body
 
     if (!name || typeof name !== "string" || name.trim().length === 0) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: "Playlist name is required",
-        },
-        { status: 400 },
-      )
+      return NextResponse.json({ success: false, error: "Playlist name is required" }, { status: 400 })
     }
 
     const sql = getDb()

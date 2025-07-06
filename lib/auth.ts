@@ -1,14 +1,17 @@
 import { cookies } from "next/headers"
+import jwt from "jsonwebtoken"
 import { getDb } from "./db"
+
+const JWT_SECRET = process.env.JWT_SECRET || "your-secret-key"
 
 export interface User {
   id: number
   email: string
-  firstName: string
-  lastName: string
-  company?: string
+  first_name: string
+  last_name: string
+  company: string
+  role: string
   plan: string
-  isAdmin: boolean
 }
 
 export async function getCurrentUser(): Promise<User | null> {
@@ -16,87 +19,44 @@ export async function getCurrentUser(): Promise<User | null> {
     console.log("🔐 [AUTH] Getting current user...")
 
     const cookieStore = await cookies()
-    const sessionToken = cookieStore.get("session_token")
+    const token = cookieStore.get("auth-token")?.value
 
-    console.log("🔐 [AUTH] Session token exists:", !!sessionToken?.value)
+    console.log("🔐 [AUTH] Token exists:", !!token)
 
-    if (!sessionToken?.value) {
-      console.log("🔐 [AUTH] No session token found")
+    if (!token) {
+      console.log("🔐 [AUTH] No auth token found")
       return null
     }
 
-    const sql = getDb()
+    const decoded = jwt.verify(token, JWT_SECRET) as any
+    console.log("🔐 [AUTH] Token decoded for user ID:", decoded.userId)
 
-    // Get user from session token
+    const sql = getDb()
     const users = await sql`
-      SELECT 
-        id, 
-        email, 
-        first_name as "firstName", 
-        last_name as "lastName", 
-        company, 
-        plan,
-        is_admin as "isAdmin"
+      SELECT id, email, first_name, last_name, company, role, plan
       FROM users 
-      WHERE id = ${sessionToken.value}
+      WHERE id = ${decoded.userId}
+      LIMIT 1
     `
 
-    console.log("🔐 [AUTH] Database query result:", users)
-
     if (users.length === 0) {
-      console.log("🔐 [AUTH] No user found for session token")
+      console.log("🔐 [AUTH] User not found in database")
       return null
     }
 
     const user = users[0]
     console.log("🔐 [AUTH] User found:", user.email, "ID:", user.id)
-
-    return {
-      id: user.id,
-      email: user.email,
-      firstName: user.firstName,
-      lastName: user.lastName,
-      company: user.company,
-      plan: user.plan || "free",
-      isAdmin: user.isAdmin || false,
-    }
+    return user
   } catch (error) {
-    console.error("🔐 [AUTH] Error getting current user:", error)
+    console.error("🔐 [AUTH] Auth error:", error)
     return null
   }
 }
 
-export async function createSession(userId: number): Promise<string> {
-  try {
-    const cookieStore = await cookies()
-
-    // Use user ID as session token (simple approach)
-    const sessionToken = userId.toString()
-
-    // Set cookie
-    cookieStore.set("session_token", sessionToken, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "lax",
-      maxAge: 60 * 60 * 24 * 7, // 7 days
-      path: "/",
-    })
-
-    console.log("🔐 [AUTH] Session created for user:", userId)
-    return sessionToken
-  } catch (error) {
-    console.error("🔐 [AUTH] Error creating session:", error)
-    throw error
-  }
+export function generateToken(userId: number): string {
+  return jwt.sign({ userId }, JWT_SECRET, { expiresIn: "7d" })
 }
 
-export async function destroySession(): Promise<void> {
-  try {
-    const cookieStore = await cookies()
-    cookieStore.delete("session_token")
-    console.log("🔐 [AUTH] Session destroyed")
-  } catch (error) {
-    console.error("🔐 [AUTH] Error destroying session:", error)
-    throw error
-  }
+export function verifyToken(token: string): any {
+  return jwt.verify(token, JWT_SECRET)
 }
