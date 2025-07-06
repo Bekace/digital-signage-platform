@@ -22,32 +22,30 @@ export async function getCurrentUser(): Promise<User | null> {
     console.log("🔐 [AUTH] Token found:", !!token)
 
     if (!token) {
-      console.log("🔐 [AUTH] No token found")
+      console.log("🔐 [AUTH] No auth token found")
       return null
     }
 
-    const decoded = jwt.verify(token, JWT_SECRET) as { userId: number }
-    console.log("🔐 [AUTH] Token decoded, userId:", decoded.userId)
+    const decoded = jwt.verify(token, JWT_SECRET) as any
+    console.log("🔐 [AUTH] Token decoded for user ID:", decoded.userId)
 
-    const result = await sql`
-      SELECT id, email, name, company, role 
+    const users = await sql`
+      SELECT id, email, first_name, last_name, company, role, plan
       FROM users 
       WHERE id = ${decoded.userId}
+      LIMIT 1
     `
 
-    console.log("🔐 [AUTH] Database query result:", result)
-
-    if (result.length === 0) {
+    if (users.length === 0) {
       console.log("🔐 [AUTH] User not found in database")
       return null
     }
 
-    const user = result[0] as User
-    console.log("🔐 [AUTH] User found:", { id: user.id, email: user.email })
-
+    const user = users[0]
+    console.log("🔐 [AUTH] User found:", user.email, "ID:", user.id)
     return user
   } catch (error) {
-    console.error("🔐 [AUTH] Error getting current user:", error)
+    console.error("🔐 [AUTH] Auth error:", error)
     return null
   }
 }
