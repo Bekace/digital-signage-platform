@@ -1,46 +1,59 @@
--- Create subscription plans table
-CREATE TABLE IF NOT EXISTS subscription_plans (
+-- Add admin role to users table
+ALTER TABLE users ADD COLUMN IF NOT EXISTS role VARCHAR(20) DEFAULT 'user';
+
+-- Update existing users to have 'user' role
+UPDATE users SET role = 'user' WHERE role IS NULL;
+
+-- Create admin user (you can change the email to your preferred admin email)
+INSERT INTO users (email, password_hash, first_name, last_name, role, plan_type, created_at)
+VALUES ('admin@signagecloud.com', 'admin123', 'Admin', 'User', 'admin', 'enterprise', NOW())
+ON CONFLICT (email) DO UPDATE SET role = 'admin';
+
+-- Create plan_features table for flexible feature management
+CREATE TABLE IF NOT EXISTS plan_features (
   id SERIAL PRIMARY KEY,
-  name VARCHAR(100) NOT NULL UNIQUE,
-  display_name VARCHAR(100) NOT NULL,
-  price_monthly DECIMAL(10,2) DEFAULT 0,
-  price_yearly DECIMAL(10,2) DEFAULT 0,
-  media_files_limit INTEGER DEFAULT 5,
-  storage_limit_gb INTEGER DEFAULT 1,
-  screens_limit INTEGER DEFAULT 1,
-  playlists_limit INTEGER DEFAULT 3,
-  features JSONB DEFAULT '{}',
-  is_active BOOLEAN DEFAULT true,
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  plan_type VARCHAR(50) NOT NULL,
+  feature_name VARCHAR(100) NOT NULL,
+  feature_value TEXT,
+  is_enabled BOOLEAN DEFAULT true,
+  created_at TIMESTAMP DEFAULT NOW(),
+  updated_at TIMESTAMP DEFAULT NOW()
 );
 
--- Insert default plans
-INSERT INTO subscription_plans (name, display_name, price_monthly, price_yearly, media_files_limit, storage_limit_gb, screens_limit, playlists_limit, features) VALUES
-('free', 'Free Plan', 0, 0, 5, 1, 1, 3, '{"support": "community", "analytics": false, "custom_branding": false}'),
-('basic', 'Basic Plan', 9.99, 99.99, 50, 10, 5, 20, '{"support": "email", "analytics": true, "custom_branding": false}'),
-('pro', 'Pro Plan', 29.99, 299.99, 200, 50, 20, 100, '{"support": "priority", "analytics": true, "custom_branding": true}'),
-('enterprise', 'Enterprise Plan', 99.99, 999.99, -1, -1, -1, -1, '{"support": "phone", "analytics": true, "custom_branding": true, "api_access": true}')
-ON CONFLICT (name) DO NOTHING;
+-- Insert default plan features
+INSERT INTO plan_features (plan_type, feature_name, feature_value, is_enabled) VALUES
+-- Free Plan Features
+('free', 'Custom Branding', 'false', false),
+('free', 'Priority Support', 'false', false),
+('free', 'Advanced Analytics', 'false', false),
+('free', 'API Access', 'false', false),
+('free', 'White Label', 'false', false),
 
--- Create admin users table
-CREATE TABLE IF NOT EXISTS admin_users (
-  id SERIAL PRIMARY KEY,
-  user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
-  role VARCHAR(50) DEFAULT 'admin',
-  permissions JSONB DEFAULT '{}',
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
+-- Pro Plan Features  
+('pro', 'Custom Branding', 'true', true),
+('pro', 'Priority Support', 'true', true),
+('pro', 'Advanced Analytics', 'true', true),
+('pro', 'API Access', 'limited', true),
+('pro', 'White Label', 'false', false),
 
--- Add admin role to existing user (replace with your user ID)
-INSERT INTO admin_users (user_id, role, permissions) 
-SELECT id, 'super_admin', '{"manage_plans": true, "manage_users": true, "view_analytics": true}'
-FROM users 
-WHERE email = 'admin@example.com' -- Replace with your email
+-- Enterprise Plan Features
+('enterprise', 'Custom Branding', 'true', true),
+('enterprise', 'Priority Support', 'true', true),
+('enterprise', 'Advanced Analytics', 'true', true),
+('enterprise', 'API Access', 'full', true),
+('enterprise', 'White Label', 'true', true),
+('enterprise', 'Dedicated Support', 'true', true),
+('enterprise', 'Custom Integrations', 'true', true)
+
 ON CONFLICT DO NOTHING;
 
--- Update users table to reference subscription plans
-ALTER TABLE users ADD COLUMN IF NOT EXISTS plan_id INTEGER REFERENCES subscription_plans(id);
-
--- Set all existing users to free plan
-UPDATE users SET plan_id = (SELECT id FROM subscription_plans WHERE name = 'free') WHERE plan_id IS NULL;
+-- Create admin_logs table for tracking admin actions
+CREATE TABLE IF NOT EXISTS admin_logs (
+  id SERIAL PRIMARY KEY,
+  admin_user_id INTEGER REFERENCES users(id),
+  action VARCHAR(100) NOT NULL,
+  target_type VARCHAR(50), -- 'plan', 'user', 'feature', etc.
+  target_id VARCHAR(100),
+  details JSONB,
+  created_at TIMESTAMP DEFAULT NOW()
+);

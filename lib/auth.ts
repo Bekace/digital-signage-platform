@@ -1,65 +1,94 @@
 import jwt from "jsonwebtoken"
 import { cookies } from "next/headers"
-import { sql } from "@/lib/db"
+import type { NextRequest } from "next/server"
+import { neon } from "@neondatabase/serverless"
 
-const JWT_SECRET = process.env.JWT_SECRET || "your-secret-key"
+const sql = neon(process.env.DATABASE_URL!)
+
+export interface DecodedToken {
+  userId: number
+  email: string
+  iat?: number
+  exp?: number
+}
 
 export interface User {
   id: number
   email: string
-  name: string
+  first_name: string
+  last_name: string
   company?: string
-  role?: string
+  plan: string
+  created_at: string
+  is_admin?: boolean
 }
 
-export async function getCurrentUser(): Promise<User | null> {
+export function verifyToken(token: string): DecodedToken | null {
   try {
-    console.log("🔐 [AUTH] Getting current user...")
+    const decoded = jwt.verify(token, process.env.JWT_SECRET!) as DecodedToken
+    return decoded
+  } catch (error) {
+    console.error("🔐 [AUTH] Token verification failed:", error)
+    return null
+  }
+}
 
-    const cookieStore = await cookies()
-    const token = cookieStore.get("auth-token")?.value
+export function generateToken(payload: { userId: number; email: string }): string {
+  return jwt.sign(payload, process.env.JWT_SECRET!, { expiresIn: "7d" })
+}
 
-    console.log("🔐 [AUTH] Token found:", !!token)
+export async function getCurrentUser(request?: NextRequest): Promise<User | null> {
+  try {
+    let token: string | null = null
+
+    if (request) {
+      // For API routes - check Authorization header first
+      const authHeader = request.headers.get("authorization")
+      if (authHeader?.startsWith("Bearer ")) {
+        token = authHeader.substring(7)
+      } else {
+        // Fallback to cookies for API routes
+        const cookieStore = request.cookies
+        token = cookieStore.get("auth-token")?.value || null
+      }
+    } else {
+      // For server components - use cookies
+      const cookieStore = await cookies()
+      token = cookieStore.get("auth-token")?.value || null
+    }
 
     if (!token) {
-      console.log("🔐 [AUTH] No auth token found")
       return null
     }
 
-    const decoded = jwt.verify(token, JWT_SECRET) as any
-    console.log("🔐 [AUTH] Token decoded for user ID:", decoded.userId)
+    const decoded = verifyToken(token)
+    if (!decoded) {
+      return null
+    }
 
+    // Get user from database
     const users = await sql`
-      SELECT id, email, first_name, last_name, company, role, plan
+      SELECT id, email, first_name, last_name, company, plan, created_at, is_admin
       FROM users 
       WHERE id = ${decoded.userId}
       LIMIT 1
     `
 
     if (users.length === 0) {
-      console.log("🔐 [AUTH] User not found in database")
       return null
     }
 
-    const user = users[0]
-    console.log("🔐 [AUTH] User found:", user.email, "ID:", user.id)
-    return user
+    return users[0] as User
   } catch (error) {
-    console.error("🔐 [AUTH] Auth error:", error)
+    console.error("❌ [AUTH] Error in getCurrentUser:", error)
     return null
   }
 }
 
-export async function createAuthToken(userId: number): Promise<string> {
-  return jwt.sign({ userId }, JWT_SECRET, { expiresIn: "7d" })
-}
-
-export async function verifyAuthToken(token: string): Promise<number | null> {
-  try {
-    const decoded = jwt.verify(token, JWT_SECRET) as { userId: number }
-    return decoded.userId
-  } catch (error) {
-    console.error("🔐 [AUTH] Token verification failed:", error)
-    return null
+export async function requireAuth(request?: NextRequest): Promise<User> {
+  const user = await getCurrentUser(request)
+  if (!user) {
+    throw new Error("Authentication required")
   }
+  return user
 }

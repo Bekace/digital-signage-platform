@@ -1,64 +1,67 @@
-import { NextResponse } from "next/server"
-import { sql } from "@/lib/db"
+import { type NextRequest, NextResponse } from "next/server"
+import { getDb } from "@/lib/db"
+import bcrypt from "bcryptjs"
 import jwt from "jsonwebtoken"
 
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
   try {
-    const body = await request.json()
-    const { firstName, lastName, email, company, password, plan } = body
+    const { email, password, firstName, lastName, company } = await request.json()
 
     // Validation
-    if (!firstName || !lastName || !email || !password) {
-      return NextResponse.json({ success: false, message: "All required fields must be filled" }, { status: 400 })
-    }
-
-    if (!email.includes("@") || !email.includes(".")) {
-      return NextResponse.json({ success: false, message: "Please enter a valid email address" }, { status: 400 })
-    }
-
-    if (password.length < 6) {
+    if (!email || !password || !firstName || !lastName) {
       return NextResponse.json(
-        { success: false, message: "Password must be at least 6 characters long" },
+        {
+          success: false,
+          message: "All required fields must be filled",
+        },
         { status: 400 },
       )
     }
 
+    if (password.length < 8) {
+      return NextResponse.json(
+        {
+          success: false,
+          message: "Password must be at least 8 characters long",
+        },
+        { status: 400 },
+      )
+    }
+
+    const sql = getDb()
+
     // Check if user already exists
-    const existingUser = await sql`
+    const existingUsers = await sql`
       SELECT id FROM users WHERE email = ${email.toLowerCase()}
     `
 
-    if (existingUser.length > 0) {
+    if (existingUsers.length > 0) {
       return NextResponse.json(
-        { success: false, message: "An account with this email already exists" },
+        {
+          success: false,
+          message: "An account with this email already exists",
+        },
         { status: 409 },
       )
     }
 
-    // Create new user
-    const result = await sql`
+    // Hash password
+    const saltRounds = 12
+    const passwordHash = await bcrypt.hash(password, saltRounds)
+
+    // Create user
+    const newUsers = await sql`
       INSERT INTO users (email, password_hash, first_name, last_name, company, plan)
-      VALUES (${email.toLowerCase()}, ${password}, ${firstName}, ${lastName}, ${company || ""}, ${plan || "free"})
+      VALUES (${email.toLowerCase()}, ${passwordHash}, ${firstName}, ${lastName}, ${company || null}, 'free')
       RETURNING id, email, first_name, last_name, company, plan, created_at
     `
 
-    const user = result[0]
-
-    if (!process.env.JWT_SECRET) {
-      return NextResponse.json({ success: false, message: "Server configuration error" }, { status: 500 })
-    }
+    const user = newUsers[0]
 
     // Create JWT token
-    const token = jwt.sign(
-      {
-        userId: user.id,
-        email: user.email,
-      },
-      process.env.JWT_SECRET,
-      { expiresIn: "7d" },
-    )
+    const token = jwt.sign({ userId: user.id, email: user.email }, process.env.JWT_SECRET!, { expiresIn: "7d" })
 
-    // Create response
+    // Create response with cookie
     const response = NextResponse.json({
       success: true,
       message: "Account created successfully",
@@ -84,6 +87,12 @@ export async function POST(request: Request) {
     return response
   } catch (error) {
     console.error("Registration error:", error)
-    return NextResponse.json({ success: false, message: "Internal server error" }, { status: 500 })
+    return NextResponse.json(
+      {
+        success: false,
+        message: "Internal server error",
+      },
+      { status: 500 },
+    )
   }
 }

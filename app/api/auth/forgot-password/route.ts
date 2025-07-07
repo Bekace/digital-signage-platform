@@ -3,6 +3,9 @@ import { neon } from "@neondatabase/serverless"
 import { Resend } from "resend"
 import crypto from "crypto"
 
+const sql = neon(process.env.DATABASE_URL!)
+const resend = new Resend(process.env.RESEND_API_KEY!)
+
 export async function POST(request: NextRequest) {
   try {
     console.log("Forgot password request received")
@@ -13,16 +16,6 @@ export async function POST(request: NextRequest) {
     if (!email) {
       return NextResponse.json({ error: "Email is required" }, { status: 400 })
     }
-
-    // Check if database URL is available
-    if (!process.env.DATABASE_URL) {
-      console.log("No database URL available")
-      return NextResponse.json({
-        message: "If an account with that email exists, we've sent a password reset link.",
-      })
-    }
-
-    const sql = neon(process.env.DATABASE_URL)
 
     // Check if user exists
     console.log("Looking for user with email...")
@@ -61,7 +54,6 @@ export async function POST(request: NextRequest) {
     if (process.env.RESEND_API_KEY) {
       console.log("Sending email via Resend...")
       try {
-        const resend = new Resend(process.env.RESEND_API_KEY)
         const emailResult = await resend.emails.send({
           from: "Digital Signage <onboarding@resend.dev>",
           to: [email],

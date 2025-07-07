@@ -5,95 +5,98 @@ const sql = neon(process.env.DATABASE_URL!)
 
 export async function GET(request: NextRequest, { params }: { params: { deviceId: string } }) {
   try {
-    const { deviceId } = params
-    console.log("🎵 [DEVICE PLAYLIST API] Fetching playlist for device:", deviceId)
+    const deviceId = params.deviceId
 
-    // Get device and user info
+    console.log("Fetching playlist for device:", deviceId)
+
+    // Get device and its assigned playlist
     const deviceResult = await sql`
-      SELECT user_id FROM devices WHERE device_id = ${deviceId}
+      SELECT d.*, d.assigned_playlist_id
+      FROM devices d
+      WHERE d.id = ${deviceId}
     `
 
     if (deviceResult.length === 0) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: "Device not found",
-        },
-        { status: 404 },
-      )
+      return NextResponse.json({ error: "Device not found" }, { status: 404 })
     }
 
-    const userId = deviceResult[0].user_id
+    const device = deviceResult[0]
 
-    // Get active playlists for this user
-    const playlistsResult = await sql`
-      SELECT 
-        p.id,
-        p.name,
-        p.status,
-        p.loop_enabled,
-        p.schedule_enabled,
-        p.start_time,
-        p.end_time,
-        p.selected_days,
-        p.background_color,
-        p.default_transition,
-        p.transition_speed,
-        p.auto_advance,
-        p.shuffle
-      FROM playlists p
-      WHERE p.user_id = ${userId} 
-      AND p.status = 'active'
-      ORDER BY p.updated_at DESC
-      LIMIT 1
-    `
-
-    if (playlistsResult.length === 0) {
+    if (!device.assigned_playlist_id) {
       return NextResponse.json({
-        success: true,
         playlist: null,
-        message: "No active playlist found",
+        message: "No playlist assigned to this device",
       })
     }
 
-    const playlist = playlistsResult[0]
-
-    // Get playlist items with media files
-    const itemsResult = await sql`
+    // Get playlist with items and media
+    const playlistResult = await sql`
       SELECT 
-        pi.id,
-        pi.position,
-        pi.duration,
-        pi.transition_type,
-        mf.filename,
-        mf.original_name,
-        mf.file_type,
-        mf.mime_type,
-        mf.url,
-        mf.file_size
-      FROM playlist_items pi
-      JOIN media_files mf ON pi.media_file_id = mf.id
-      WHERE pi.playlist_id = ${playlist.id}
-      AND mf.deleted_at IS NULL
-      ORDER BY pi.position ASC
+        p.*,
+        COALESCE(
+          JSON_AGG(
+            JSON_BUILD_OBJECT(
+              'id', pi.id,
+              'media_id', pi.media_id,
+              'position', pi.position,
+              'duration', pi.duration,
+              'transition_type', pi.transition_type,
+              'media', JSON_BUILD_OBJECT(
+                'id', m.id,
+                'filename', m.filename,
+                'original_name', m.original_name,
+                'file_type', m.file_type,
+                'mime_type', m.mime_type,
+                'url', m.url,
+                'thumbnail_url', m.thumbnail_url,
+                'dimensions', m.dimensions,
+                'duration', m.duration,
+                'media_source', m.media_source,
+                'external_url', m.external_url
+              )
+            ) ORDER BY pi.position
+          ) FILTER (WHERE pi.id IS NOT NULL), 
+          '[]'
+        ) as items
+      FROM playlists p
+      LEFT JOIN playlist_items pi ON p.id = pi.playlist_id
+      LEFT JOIN media_files m ON pi.media_id = m.id
+      WHERE p.id = ${device.assigned_playlist_id}
+      GROUP BY p.id
     `
 
-    const playlistData = {
-      ...playlist,
-      items: itemsResult,
+    if (playlistResult.length === 0) {
+      return NextResponse.json({ error: "Playlist not found" }, { status: 404 })
     }
 
-    console.log("🎵 [DEVICE PLAYLIST API] Returning playlist with", itemsResult.length, "items")
+    const playlist = playlistResult[0]
+
+    // Parse items if they're a string
+    if (typeof playlist.items === "string") {
+      playlist.items = JSON.parse(playlist.items)
+    }
+
+    console.log("Playlist found:", playlist.name, "with", playlist.items?.length || 0, "items")
 
     return NextResponse.json({
-      success: true,
-      playlist: playlistData,
+      playlist: {
+        id: playlist.id,
+        name: playlist.name,
+        description: playlist.description,
+        status: playlist.status,
+        loop_enabled: playlist.loop_enabled,
+        shuffle: playlist.shuffle,
+        background_color: playlist.background_color,
+        text_overlay: playlist.text_overlay,
+        scale_image: playlist.scale_image,
+        scale_video: playlist.scale_video,
+        items: playlist.items || [],
+      },
     })
   } catch (error) {
-    console.error("🎵 [DEVICE PLAYLIST API] Error:", error)
+    console.error("Playlist fetch error:", error)
     return NextResponse.json(
       {
-        success: false,
         error: "Failed to fetch playlist",
         details: error instanceof Error ? error.message : "Unknown error",
       },
