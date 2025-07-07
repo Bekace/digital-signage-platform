@@ -2,6 +2,8 @@ import { type NextRequest, NextResponse } from "next/server"
 import { getCurrentUser } from "@/lib/auth"
 import { neon } from "@neondatabase/serverless"
 
+export const dynamic = "force-dynamic"
+
 const sql = neon(process.env.DATABASE_URL!)
 
 export async function GET(request: NextRequest) {
@@ -60,7 +62,8 @@ export async function GET(request: NextRequest) {
             ? {
                 id: user.id,
                 email: user.email,
-                name: user.name,
+                first_name: user.first_name,
+                last_name: user.last_name,
                 plan: user.plan,
               }
             : null,

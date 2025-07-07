@@ -2,42 +2,61 @@ import { NextResponse } from "next/server"
 import { getCurrentUser } from "@/lib/auth"
 import { getDb } from "@/lib/db"
 
+export const dynamic = "force-dynamic"
+
 export async function GET() {
   try {
     const user = await getCurrentUser()
+    if (!user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    }
+
     const sql = getDb()
 
-    // Test database connection
-    const dbTest = await sql`SELECT NOW() as current_time`
-
-    // Check if media_files table exists
-    const tableCheck = await sql`
-      SELECT table_name 
-      FROM information_schema.tables 
-      WHERE table_schema = 'public' 
-      AND table_name IN ('media_files', 'users', 'plan_limits')
-    `
-
-    // Check user data
-    const userCheck = user
-      ? await sql`
-      SELECT id, email, plan_type, media_files_count, storage_used_bytes 
+    // Get user's current usage
+    const userUsage = await sql`
+      SELECT media_files_count, storage_used_bytes, plan
       FROM users 
       WHERE id = ${user.id}
     `
-      : []
+
+    // Get plan limits
+    const planLimits = await sql`
+      SELECT max_files, max_storage_gb
+      FROM plan_limits 
+      WHERE plan_type = ${userUsage[0]?.plan || "free"}
+    `
+
+    // Get recent uploads
+    const recentUploads = await sql`
+      SELECT original_name, file_size, mime_type, created_at
+      FROM media_files 
+      WHERE user_id = ${user.id}
+      ORDER BY created_at DESC
+      LIMIT 10
+    `
 
     return NextResponse.json({
-      database_connection: dbTest[0],
-      current_user: user ? { id: user.id, email: user.email } : null,
-      tables_exist: tableCheck.map((t) => t.table_name),
-      user_data: userCheck[0] || null,
-      blob_token: process.env.BLOB_READ_WRITE_TOKEN ? "✅ Available" : "❌ Missing",
+      user: {
+        id: user.id,
+        email: user.email,
+        plan: userUsage[0]?.plan || "unknown",
+      },
+      usage: {
+        files: userUsage[0]?.media_files_count || 0,
+        storage_bytes: userUsage[0]?.storage_used_bytes || 0,
+        storage_mb: Math.round(((userUsage[0]?.storage_used_bytes || 0) / (1024 * 1024)) * 100) / 100,
+      },
+      limits: planLimits[0] || { max_files: 0, max_storage_gb: 0 },
+      recent_uploads: recentUploads,
+      debug_info: {
+        timestamp: new Date().toISOString(),
+        environment: process.env.NODE_ENV,
+        vercel: !!process.env.VERCEL,
+      },
     })
   } catch (error) {
-    return NextResponse.json({
-      error: error instanceof Error ? error.message : "Unknown error",
-      stack: error instanceof Error ? error.stack : null,
-    })
+    console.error("Debug upload error:", error)
+    return NextResponse.json({ error: "Debug failed" }, { status: 500 })
   }
 }

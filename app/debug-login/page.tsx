@@ -192,12 +192,12 @@ export default function DebugLoginPage() {
               </CardHeader>
               <CardContent>
                 <div className="flex items-center space-x-2">
-                  {debugData?.database.connection === "OK" ? (
+                  {debugData?.database?.connection === "OK" ? (
                     <CheckCircle className="h-4 w-4 text-green-500" />
                   ) : (
                     <XCircle className="h-4 w-4 text-red-500" />
                   )}
-                  <span className="text-sm">{debugData?.database.connection || "Unknown"}</span>
+                  <span className="text-sm">{debugData?.database?.connection || "Unknown"}</span>
                 </div>
               </CardContent>
             </Card>
@@ -208,7 +208,7 @@ export default function DebugLoginPage() {
                 <User className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">{debugData?.database.userCount || 0}</div>
+                <div className="text-2xl font-bold">{debugData?.database?.userCount || 0}</div>
                 <p className="text-xs text-muted-foreground">Total users in database</p>
               </CardContent>
             </Card>
@@ -220,12 +220,14 @@ export default function DebugLoginPage() {
               </CardHeader>
               <CardContent>
                 <div className="flex items-center space-x-2">
-                  {debugData?.demoUser !== "NOT_FOUND" ? (
+                  {debugData?.demoUser && debugData.demoUser !== "NOT_FOUND" ? (
                     <CheckCircle className="h-4 w-4 text-green-500" />
                   ) : (
                     <XCircle className="h-4 w-4 text-red-500" />
                   )}
-                  <span className="text-sm">{debugData?.demoUser !== "NOT_FOUND" ? "Exists" : "Missing"}</span>
+                  <span className="text-sm">
+                    {debugData?.demoUser && debugData.demoUser !== "NOT_FOUND" ? "Exists" : "Missing"}
+                  </span>
                 </div>
               </CardContent>
             </Card>
@@ -238,7 +240,7 @@ export default function DebugLoginPage() {
               <CardContent>
                 <div className="space-y-1">
                   <div className="flex items-center space-x-2">
-                    {debugData?.environment.DATABASE_URL ? (
+                    {debugData?.environment?.DATABASE_URL ? (
                       <CheckCircle className="h-3 w-3 text-green-500" />
                     ) : (
                       <XCircle className="h-3 w-3 text-red-500" />
@@ -246,7 +248,7 @@ export default function DebugLoginPage() {
                     <span className="text-xs">DB URL</span>
                   </div>
                   <div className="flex items-center space-x-2">
-                    {debugData?.environment.JWT_SECRET ? (
+                    {debugData?.environment?.JWT_SECRET ? (
                       <CheckCircle className="h-3 w-3 text-green-500" />
                     ) : (
                       <XCircle className="h-3 w-3 text-red-500" />
@@ -266,7 +268,7 @@ export default function DebugLoginPage() {
               <CardDescription>Users table schema and configuration</CardDescription>
             </CardHeader>
             <CardContent>
-              {debugData?.database.tableStructure ? (
+              {debugData?.database?.tableStructure ? (
                 <div className="space-y-2">
                   {debugData.database.tableStructure.map((column, index) => (
                     <div key={index} className="flex items-center justify-between p-2 border rounded">
@@ -295,7 +297,7 @@ export default function DebugLoginPage() {
               <CardDescription>Current users and their status</CardDescription>
             </CardHeader>
             <CardContent>
-              {debugData?.database.users && debugData.database.users.length > 0 ? (
+              {debugData?.database?.users && debugData.database.users.length > 0 ? (
                 <div className="space-y-2">
                   {debugData.database.users.map((user, index) => (
                     <div key={index} className="flex items-center justify-between p-3 border rounded">
@@ -320,7 +322,7 @@ export default function DebugLoginPage() {
             </CardContent>
           </Card>
 
-          {debugData?.demoUser !== "NOT_FOUND" && (
+          {debugData?.demoUser && debugData.demoUser !== "NOT_FOUND" && (
             <Card>
               <CardHeader>
                 <CardTitle>Demo User Details</CardTitle>
