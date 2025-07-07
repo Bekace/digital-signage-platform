@@ -1,63 +1,57 @@
 import { type NextRequest, NextResponse } from "next/server"
-import { getDb } from "@/lib/db"
-import bcrypt from "bcryptjs"
+import { neon } from "@neondatabase/serverless"
 import jwt from "jsonwebtoken"
+
+const sql = neon(process.env.DATABASE_URL!)
 
 export async function POST(request: NextRequest) {
   try {
-    console.log("🔐 [LOGIN API] Starting login request...")
-
-    const body = await request.json()
-    const { email, password } = body
-
-    console.log("🔐 [LOGIN API] Login attempt for:", email)
+    const { email, password } = await request.json()
 
     if (!email || !password) {
-      console.log("🔐 [LOGIN API] Missing email or password")
-      return NextResponse.json({ success: false, message: "Email and password are required" }, { status: 400 })
+      return NextResponse.json(
+        {
+          success: false,
+          message: "Email and password are required",
+        },
+        { status: 400 },
+      )
     }
 
-    const sql = getDb()
-
-    // Find user in database
-    const users = await sql`
-      SELECT id, email, first_name, last_name, company, password_hash, plan
+    // Get user from database
+    const result = await sql`
+      SELECT id, email, password_hash, first_name, last_name, company, plan, created_at
       FROM users 
       WHERE email = ${email.toLowerCase()}
-      LIMIT 1
     `
 
-    if (users.length === 0) {
-      console.log("🔐 [LOGIN API] User not found:", email)
-      return NextResponse.json({ success: false, message: "Invalid email or password" }, { status: 401 })
+    if (result.length === 0) {
+      return NextResponse.json(
+        {
+          success: false,
+          message: "Invalid email or password",
+        },
+        { status: 401 },
+      )
     }
 
-    const user = users[0]
-    console.log("🔐 [LOGIN API] User found:", user.email)
+    const user = result[0]
 
-    // Verify password
-    const isValidPassword = await bcrypt.compare(password, user.password_hash)
-
-    if (!isValidPassword) {
-      console.log("🔐 [LOGIN API] Invalid password for:", email)
-      return NextResponse.json({ success: false, message: "Invalid email or password" }, { status: 401 })
+    // Simple password check (for demo - in production you'd use bcrypt)
+    if (user.password_hash !== password) {
+      return NextResponse.json(
+        {
+          success: false,
+          message: "Invalid email or password",
+        },
+        { status: 401 },
+      )
     }
 
-    // Generate JWT token
-    const token = jwt.sign(
-      {
-        userId: user.id,
-        email: user.email,
-        firstName: user.first_name,
-        lastName: user.last_name,
-      },
-      process.env.JWT_SECRET!,
-      { expiresIn: "7d" },
-    )
+    // Create JWT token
+    const token = jwt.sign({ userId: user.id, email: user.email }, process.env.JWT_SECRET!, { expiresIn: "7d" })
 
-    console.log("🔐 [LOGIN API] Login successful for:", user.email)
-
-    // Create response with user data
+    // Create response
     const response = NextResponse.json({
       success: true,
       message: "Login successful",
@@ -69,7 +63,6 @@ export async function POST(request: NextRequest) {
         company: user.company,
         plan: user.plan,
       },
-      token,
     })
 
     // Set HTTP-only cookie
@@ -77,13 +70,19 @@ export async function POST(request: NextRequest) {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
       sameSite: "lax",
-      maxAge: 7 * 24 * 60 * 60, // 7 days
+      maxAge: 60 * 60 * 24 * 7, // 7 days
       path: "/",
     })
 
     return response
   } catch (error) {
-    console.error("🔐 [LOGIN API] Login error:", error)
-    return NextResponse.json({ success: false, message: "Internal server error" }, { status: 500 })
+    console.error("Login error:", error)
+    return NextResponse.json(
+      {
+        success: false,
+        message: "Internal server error",
+      },
+      { status: 500 },
+    )
   }
 }

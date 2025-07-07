@@ -1,29 +1,24 @@
 import { NextResponse } from "next/server"
-import { sql } from "@/lib/db"
-import { cookies } from "next/headers"
-import jwt from "jsonwebtoken"
+import { getCurrentUser } from "@/lib/auth"
+import { getDb } from "@/lib/db"
 
 export async function GET() {
   try {
-    const cookieStore = await cookies()
-    const token = cookieStore.get("auth-token")?.value
+    const user = await getCurrentUser()
 
-    if (!token) {
-      return NextResponse.json({ success: false, message: "No authentication token" }, { status: 401 })
+    if (!user) {
+      return NextResponse.json({ success: false, message: "Not authenticated" }, { status: 401 })
     }
 
-    if (!process.env.JWT_SECRET) {
-      return NextResponse.json({ success: false, message: "Server configuration error" }, { status: 500 })
-    }
+    const sql = getDb()
 
-    // Verify JWT token
-    const decoded = jwt.verify(token, process.env.JWT_SECRET) as { userId: string; email: string }
-
-    // Get user from database
+    // Get complete user profile including company info and admin status
     const users = await sql`
-      SELECT id, email, first_name, last_name, company, plan, created_at
+      SELECT 
+        id, email, first_name, last_name, company, 
+        company_address, company_phone, plan, created_at, is_admin
       FROM users 
-      WHERE id = ${decoded.userId}
+      WHERE id = ${user.id}
       LIMIT 1
     `
 
@@ -31,74 +26,25 @@ export async function GET() {
       return NextResponse.json({ success: false, message: "User not found" }, { status: 404 })
     }
 
-    const user = users[0]
+    const userData = users[0]
 
     return NextResponse.json({
       success: true,
       user: {
-        id: user.id,
-        email: user.email,
-        firstName: user.first_name,
-        lastName: user.last_name,
-        company: user.company,
-        plan: user.plan,
-        createdAt: user.created_at,
+        id: userData.id,
+        email: userData.email,
+        firstName: userData.first_name,
+        lastName: userData.last_name,
+        company: userData.company,
+        companyAddress: userData.company_address,
+        companyPhone: userData.company_phone,
+        plan: userData.plan,
+        createdAt: userData.created_at,
+        isAdmin: userData.is_admin || false,
       },
     })
   } catch (error) {
-    console.error("Profile error:", error)
-    return NextResponse.json({ success: false, message: "Internal server error" }, { status: 500 })
-  }
-}
-
-export async function PUT(request: Request) {
-  try {
-    const cookieStore = await cookies()
-    const token = cookieStore.get("auth-token")?.value
-
-    if (!token) {
-      return NextResponse.json({ success: false, message: "No authentication token" }, { status: 401 })
-    }
-
-    if (!process.env.JWT_SECRET) {
-      return NextResponse.json({ success: false, message: "Server configuration error" }, { status: 500 })
-    }
-
-    // Verify JWT token
-    const decoded = jwt.verify(token, process.env.JWT_SECRET) as { userId: string; email: string }
-
-    const body = await request.json()
-    const { firstName, lastName, company } = body
-
-    // Update user in database
-    const result = await sql`
-      UPDATE users 
-      SET first_name = ${firstName}, last_name = ${lastName}, company = ${company}
-      WHERE id = ${decoded.userId}
-      RETURNING id, email, first_name, last_name, company, plan, created_at
-    `
-
-    if (result.length === 0) {
-      return NextResponse.json({ success: false, message: "User not found" }, { status: 404 })
-    }
-
-    const user = result[0]
-
-    return NextResponse.json({
-      success: true,
-      message: "Profile updated successfully",
-      user: {
-        id: user.id,
-        email: user.email,
-        firstName: user.first_name,
-        lastName: user.last_name,
-        company: user.company,
-        plan: user.plan,
-        createdAt: user.created_at,
-      },
-    })
-  } catch (error) {
-    console.error("Profile update error:", error)
+    console.error("Profile fetch error:", error)
     return NextResponse.json({ success: false, message: "Internal server error" }, { status: 500 })
   }
 }

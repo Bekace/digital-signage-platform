@@ -1,112 +1,83 @@
-export interface Plan {
-  id: string
-  name: string
-  price: number
-  interval: "monthly" | "yearly"
+export interface PlanLimits {
+  plan_type: string
+  max_media_files: number
+  max_storage_bytes: number
+  max_screens: number
+  price_monthly: number
   features: string[]
-  limits: {
-    devices: number
-    storage: number // in GB
-    bandwidth: number // in GB
+}
+
+export interface UserUsage {
+  media_files_count: number
+  storage_used_bytes: number
+  screens_count: number
+  plan_type: string
+}
+
+export const PLAN_NAMES = {
+  free: "Free",
+  pro: "Pro",
+  enterprise: "Enterprise",
+} as const
+
+export function formatBytes(bytes: number): string {
+  if (bytes === 0) return "0 Bytes"
+  if (bytes === -1) return "Unlimited"
+
+  const k = 1024
+  const sizes = ["Bytes", "KB", "MB", "GB", "TB"]
+  const i = Math.floor(Math.log(bytes) / Math.log(k))
+
+  return Number.parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i]
+}
+
+export function formatNumber(num: number): string {
+  if (num === -1) return "Unlimited"
+  return num.toLocaleString()
+}
+
+export function getUsagePercentage(used: number, limit: number): number {
+  if (limit === -1) return 0 // Unlimited
+  return Math.min((used / limit) * 100, 100)
+}
+
+export function canUploadFile(
+  currentUsage: UserUsage,
+  planLimits: PlanLimits,
+  fileSize: number,
+): { allowed: boolean; reason?: string } {
+  // Check file count limit
+  if (planLimits.max_media_files !== -1 && currentUsage.media_files_count >= planLimits.max_media_files) {
+    return {
+      allowed: false,
+      reason: `You've reached your plan's limit of ${formatNumber(planLimits.max_media_files)} media files. Upgrade to upload more.`,
+    }
   }
+
+  // Check storage limit
+  if (
+    planLimits.max_storage_bytes !== -1 &&
+    currentUsage.storage_used_bytes + fileSize > planLimits.max_storage_bytes
+  ) {
+    return {
+      allowed: false,
+      reason: `This file would exceed your storage limit of ${formatBytes(planLimits.max_storage_bytes)}. Upgrade for more storage.`,
+    }
+  }
+
+  return { allowed: true }
 }
 
-export const PLANS: Plan[] = [
-  {
-    id: "free",
-    name: "Free",
-    price: 0,
-    interval: "monthly",
-    features: ["1 device", "1GB storage", "Basic templates", "Community support"],
-    limits: {
-      devices: 1,
-      storage: 1,
-      bandwidth: 5,
-    },
-  },
-  {
-    id: "starter",
-    name: "Starter",
-    price: 29,
-    interval: "monthly",
-    features: ["5 devices", "10GB storage", "All templates", "Email support", "Custom branding"],
-    limits: {
-      devices: 5,
-      storage: 10,
-      bandwidth: 50,
-    },
-  },
-  {
-    id: "professional",
-    name: "Professional",
-    price: 79,
-    interval: "monthly",
-    features: [
-      "25 devices",
-      "100GB storage",
-      "All templates",
-      "Priority support",
-      "Custom branding",
-      "Advanced analytics",
-      "API access",
-    ],
-    limits: {
-      devices: 25,
-      storage: 100,
-      bandwidth: 500,
-    },
-  },
-  {
-    id: "enterprise",
-    name: "Enterprise",
-    price: 199,
-    interval: "monthly",
-    features: [
-      "Unlimited devices",
-      "1TB storage",
-      "All templates",
-      "24/7 phone support",
-      "White label",
-      "Advanced analytics",
-      "API access",
-      "Custom integrations",
-    ],
-    limits: {
-      devices: -1, // unlimited
-      storage: 1000,
-      bandwidth: 5000,
-    },
-  },
-]
-
-export function getPlanById(id: string): Plan | undefined {
-  return PLANS.find((plan) => plan.id === id)
-}
-
-export function getDefaultPlan(): Plan {
-  return PLANS[0] // Free plan
-}
-
-export function canUpgradeTo(currentPlanId: string, targetPlanId: string): boolean {
-  const currentIndex = PLANS.findIndex((p) => p.id === currentPlanId)
-  const targetIndex = PLANS.findIndex((p) => p.id === targetPlanId)
-
-  return targetIndex > currentIndex
-}
-
-export function formatPrice(price: number): string {
-  return price === 0 ? "Free" : `$${price}`
-}
-
-export function getPlanLimits(planId: string) {
-  const plan = getPlanById(planId)
-  return plan?.limits || getDefaultPlan().limits
-}
-
-export function checkPlanLimit(planId: string, resource: keyof Plan["limits"], currentUsage: number): boolean {
-  const limits = getPlanLimits(planId)
-  const limit = limits[resource]
-
-  if (limit === -1) return true // unlimited
-  return currentUsage < limit
+// Remove hardcoded limits - now fetched from database
+export async function getPlanLimits(planType: string): Promise<PlanLimits | null> {
+  try {
+    const response = await fetch(`/api/plans/${planType}`)
+    if (response.ok) {
+      const data = await response.json()
+      return data.plan
+    }
+  } catch (error) {
+    console.error("Error fetching plan limits:", error)
+  }
+  return null
 }

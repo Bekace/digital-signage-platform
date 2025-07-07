@@ -10,16 +10,20 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Badge } from "@/components/ui/badge"
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
+import { Label } from "@/components/ui/label"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { toast } from "sonner"
-import { PlayCircle, AlertCircle, Loader2 } from "lucide-react"
+import { PlayCircle, Clock, FileText, Loader2, AlertCircle, X } from "lucide-react"
 
 interface Playlist {
   id: number
   name: string
   description?: string
-  media_count: number
+  item_count: number
+  total_duration: number
   created_at: string
 }
 
@@ -45,26 +49,29 @@ export function AssignPlaylistDialog({
   const [playlists, setPlaylists] = useState<Playlist[]>([])
   const [selectedPlaylistId, setSelectedPlaylistId] = useState<string>("")
   const [loading, setLoading] = useState(false)
-  const [submitting, setSubmitting] = useState(false)
+  const [loadingPlaylists, setLoadingPlaylists] = useState(true)
   const [error, setError] = useState("")
 
   useEffect(() => {
     if (open) {
       loadPlaylists()
-      setSelectedPlaylistId(currentPlaylistId?.toString() || "")
+      setSelectedPlaylistId(currentPlaylistId ? currentPlaylistId.toString() : "")
     }
   }, [open, currentPlaylistId])
 
   const loadPlaylists = async () => {
     try {
-      setLoading(true)
+      setLoadingPlaylists(true)
       setError("")
+
+      console.log("🎵 [ASSIGN PLAYLIST] Loading playlists...")
 
       const response = await fetch("/api/playlists", {
         credentials: "include",
       })
 
       const data = await response.json()
+      console.log("🎵 [ASSIGN PLAYLIST] Playlists response:", data)
 
       if (data.success) {
         setPlaylists(data.playlists || [])
@@ -72,75 +79,61 @@ export function AssignPlaylistDialog({
         setError(data.error || "Failed to load playlists")
       }
     } catch (err) {
-      console.error("Error loading playlists:", err)
+      console.error("🎵 [ASSIGN PLAYLIST] Error loading playlists:", err)
       setError("Failed to connect to server")
     } finally {
-      setLoading(false)
+      setLoadingPlaylists(false)
     }
   }
 
-  const handleAssign = async () => {
-    if (!selectedPlaylistId) {
-      toast.error("Please select a playlist")
-      return
-    }
-
+  const assignPlaylist = async () => {
     try {
-      setSubmitting(true)
-      setError("")
+      setLoading(true)
+      console.log("🎵 [ASSIGN PLAYLIST] Assigning playlist:", {
+        deviceId,
+        playlistId: selectedPlaylistId || null,
+      })
 
-      const response = await fetch(`/api/devices/${deviceId}/playlist`, {
+      const response = await fetch(`/api/devices/${deviceId}/assign-playlist`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
         credentials: "include",
         body: JSON.stringify({
-          playlistId: Number.parseInt(selectedPlaylistId),
+          playlistId: selectedPlaylistId ? Number.parseInt(selectedPlaylistId) : null,
         }),
       })
 
       const data = await response.json()
+      console.log("🎵 [ASSIGN PLAYLIST] Assignment response:", data)
 
       if (data.success) {
-        toast.success("Playlist assigned successfully!")
+        toast.success(data.message || "Playlist assigned successfully")
         onPlaylistAssigned()
         onOpenChange(false)
       } else {
-        setError(data.error || "Failed to assign playlist")
+        toast.error(data.error || "Failed to assign playlist")
       }
-    } catch (err) {
-      console.error("Error assigning playlist:", err)
-      setError("Failed to connect to server")
+    } catch (error) {
+      console.error("🎵 [ASSIGN PLAYLIST] Error:", error)
+      toast.error("Failed to assign playlist")
     } finally {
-      setSubmitting(false)
+      setLoading(false)
     }
   }
 
-  const handleUnassign = async () => {
-    try {
-      setSubmitting(true)
-      setError("")
+  const formatDuration = (seconds: number) => {
+    const hours = Math.floor(seconds / 3600)
+    const minutes = Math.floor((seconds % 3600) / 60)
+    const secs = seconds % 60
 
-      const response = await fetch(`/api/devices/${deviceId}/playlist`, {
-        method: "DELETE",
-        credentials: "include",
-      })
-
-      const data = await response.json()
-
-      if (data.success) {
-        toast.success("Playlist unassigned successfully!")
-        onPlaylistAssigned()
-        onOpenChange(false)
-      } else {
-        setError(data.error || "Failed to unassign playlist")
-      }
-    } catch (err) {
-      console.error("Error unassigning playlist:", err)
-      setError("Failed to connect to server")
-    } finally {
-      setSubmitting(false)
+    if (hours > 0) {
+      return `${hours}h ${minutes}m ${secs}s`
+    } else if (minutes > 0) {
+      return `${minutes}m ${secs}s`
+    } else {
+      return `${secs}s`
     }
   }
 
@@ -148,103 +141,120 @@ export function AssignPlaylistDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[425px]">
+      <DialogContent className="sm:max-w-[600px] max-h-[80vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <PlayCircle className="h-5 w-5" />
-            Assign Playlist
+            Assign Playlist to {deviceName}
           </DialogTitle>
           <DialogDescription>
-            Assign a playlist to <strong>{deviceName}</strong>. The selected content will be displayed on this screen.
+            Choose a playlist to display on this screen. The device will automatically start playing the selected
+            playlist.
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-4 py-4">
-          {error && (
+        <div className="space-y-4">
+          {/* Current Assignment */}
+          {currentPlaylistId && (
+            <Alert>
+              <PlayCircle className="h-4 w-4" />
+              <AlertDescription>
+                Currently assigned: <strong>{currentPlaylistName}</strong>
+              </AlertDescription>
+            </Alert>
+          )}
+
+          {/* Loading State */}
+          {loadingPlaylists ? (
+            <div className="flex items-center justify-center py-8">
+              <Loader2 className="h-6 w-6 animate-spin mr-2" />
+              <span>Loading playlists...</span>
+            </div>
+          ) : error ? (
             <Alert variant="destructive">
               <AlertCircle className="h-4 w-4" />
               <AlertDescription>{error}</AlertDescription>
             </Alert>
-          )}
+          ) : playlists.length === 0 ? (
+            <Alert>
+              <FileText className="h-4 w-4" />
+              <AlertDescription>
+                No playlists found. Create a playlist first to assign it to this screen.
+              </AlertDescription>
+            </Alert>
+          ) : (
+            <div className="space-y-4">
+              <RadioGroup value={selectedPlaylistId} onValueChange={setSelectedPlaylistId}>
+                {/* Remove Assignment Option */}
+                <div className="flex items-center space-x-2 p-3 border rounded-lg">
+                  <RadioGroupItem value="" id="remove" />
+                  <Label htmlFor="remove" className="flex-1 cursor-pointer">
+                    <div className="flex items-center gap-2">
+                      <X className="h-4 w-4 text-red-500" />
+                      <span className="font-medium">Remove playlist assignment</span>
+                    </div>
+                    <p className="text-sm text-gray-600 mt-1">The screen will stop playing content</p>
+                  </Label>
+                </div>
 
-          {currentPlaylistId && (
-            <div className="p-3 bg-blue-50 rounded-lg border border-blue-200">
-              <div className="flex items-center gap-2 text-blue-800">
-                <PlayCircle className="h-4 w-4" />
-                <span className="text-sm font-medium">Currently Assigned:</span>
-              </div>
-              <p className="text-sm text-blue-700 mt-1">{currentPlaylistName || `Playlist #${currentPlaylistId}`}</p>
-            </div>
-          )}
+                {/* Playlist Options */}
+                {playlists.map((playlist) => (
+                  <div key={playlist.id} className="flex items-center space-x-2">
+                    <RadioGroupItem value={playlist.id.toString()} id={`playlist-${playlist.id}`} />
+                    <Label htmlFor={`playlist-${playlist.id}`} className="flex-1 cursor-pointer">
+                      <Card className="hover:bg-gray-50 transition-colors">
+                        <CardHeader className="pb-2">
+                          <div className="flex items-center justify-between">
+                            <CardTitle className="text-base">{playlist.name}</CardTitle>
+                            <div className="flex gap-2">
+                              <Badge variant="secondary">{playlist.item_count} items</Badge>
+                              <Badge variant="outline" className="flex items-center gap-1">
+                                <Clock className="h-3 w-3" />
+                                {formatDuration(playlist.total_duration)}
+                              </Badge>
+                            </div>
+                          </div>
+                          {playlist.description && (
+                            <CardDescription className="text-sm">{playlist.description}</CardDescription>
+                          )}
+                        </CardHeader>
+                        <CardContent className="pt-0">
+                          <div className="text-xs text-gray-500">
+                            Created {new Date(playlist.created_at).toLocaleDateString()}
+                          </div>
+                        </CardContent>
+                      </Card>
+                    </Label>
+                  </div>
+                ))}
+              </RadioGroup>
 
-          <div className="space-y-2">
-            <label className="text-sm font-medium">Select Playlist</label>
-            {loading ? (
-              <div className="flex items-center justify-center py-8">
-                <Loader2 className="h-6 w-6 animate-spin mr-2" />
-                <span>Loading playlists...</span>
-              </div>
-            ) : playlists.length === 0 ? (
-              <div className="text-center py-8 text-gray-500">
-                <PlayCircle className="h-12 w-12 mx-auto mb-2 opacity-50" />
-                <p>No playlists available</p>
-                <p className="text-sm">Create a playlist first to assign content</p>
-              </div>
-            ) : (
-              <Select value={selectedPlaylistId} onValueChange={setSelectedPlaylistId}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Choose a playlist..." />
-                </SelectTrigger>
-                <SelectContent>
-                  {playlists.map((playlist) => (
-                    <SelectItem key={playlist.id} value={playlist.id.toString()}>
-                      <div className="flex flex-col">
-                        <span className="font-medium">{playlist.name}</span>
-                        <span className="text-xs text-gray-500">
-                          {playlist.media_count} items • Created {new Date(playlist.created_at).toLocaleDateString()}
-                        </span>
-                      </div>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            )}
-          </div>
-
-          {selectedPlaylist && (
-            <div className="p-3 bg-green-50 rounded-lg border border-green-200">
-              <div className="flex items-center gap-2 text-green-800">
-                <PlayCircle className="h-4 w-4" />
-                <span className="text-sm font-medium">Selected Playlist:</span>
-              </div>
-              <p className="text-sm text-green-700 mt-1">{selectedPlaylist.name}</p>
-              <p className="text-xs text-green-600 mt-1">
-                {selectedPlaylist.media_count} media items
-                {selectedPlaylist.description && ` • ${selectedPlaylist.description}`}
-              </p>
+              {/* Selected Playlist Preview */}
+              {selectedPlaylist && (
+                <Alert>
+                  <PlayCircle className="h-4 w-4" />
+                  <AlertDescription>
+                    <strong>Selected:</strong> {selectedPlaylist.name} ({selectedPlaylist.item_count} items,{" "}
+                    {formatDuration(selectedPlaylist.total_duration)})
+                  </AlertDescription>
+                </Alert>
+              )}
             </div>
           )}
         </div>
 
-        <DialogFooter className="flex gap-2">
-          {currentPlaylistId && (
-            <Button variant="outline" onClick={handleUnassign} disabled={submitting || loading}>
-              {submitting ? (
-                <>
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  Unassigning...
-                </>
-              ) : (
-                "Unassign Current"
-              )}
-            </Button>
-          )}
-          <Button onClick={handleAssign} disabled={!selectedPlaylistId || submitting || loading}>
-            {submitting ? (
+        <DialogFooter>
+          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={loading}>
+            Cancel
+          </Button>
+          <Button onClick={assignPlaylist} disabled={loading || loadingPlaylists}>
+            {loading ? (
               <>
                 <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                 Assigning...
               </>
+            ) : selectedPlaylistId === "" ? (
+              "Remove Assignment"
             ) : (
               "Assign Playlist"
             )}

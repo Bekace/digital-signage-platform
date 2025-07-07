@@ -1,67 +1,104 @@
 "use client"
 
-import React from "react"
-
 import { useState, useEffect } from "react"
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { Alert, AlertDescription } from "@/components/ui/alert"
-import { Loader2, Monitor, Smartphone, Tv, CheckCircle, Copy, RefreshCw } from "lucide-react"
-import { useToast } from "@/hooks/use-toast"
+import { Separator } from "@/components/ui/separator"
+import { toast } from "sonner"
+import { Copy, Check, Monitor, Smartphone, Tv, Globe, Plus, Wifi, WifiOff, Loader2 } from "lucide-react"
 
 interface AddScreenDialogProps {
+  open: boolean
+  onOpenChange: (open: boolean) => void
   onDeviceAdded: () => void
 }
 
-export function AddScreenDialog({ onDeviceAdded }: AddScreenDialogProps) {
-  const [open, setOpen] = useState(false)
-  const [step, setStep] = useState(1)
-  const [loading, setLoading] = useState(false)
-  const [deviceName, setDeviceName] = useState("")
+export function AddScreenDialog({ open, onOpenChange, onDeviceAdded }: AddScreenDialogProps) {
+  const [step, setStep] = useState<"form" | "pairing">("form")
+  const [screenName, setScreenName] = useState("")
   const [deviceType, setDeviceType] = useState("")
-  const [location, setLocation] = useState("")
-  const [generatedCode, setGeneratedCode] = useState("")
-  const [deviceId, setDeviceId] = useState("")
-  const [isPolling, setIsPolling] = useState(false)
-  const [deviceConnected, setDeviceConnected] = useState(false)
-  const [error, setError] = useState("")
-  const { toast } = useToast()
+  const [pairingCode, setPairingCode] = useState("")
+  const [loading, setLoading] = useState(false)
+  const [copied, setCopied] = useState(false)
+  const [connectionStatus, setConnectionStatus] = useState<{
+    connected: boolean
+    device?: any
+    checking: boolean
+  }>({
+    connected: false,
+    checking: false,
+  })
 
   const deviceTypes = [
-    { value: "web", label: "Web Browser", icon: Monitor },
+    { value: "fire_tv", label: "Fire TV Stick", icon: Tv },
+    { value: "android_tv", label: "Android TV", icon: Tv },
     { value: "android", label: "Android Device", icon: Smartphone },
-    { value: "tv", label: "Smart TV", icon: Tv },
+    { value: "ios", label: "iOS Device", icon: Smartphone },
+    { value: "web_browser", label: "Web Browser", icon: Globe },
+    { value: "other", label: "Other Device", icon: Monitor },
   ]
 
-  const resetDialog = () => {
-    setStep(1)
-    setDeviceName("")
-    setDeviceType("")
-    setLocation("")
-    setGeneratedCode("")
-    setDeviceId("")
-    setIsPolling(false)
-    setDeviceConnected(false)
-    setError("")
-    setLoading(false)
-  }
+  // Check connection status periodically
+  useEffect(() => {
+    if (step === "pairing" && pairingCode && !connectionStatus.connected) {
+      const checkConnection = async () => {
+        try {
+          setConnectionStatus((prev) => ({ ...prev, checking: true }))
 
-  const handleNext = async () => {
-    if (!deviceName.trim() || !deviceType) {
-      setError("Please fill in all required fields")
-      return
+          const response = await fetch("/api/devices/check-connection", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            credentials: "include",
+            body: JSON.stringify({ pairingCode }),
+          })
+
+          const data = await response.json()
+          console.log("🔍 [ADD SCREEN] Connection check:", data)
+
+          if (data.success) {
+            setConnectionStatus({
+              connected: data.connected,
+              device: data.device,
+              checking: false,
+            })
+
+            if (data.connected && !connectionStatus.connected) {
+              toast.success("Device connected successfully!")
+            }
+          }
+        } catch (error) {
+          console.error("❌ [ADD SCREEN] Connection check error:", error)
+          setConnectionStatus((prev) => ({ ...prev, checking: false }))
+        }
+      }
+
+      // Check immediately
+      checkConnection()
+
+      // Then check every 3 seconds
+      const interval = setInterval(checkConnection, 3000)
+      return () => clearInterval(interval)
     }
+  }, [step, pairingCode, connectionStatus.connected])
 
-    setLoading(true)
-    setError("")
-
+  const generatePairingCode = async () => {
     try {
-      console.log("Generating code for device:", { deviceName, deviceType, location })
+      setLoading(true)
+      console.log("🔗 [ADD SCREEN] Generating pairing code for:", { screenName, deviceType })
 
       const response = await fetch("/api/devices/generate-code", {
         method: "POST",
@@ -70,234 +107,323 @@ export function AddScreenDialog({ onDeviceAdded }: AddScreenDialogProps) {
         },
         credentials: "include",
         body: JSON.stringify({
-          name: deviceName,
-          type: deviceType,
-          location: location || null,
+          screenName,
+          deviceType,
         }),
       })
 
       const data = await response.json()
-      console.log("Generate code response:", data)
+      console.log("🔗 [ADD SCREEN] Generate code response:", data)
 
-      if (!response.ok) {
-        throw new Error(data.error || `HTTP ${response.status}`)
+      if (data.success) {
+        setPairingCode(data.pairingCode || data.code)
+        setStep("pairing")
+        setConnectionStatus({ connected: false, checking: false })
+        toast.success("Pairing code generated successfully")
+      } else {
+        toast.error(data.error || "Failed to generate pairing code")
       }
-
-      if (!data.success) {
-        throw new Error(data.error || "Failed to generate code")
-      }
-
-      setGeneratedCode(data.code)
-      setDeviceId(data.device?.id || "")
-      setStep(2)
-      startPolling()
-
-      toast({
-        title: "Device code generated",
-        description: `Code: ${data.code}`,
-      })
     } catch (error) {
-      console.error("Generate code error:", error)
-      const errorMessage = error instanceof Error ? error.message : "Failed to generate device code"
-      setError(errorMessage)
-      toast({
-        title: "Error",
-        description: errorMessage,
-        variant: "destructive",
-      })
+      console.error("❌ [ADD SCREEN] Error generating code:", error)
+      toast.error("Failed to generate pairing code")
     } finally {
       setLoading(false)
     }
   }
 
-  const startPolling = () => {
-    setIsPolling(true)
-    const pollInterval = setInterval(async () => {
-      try {
-        const response = await fetch("/api/devices", {
-          credentials: "include",
-        })
-        const data = await response.json()
+  const createScreen = async () => {
+    try {
+      setLoading(true)
+      console.log("📺 [ADD SCREEN] Creating screen with code:", pairingCode)
 
-        if (data.success && data.devices) {
-          const connectedDevice = data.devices.find(
-            (device: any) => device.name === deviceName && device.status === "online",
-          )
+      const response = await fetch("/api/devices/create-screen", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        credentials: "include",
+        body: JSON.stringify({ pairingCode }),
+      })
 
-          if (connectedDevice) {
-            setDeviceConnected(true)
-            setIsPolling(false)
-            clearInterval(pollInterval)
-            toast({
-              title: "Device connected!",
-              description: `${deviceName} is now online`,
-            })
-          }
-        }
-      } catch (error) {
-        console.error("Polling error:", error)
+      const data = await response.json()
+      console.log("📺 [ADD SCREEN] Create screen response:", data)
+
+      if (data.success) {
+        toast.success("Screen created successfully!")
+        handleClose()
+        onDeviceAdded()
+      } else {
+        toast.error(data.error || "Failed to create screen")
       }
-    }, 3000)
-
-    // Stop polling after 5 minutes
-    setTimeout(() => {
-      clearInterval(pollInterval)
-      setIsPolling(false)
-    }, 300000)
-  }
-
-  const copyCode = () => {
-    navigator.clipboard.writeText(generatedCode)
-    toast({
-      title: "Code copied",
-      description: "Device code copied to clipboard",
-    })
-  }
-
-  const handleFinish = () => {
-    setOpen(false)
-    resetDialog()
-    onDeviceAdded()
-  }
-
-  useEffect(() => {
-    if (!open) {
-      resetDialog()
+    } catch (error) {
+      console.error("❌ [ADD SCREEN] Error creating screen:", error)
+      toast.error("Failed to create screen")
+    } finally {
+      setLoading(false)
     }
-  }, [open])
-
-  const getDeviceIcon = (type: string) => {
-    const deviceType = deviceTypes.find((dt) => dt.value === type)
-    return deviceType?.icon || Monitor
   }
+
+  const copyToClipboard = async () => {
+    try {
+      await navigator.clipboard.writeText(pairingCode)
+      setCopied(true)
+      toast.success("Pairing code copied to clipboard")
+      setTimeout(() => setCopied(false), 2000)
+    } catch (error) {
+      toast.error("Failed to copy pairing code")
+    }
+  }
+
+  const handleClose = () => {
+    setStep("form")
+    setScreenName("")
+    setDeviceType("")
+    setPairingCode("")
+    setCopied(false)
+    setConnectionStatus({ connected: false, checking: false })
+    onOpenChange(false)
+  }
+
+  const getDeviceInstructions = (type: string) => {
+    switch (type) {
+      case "fire_tv":
+        return [
+          "Install the SignageCloud app from the Amazon Appstore",
+          "Open the app on your Fire TV",
+          "Select 'Connect to Dashboard'",
+          "Enter the pairing code when prompted",
+          "Wait for connection confirmation",
+        ]
+      case "android_tv":
+        return [
+          "Install the SignageCloud app from Google Play Store",
+          "Open the app on your Android TV",
+          "Select 'Connect to Dashboard'",
+          "Enter the pairing code when prompted",
+          "Wait for connection confirmation",
+        ]
+      case "android":
+        return [
+          "Install the SignageCloud app from Google Play Store",
+          "Open the app on your Android device",
+          "Tap 'Connect to Dashboard'",
+          "Enter the pairing code when prompted",
+          "Wait for connection confirmation",
+        ]
+      case "ios":
+        return [
+          "Install the SignageCloud app from the App Store",
+          "Open the app on your iOS device",
+          "Tap 'Connect to Dashboard'",
+          "Enter the pairing code when prompted",
+          "Wait for connection confirmation",
+        ]
+      case "web_browser":
+        return [
+          "Open a web browser on your device",
+          "Navigate to /device-player on this website",
+          "Click 'Connect to Dashboard'",
+          "Enter the pairing code when prompted",
+          "Wait for connection confirmation",
+        ]
+      default:
+        return [
+          "Install or open your SignageCloud compatible app",
+          "Look for 'Connect to Dashboard' or 'Pair Device' option",
+          "Enter the pairing code when prompted",
+          "Wait for connection confirmation",
+        ]
+    }
+  }
+
+  const selectedDeviceType = deviceTypes.find((dt) => dt.value === deviceType)
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
-        <Button>Add Screen</Button>
-      </DialogTrigger>
+    <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[500px]">
-        <DialogHeader>
-          <DialogTitle>Add New Screen</DialogTitle>
-        </DialogHeader>
+        {step === "form" ? (
+          <>
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <Plus className="h-5 w-5" />
+                Add New Screen
+              </DialogTitle>
+              <DialogDescription>
+                Add a new digital signage display to your account. You'll get a pairing code to connect your device.
+              </DialogDescription>
+            </DialogHeader>
 
-        {step === 1 && (
-          <div className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="deviceName">Screen Name *</Label>
-              <Input
-                id="deviceName"
-                placeholder="e.g., Lobby Display"
-                value={deviceName}
-                onChange={(e) => setDeviceName(e.target.value)}
-              />
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="screenName">Screen Name</Label>
+                <Input
+                  id="screenName"
+                  placeholder="e.g., Lobby Display, Conference Room TV"
+                  value={screenName}
+                  onChange={(e) => setScreenName(e.target.value)}
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="deviceType">Device Type</Label>
+                <Select value={deviceType} onValueChange={setDeviceType}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select device type" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {deviceTypes.map((type) => {
+                      const Icon = type.icon
+                      return (
+                        <SelectItem key={type.value} value={type.value}>
+                          <div className="flex items-center gap-2">
+                            <Icon className="h-4 w-4" />
+                            {type.label}
+                          </div>
+                        </SelectItem>
+                      )
+                    })}
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="deviceType">Device Type *</Label>
-              <Select value={deviceType} onValueChange={setDeviceType}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select device type" />
-                </SelectTrigger>
-                <SelectContent>
-                  {deviceTypes.map((type) => {
-                    const Icon = type.icon
-                    return (
-                      <SelectItem key={type.value} value={type.value}>
-                        <div className="flex items-center gap-2">
-                          <Icon className="h-4 w-4" />
-                          {type.label}
-                        </div>
-                      </SelectItem>
-                    )
-                  })}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="location">Location (Optional)</Label>
-              <Input
-                id="location"
-                placeholder="e.g., Main Lobby, Conference Room A"
-                value={location}
-                onChange={(e) => setLocation(e.target.value)}
-              />
-            </div>
-
-            {error && (
-              <Alert variant="destructive">
-                <AlertDescription>{error}</AlertDescription>
-              </Alert>
-            )}
-
-            <div className="flex justify-end gap-2">
-              <Button variant="outline" onClick={() => setOpen(false)}>
+            <DialogFooter>
+              <Button variant="outline" onClick={handleClose}>
                 Cancel
               </Button>
-              <Button onClick={handleNext} disabled={loading}>
-                {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                Next
+              <Button onClick={generatePairingCode} disabled={!screenName || !deviceType || loading}>
+                {loading ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Generating...
+                  </>
+                ) : (
+                  "Generate Pairing Code"
+                )}
               </Button>
-            </div>
-          </div>
-        )}
+            </DialogFooter>
+          </>
+        ) : (
+          <>
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                {selectedDeviceType && <selectedDeviceType.icon className="h-5 w-5" />}
+                Connect Your {selectedDeviceType?.label}
+              </DialogTitle>
+              <DialogDescription>Use this pairing code to connect "{screenName}" to your dashboard</DialogDescription>
+            </DialogHeader>
 
-        {step === 2 && (
-          <div className="space-y-4">
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  {React.createElement(getDeviceIcon(deviceType), { className: "h-5 w-5" })}
-                  {deviceName}
-                </CardTitle>
-                <CardDescription>
-                  {deviceType === "web" && "Open a web browser and navigate to your signage URL"}
-                  {deviceType === "android" && "Open the SignageCloud app on your Android device"}
-                  {deviceType === "tv" && "Open the SignageCloud app on your Smart TV"}
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="text-center space-y-4">
-                  <div>
-                    <Label className="text-sm font-medium">Enter this code on your device:</Label>
-                    <div className="flex items-center justify-center gap-2 mt-2">
-                      <div className="text-3xl font-mono font-bold bg-gray-100 px-4 py-2 rounded">{generatedCode}</div>
-                      <Button variant="outline" size="sm" onClick={copyCode}>
-                        <Copy className="h-4 w-4" />
-                      </Button>
+            <div className="space-y-6">
+              {/* Connection Status */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-lg flex items-center gap-2">
+                    {connectionStatus.connected ? (
+                      <>
+                        <Wifi className="h-5 w-5 text-green-500" />
+                        Device Connected
+                      </>
+                    ) : connectionStatus.checking ? (
+                      <>
+                        <Loader2 className="h-5 w-5 animate-spin" />
+                        Checking Connection...
+                      </>
+                    ) : (
+                      <>
+                        <WifiOff className="h-5 w-5 text-orange-500" />
+                        Waiting for Connection
+                      </>
+                    )}
+                  </CardTitle>
+                  <CardDescription>
+                    {connectionStatus.connected
+                      ? "Your device is connected and ready to be added"
+                      : "Enter the pairing code in your device to connect"}
+                  </CardDescription>
+                </CardHeader>
+                {connectionStatus.device && (
+                  <CardContent>
+                    <div className="text-sm text-muted-foreground">
+                      <p>
+                        <strong>Device:</strong> {connectionStatus.device.name}
+                      </p>
+                      <p>
+                        <strong>Status:</strong> {connectionStatus.device.status}
+                      </p>
                     </div>
+                  </CardContent>
+                )}
+              </Card>
+
+              {/* Pairing Code */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-lg">Pairing Code</CardTitle>
+                  <CardDescription>Enter this code in your SignageCloud app or device player</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="flex items-center justify-between p-4 bg-muted rounded-lg">
+                    <div className="text-3xl font-mono font-bold tracking-wider">{pairingCode}</div>
+                    <Button variant="outline" size="sm" onClick={copyToClipboard}>
+                      {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+                    </Button>
                   </div>
+                </CardContent>
+              </Card>
 
-                  {deviceConnected ? (
-                    <div className="flex items-center justify-center gap-2 text-green-600">
-                      <CheckCircle className="h-5 w-5" />
-                      <span className="font-medium">Device Connected!</span>
-                    </div>
-                  ) : (
-                    <div className="space-y-2">
-                      {isPolling && (
-                        <div className="flex items-center justify-center gap-2 text-blue-600">
-                          <RefreshCw className="h-4 w-4 animate-spin" />
-                          <span className="text-sm">Waiting for device to connect...</span>
-                        </div>
-                      )}
-                      <Badge variant="secondary">Status: Waiting for connection</Badge>
-                    </div>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
+              {/* Instructions */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-lg">Setup Instructions</CardTitle>
+                  <CardDescription>Follow these steps to connect your device</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <ol className="space-y-2">
+                    {getDeviceInstructions(deviceType).map((instruction, index) => (
+                      <li key={index} className="flex gap-3">
+                        <Badge
+                          variant="outline"
+                          className="min-w-[24px] h-6 rounded-full p-0 flex items-center justify-center"
+                        >
+                          {index + 1}
+                        </Badge>
+                        <span className="text-sm">{instruction}</span>
+                      </li>
+                    ))}
+                  </ol>
+                </CardContent>
+              </Card>
 
-            <div className="flex justify-end gap-2">
-              <Button variant="outline" onClick={() => setStep(1)}>
-                Back
-              </Button>
-              <Button onClick={handleFinish} disabled={!deviceConnected}>
-                {deviceConnected ? "Finish" : "Skip for Now"}
-              </Button>
+              <Separator />
+
+              <div className="text-center text-sm text-muted-foreground">
+                <p>The pairing code will expire in 10 minutes.</p>
+                <p>The "Done" button will be enabled once your device connects.</p>
+              </div>
             </div>
-          </div>
+
+            <DialogFooter>
+              <Button variant="outline" onClick={handleClose}>
+                Cancel
+              </Button>
+              <Button
+                onClick={createScreen}
+                disabled={!connectionStatus.connected || loading}
+                className={connectionStatus.connected ? "bg-green-600 hover:bg-green-700" : ""}
+              >
+                {loading ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Creating Screen...
+                  </>
+                ) : connectionStatus.connected ? (
+                  "Done - Create Screen"
+                ) : (
+                  "Waiting for Connection..."
+                )}
+              </Button>
+            </DialogFooter>
+          </>
         )}
       </DialogContent>
     </Dialog>

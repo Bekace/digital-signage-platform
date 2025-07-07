@@ -1,132 +1,231 @@
 import { type NextRequest, NextResponse } from "next/server"
+import { put } from "@vercel/blob"
+import sharp from "sharp"
 import { getCurrentUser } from "@/lib/auth"
 import { getDb } from "@/lib/db"
 
-const MAX_FILE_SIZE = 10 * 1024 * 1024 // 10MB per file
-const ALLOWED_TYPES = [
-  "image/jpeg",
-  "image/jpg",
-  "image/png",
-  "image/gif",
-  "image/webp",
-  "video/mp4",
-  "video/webm",
-  "application/pdf",
-]
+// Increase the maximum duration for this API route
+export const maxDuration = 60 // 60 seconds for large file uploads
 
 export async function POST(request: NextRequest) {
-  try {
-    console.log("🔍 Starting file upload...")
+  console.log("=== UPLOAD API CALLED ===")
+  console.log("Request headers:", {
+    contentLength: request.headers.get("content-length"),
+    contentType: request.headers.get("content-type"),
+  })
 
+  try {
     const user = await getCurrentUser()
+    console.log("User authenticated:", user ? user.id : "No user")
+
     if (!user) {
+      console.log("ERROR: Unauthorized - no user found")
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
     const formData = await request.formData()
     const file = formData.get("file") as File
+    console.log("FormData received, file:", file ? file.name : "No file")
 
     if (!file) {
+      console.log("ERROR: No file provided in form data")
       return NextResponse.json({ error: "No file provided" }, { status: 400 })
     }
 
-    console.log("📁 File details:", {
+    console.log("File details:", {
       name: file.name,
       size: file.size,
       type: file.type,
+      lastModified: file.lastModified,
     })
 
-    // Validate file type
-    if (!ALLOWED_TYPES.includes(file.type)) {
-      return NextResponse.json({ error: `File type ${file.type} not supported` }, { status: 400 })
+    // Set realistic file size limits based on Vercel's 4.5MB body limit
+    // We need to account for FormData overhead, so actual file should be smaller
+    let maxSize: number
+    let maxSizeMB: string
+
+    if (file.type.startsWith("video/")) {
+      maxSize = 4 * 1024 * 1024 // 4MB for videos (safe for Vercel)
+      maxSizeMB = "4MB"
+    } else if (file.type.startsWith("image/")) {
+      maxSize = 3 * 1024 * 1024 // 3MB for images
+      maxSizeMB = "3MB"
+    } else if (file.type.startsWith("audio/")) {
+      maxSize = 4 * 1024 * 1024 // 4MB for audio
+      maxSizeMB = "4MB"
+    } else if (file.type === "application/pdf") {
+      maxSize = 3 * 1024 * 1024 // 3MB for PDFs
+      maxSizeMB = "3MB"
+    } else if (file.type.includes("presentation") || file.type.includes("powerpoint")) {
+      maxSize = 3 * 1024 * 1024 // 3MB for presentations
+      maxSizeMB = "3MB"
+    } else {
+      maxSize = 3 * 1024 * 1024 // 3MB for other documents
+      maxSizeMB = "3MB"
     }
 
-    // Validate file size
-    if (file.size > MAX_FILE_SIZE) {
+    console.log(`File type: ${file.type}, Max size: ${maxSizeMB} (${maxSize} bytes), File size: ${file.size} bytes`)
+
+    if (file.size > maxSize) {
+      const fileSizeMB = Math.round((file.size / 1024 / 1024) * 100) / 100
+      console.log("ERROR: File too large")
       return NextResponse.json(
-        { error: `File too large. Maximum size: ${MAX_FILE_SIZE / 1024 / 1024}MB` },
+        {
+          success: false,
+          error: `File size must be less than ${maxSizeMB}. Your file is ${fileSizeMB}MB. This limit is due to Vercel's serverless function constraints.`,
+        },
         { status: 400 },
       )
     }
 
-    // Convert file to base64 for storage
-    const arrayBuffer = await file.arrayBuffer()
-    const base64 = Buffer.from(arrayBuffer).toString("base64")
-    const dataUrl = `data:${file.type};base64,${base64}`
-
-    const sql = getDb()
-
-    // Create unique filename
+    // Generate unique filename
     const timestamp = Date.now()
-    const sanitizedName = file.name.replace(/[^a-zA-Z0-9.-]/g, "_")
-    const uniqueFilename = `${user.id}/${timestamp}-${sanitizedName}`
+    const randomString = Math.random().toString(36).substring(2, 15)
+    const fileExtension = file.name.split(".").pop()?.toLowerCase() || "bin"
+    const filename = `${timestamp}-${randomString}.${fileExtension}`
+    console.log("Generated filename:", filename)
 
-    // Determine file type category
-    const getFileTypeCategory = (mimeType: string): string => {
-      if (mimeType.startsWith("image/")) return "image"
-      if (mimeType.startsWith("video/")) return "video"
-      if (mimeType === "application/pdf") return "document"
-      return "other"
+    // Convert file to buffer
+    console.log("Converting file to buffer...")
+    const fileBuffer = Buffer.from(await file.arrayBuffer())
+    console.log("Buffer created, size:", fileBuffer.length)
+
+    // Upload to Vercel Blob
+    console.log("Uploading to Vercel Blob...")
+    const blob = await put(filename, fileBuffer, {
+      access: "public",
+      contentType: file.type,
+    })
+    console.log("Blob upload successful:", blob.url)
+
+    // Generate thumbnail
+    let thumbnailUrl = null
+    let dimensions = null
+
+    if (file.type.startsWith("image/")) {
+      try {
+        console.log("Generating image thumbnail...")
+        const thumbnailBuffer = await sharp(fileBuffer)
+          .resize(300, 200, { fit: "cover" })
+          .jpeg({ quality: 80 })
+          .toBuffer()
+
+        const thumbnailFilename = `thumb-${filename.replace(/\.[^/.]+$/, ".jpg")}`
+        const thumbnailBlob = await put(thumbnailFilename, thumbnailBuffer, {
+          access: "public",
+        })
+        thumbnailUrl = thumbnailBlob.url
+
+        const metadata = await sharp(fileBuffer).metadata()
+        dimensions = `${metadata.width}x${metadata.height}`
+        console.log("Image thumbnail generated:", thumbnailUrl)
+      } catch (error) {
+        console.error("Error generating image thumbnail:", error)
+      }
+    } else if (file.type.startsWith("video/")) {
+      console.log("Video file detected, using generic thumbnail")
+      thumbnailUrl = "/thumbnails/video.png"
+    } else if (file.type.startsWith("audio/")) {
+      thumbnailUrl = "/thumbnails/audio.png"
+    } else if (file.type === "application/pdf") {
+      thumbnailUrl = "/thumbnails/pdf.png"
+    } else if (file.type.includes("presentation") || file.type.includes("powerpoint")) {
+      thumbnailUrl = "/thumbnails/slides.png"
+    } else if (file.type.includes("office") || file.type.includes("document")) {
+      thumbnailUrl = "/thumbnails/office.png"
+    } else {
+      thumbnailUrl = "/thumbnails/generic.png"
     }
 
-    console.log("🔍 Saving to database...")
+    // Determine file type category
+    let fileType = "document"
+    if (file.type.startsWith("image/")) fileType = "image"
+    else if (file.type.startsWith("video/")) fileType = "video"
+    else if (file.type.startsWith("audio/")) fileType = "audio"
+    else if (file.type === "application/pdf") fileType = "pdf"
+    else if (file.type.includes("presentation") || file.type.includes("powerpoint")) fileType = "presentation"
+    else if (file.type.includes("office") || file.type.includes("document")) fileType = "office"
 
-    // Insert into media_files table with TEXT url column
-    const mediaResult = await sql`
+    console.log("File type determined:", fileType)
+
+    // Save to database
+    console.log("Saving to database...")
+    const sql = getDb()
+
+    const result = await sql`
       INSERT INTO media_files (
-        user_id, 
-        filename, 
-        original_name,
-        file_type,
-        file_size, 
-        url,
-        mime_type,
-        created_at
+        user_id, filename, original_name, file_type, file_size, 
+        mime_type, url, storage_url, thumbnail_url, dimensions, duration
       ) VALUES (
-        ${user.id}, 
-        ${uniqueFilename}, 
-        ${file.name},
-        ${getFileTypeCategory(file.type)},
-        ${file.size}, 
-        ${dataUrl},
-        ${file.type},
-        NOW()
+        ${user.id}, ${filename}, ${file.name}, ${fileType}, ${file.size},
+        ${file.type}, ${blob.url}, ${blob.url}, ${thumbnailUrl}, ${dimensions}, ${null}
       )
       RETURNING *
     `
 
-    console.log("✅ Media file saved successfully!")
+    const mediaFile = result[0]
+    console.log("Database save successful:", mediaFile.id)
 
-    // Update user's usage counters
-    await sql`
-      UPDATE users 
-      SET 
-        media_files_count = COALESCE(media_files_count, 0) + 1,
-        storage_used_bytes = COALESCE(storage_used_bytes::bigint, 0) + ${file.size}
-      WHERE id = ${user.id}
-    `
-
-    console.log("✅ User usage updated")
-
-    return NextResponse.json({
+    const response = {
       success: true,
-      file: mediaResult[0],
       message: "File uploaded successfully",
-      debug: {
-        file_type: file.type,
-        file_size: file.size,
-        base64_length: dataUrl.length,
-        saved_to_db: true,
+      file: {
+        id: mediaFile.id,
+        filename: mediaFile.filename,
+        original_name: mediaFile.original_name,
+        file_type: mediaFile.file_type,
+        file_size: mediaFile.file_size,
+        mime_type: mediaFile.mime_type,
+        url: mediaFile.url,
+        storage_url: mediaFile.storage_url,
+        thumbnail_url: mediaFile.thumbnail_url,
+        dimensions: mediaFile.dimensions,
+        duration: mediaFile.duration,
+        created_at: mediaFile.created_at,
       },
-    })
+    }
+
+    console.log("=== UPLOAD SUCCESS ===")
+    return NextResponse.json(response)
   } catch (error) {
-    console.error("❌ Upload error:", error)
+    console.error("=== UPLOAD ERROR ===")
+    console.error("Error details:", error)
+    console.error("Error stack:", error instanceof Error ? error.stack : "No stack")
+
+    let errorMessage = "Failed to upload file"
+    let statusCode = 500
+
+    if (error instanceof Error) {
+      console.error("Error message:", error.message)
+
+      if (error.message.includes("size") || error.message.includes("large")) {
+        errorMessage = "File is too large for Vercel's serverless function limits"
+        statusCode = 413
+      } else if (error.message.includes("type") || error.message.includes("format")) {
+        errorMessage = "File type not supported"
+        statusCode = 400
+      } else if (error.message.includes("network") || error.message.includes("timeout")) {
+        errorMessage = "Network error during upload"
+        statusCode = 408
+      } else if (error.message.includes("database") || error.message.includes("sql")) {
+        errorMessage = "Database error"
+        statusCode = 500
+      } else if (error.message.includes("blob") || error.message.includes("storage")) {
+        errorMessage = "Storage error"
+        statusCode = 500
+      } else {
+        errorMessage = `Upload failed: ${error.message}`
+      }
+    }
+
     return NextResponse.json(
       {
-        error: "Failed to upload file",
+        success: false,
+        error: errorMessage,
         details: error instanceof Error ? error.message : "Unknown error",
+        timestamp: new Date().toISOString(),
       },
-      { status: 500 },
+      { status: statusCode },
     )
   }
 }

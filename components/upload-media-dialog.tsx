@@ -1,202 +1,314 @@
 "use client"
 
+import type React from "react"
 import { useState } from "react"
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
-import { Button } from "@/components/ui/button"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
+import { Input } from "@/components/ui/input"
 import { Progress } from "@/components/ui/progress"
-import { X, Upload, CheckCircle, AlertCircle, File } from "lucide-react"
-
-interface UploadFile {
-  file: File
-  id: string
-  progress: number
-  status: "pending" | "uploading" | "success" | "error"
-  error?: string
-}
+import { Loader2, Upload, CheckCircle, XCircle } from "lucide-react"
 
 interface UploadMediaDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
-  onUploadComplete?: () => void
+  onUploadComplete: () => void
 }
 
 export function UploadMediaDialog({ open, onOpenChange, onUploadComplete }: UploadMediaDialogProps) {
-  const [files, setFiles] = useState<UploadFile[]>([])
-  const [isDragging, setIsDragging] = useState(false)
+  const [selectedFile, setSelectedFile] = useState<File | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [uploading, setUploading] = useState(false)
+  const [uploadProgress, setUploadProgress] = useState(0)
+  const [uploadComplete, setUploadComplete] = useState(false)
 
-  const handleFileSelect = (selectedFiles: FileList | null) => {
-    if (!selectedFiles) return
+  const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    console.log("File selected:", file ? file.name : "No file")
 
-    const newFiles: UploadFile[] = Array.from(selectedFiles).map((file) => ({
-      file,
-      id: Math.random().toString(36).substr(2, 9),
-      progress: 0,
-      status: "pending",
-    }))
+    if (!file) return
 
-    setFiles((prev) => [...prev, ...newFiles])
+    // Reset states
+    setError(null)
+    setUploadComplete(false)
+    setUploadProgress(0)
+
+    // Set file size limits based on Vercel's 4.5MB body limit
+    // Account for FormData overhead by setting file limits slightly lower
+    let maxSize: number
+    let maxSizeMB: string
+
+    if (file.type.startsWith("video/")) {
+      maxSize = 4 * 1024 * 1024 // 4MB for videos
+      maxSizeMB = "4MB"
+    } else if (file.type.startsWith("image/")) {
+      maxSize = 3 * 1024 * 1024 // 3MB for images
+      maxSizeMB = "3MB"
+    } else if (file.type.startsWith("audio/")) {
+      maxSize = 4 * 1024 * 1024 // 4MB for audio
+      maxSizeMB = "4MB"
+    } else if (file.type === "application/pdf") {
+      maxSize = 3 * 1024 * 1024 // 3MB for PDFs
+      maxSizeMB = "3MB"
+    } else if (file.type.includes("presentation") || file.type.includes("powerpoint")) {
+      maxSize = 3 * 1024 * 1024 // 3MB for presentations
+      maxSizeMB = "3MB"
+    } else {
+      maxSize = 3 * 1024 * 1024 // 3MB for other documents
+      maxSizeMB = "3MB"
+    }
+
+    console.log(`File type: ${file.type}, Max size: ${maxSizeMB} (${maxSize} bytes), File size: ${file.size} bytes`)
+
+    if (file.size > maxSize) {
+      const fileSizeMB = Math.round((file.size / 1024 / 1024) * 100) / 100
+      setError(
+        `File size must be less than ${maxSizeMB}. Your file is ${fileSizeMB}MB. This limit is due to Vercel's serverless function constraints.`,
+      )
+      return
+    }
+
+    setSelectedFile(file)
+    console.log("File validated and set:", {
+      name: file.name,
+      size: file.size,
+      type: file.type,
+    })
   }
 
-  const removeFile = (id: string) => {
-    setFiles((prev) => prev.filter((f) => f.id !== id))
-  }
+  const handleUpload = async () => {
+    if (!selectedFile) {
+      setError("Please select a file")
+      return
+    }
 
-  const uploadFile = async (uploadFile: UploadFile) => {
-    const formData = new FormData()
-    formData.append("file", uploadFile.file)
+    console.log("Starting upload process...")
 
     try {
-      setFiles((prev) => prev.map((f) => (f.id === uploadFile.id ? { ...f, status: "uploading", progress: 0 } : f)))
+      setUploading(true)
+      setUploadProgress(10)
+      setError(null)
+      setUploadComplete(false)
+
+      console.log("Creating FormData...")
+      const formData = new FormData()
+      formData.append("file", selectedFile)
+
+      console.log("FormData created, making API call...")
+      setUploadProgress(20)
 
       const response = await fetch("/api/media/upload", {
         method: "POST",
         body: formData,
       })
 
-      if (response.ok) {
-        setFiles((prev) => prev.map((f) => (f.id === uploadFile.id ? { ...f, status: "success", progress: 100 } : f)))
+      console.log("API response received:", response.status, response.statusText)
+      setUploadProgress(80)
+
+      // Handle different response types
+      let data
+      const contentType = response.headers.get("content-type")
+
+      if (contentType && contentType.includes("application/json")) {
+        data = await response.json()
+        console.log("Response data (JSON):", data)
       } else {
-        const errorData = await response.json()
-        setFiles((prev) =>
-          prev.map((f) =>
-            f.id === uploadFile.id ? { ...f, status: "error", error: errorData.message || "Upload failed" } : f,
-          ),
-        )
+        // Handle non-JSON responses (like 413 errors)
+        const text = await response.text()
+        console.log("Response data (Text):", text)
+        data = { error: text || `Server error (${response.status})` }
       }
-    } catch (error) {
-      setFiles((prev) =>
-        prev.map((f) => (f.id === uploadFile.id ? { ...f, status: "error", error: "Network error" } : f)),
-      )
-    }
-  }
 
-  const uploadAll = async () => {
-    const pendingFiles = files.filter((f) => f.status === "pending")
+      if (response.ok && data.success) {
+        console.log("Upload successful!")
+        setUploadProgress(100)
+        setUploadComplete(true)
 
-    // Upload files sequentially to avoid overwhelming the server
-    for (const file of pendingFiles) {
-      await uploadFile(file)
-    }
+        // Wait a moment to show success, then close and refresh
+        setTimeout(() => {
+          onUploadComplete()
+          handleClose()
+        }, 1500)
+      } else {
+        console.error("Upload failed:", data.error)
 
-    // Check if any uploads were successful
-    const hasSuccessfulUploads = files.some((f) => f.status === "success")
+        // Provide specific error messages based on status code
+        let errorMessage = data.error || "Upload failed"
 
-    if (hasSuccessfulUploads && onUploadComplete) {
-      console.log("Upload completed successfully, triggering refresh...")
-      onUploadComplete()
+        if (response.status === 413) {
+          errorMessage = "File is too large for Vercel's serverless functions (4.5MB limit). Try a smaller file."
+        } else if (response.status === 401) {
+          errorMessage = "You are not authorized to upload files. Please log in again."
+        } else if (response.status === 400) {
+          errorMessage = data.error || "Invalid file or request."
+        } else if (response.status >= 500) {
+          errorMessage = "Server error. Please try again later."
+        }
+
+        setError(errorMessage)
+        setUploadProgress(0)
+      }
+    } catch (err) {
+      console.error("Upload error:", err)
+      setError(err instanceof Error ? err.message : "Network error during upload")
+      setUploadProgress(0)
+    } finally {
+      setUploading(false)
     }
   }
 
   const handleClose = () => {
-    const hasSuccess = files.some((f) => f.status === "success")
-
-    if (hasSuccess && onUploadComplete) {
-      onUploadComplete()
+    if (uploading) {
+      console.log("Cannot close dialog during upload")
+      return false
     }
 
-    setFiles([])
+    console.log("Closing dialog and resetting state")
     onOpenChange(false)
+    setSelectedFile(null)
+    setError(null)
+    setUploadProgress(0)
+    setUploadComplete(false)
+    return true
   }
 
   const formatFileSize = (bytes: number) => {
-    if (bytes === 0) return "0 B"
+    if (bytes === 0) return "0 Bytes"
     const k = 1024
-    const sizes = ["B", "KB", "MB", "GB"]
+    const sizes = ["Bytes", "KB", "MB", "GB"]
     const i = Math.floor(Math.log(bytes) / Math.log(k))
-    return Number.parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + " " + sizes[i]
+    return Number.parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i]
   }
-
-  const getStatusIcon = (status: UploadFile["status"]) => {
-    switch (status) {
-      case "success":
-        return <CheckCircle className="h-4 w-4 text-green-500" />
-      case "error":
-        return <AlertCircle className="h-4 w-4 text-red-500" />
-      default:
-        return <File className="h-4 w-4 text-gray-400" />
-    }
-  }
-
-  const pendingCount = files.filter((f) => f.status === "pending").length
-  const uploadingCount = files.filter((f) => f.status === "uploading").length
-  const isUploading = uploadingCount > 0
 
   return (
-    <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="sm:max-w-md">
-        <DialogHeader>
-          <DialogTitle>Upload Media Files</DialogTitle>
-        </DialogHeader>
+    <AlertDialog
+      open={open}
+      onOpenChange={(newOpen) => {
+        if (!newOpen && uploading) {
+          // Prevent closing during upload
+          console.log("Prevented dialog close during upload")
+          return
+        }
+        if (!newOpen) {
+          handleClose()
+        }
+      }}
+    >
+      <AlertDialogContent className="sm:max-w-md">
+        <AlertDialogHeader>
+          <AlertDialogTitle className="flex items-center gap-2">
+            <Upload className="h-5 w-5" />
+            Upload Media
+          </AlertDialogTitle>
+          <AlertDialogDescription>
+            Select a file to upload to your media library.
+            <br />
+            <strong>Limits:</strong> Videos/Audio (4MB), Images/PDFs/Documents (3MB)
+            <br />
+            <small className="text-gray-500">Limited by Vercel's serverless function constraints</small>
+          </AlertDialogDescription>
+        </AlertDialogHeader>
 
-        <div className="space-y-4">
-          {/* Drop Zone */}
-          <div
-            className={`border-2 border-dashed rounded-lg p-6 text-center transition-colors ${
-              isDragging ? "border-blue-500 bg-blue-50" : "border-gray-300 hover:border-gray-400"
-            }`}
-            onDragOver={(e) => {
-              e.preventDefault()
-              setIsDragging(true)
-            }}
-            onDragLeave={() => setIsDragging(false)}
-            onDrop={(e) => {
-              e.preventDefault()
-              setIsDragging(false)
-              handleFileSelect(e.dataTransfer.files)
-            }}
-          >
-            <Upload className="h-8 w-8 text-gray-400 mx-auto mb-2" />
-            <p className="text-sm text-gray-600 mb-2">Drag and drop files here, or click to select</p>
-            <input
-              type="file"
-              multiple
-              accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx"
-              onChange={(e) => handleFileSelect(e.target.files)}
-              className="hidden"
-              id="file-upload"
-            />
-            <Button variant="outline" asChild>
-              <label htmlFor="file-upload" className="cursor-pointer">
-                Select Files
-              </label>
-            </Button>
-          </div>
+        <div className="grid gap-4 py-4">
+          <Input
+            type="file"
+            onChange={handleFileSelect}
+            accept="image/*,video/*,audio/*,.pdf,.ppt,.pptx,.doc,.docx"
+            disabled={uploading}
+            className="cursor-pointer"
+          />
 
-          {/* File List */}
-          {files.length > 0 && (
-            <div className="space-y-2 max-h-60 overflow-y-auto">
-              {files.map((file) => (
-                <div key={file.id} className="flex items-center gap-3 p-2 border rounded">
-                  {getStatusIcon(file.status)}
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium truncate">{file.file.name}</p>
-                    <p className="text-xs text-gray-500">{formatFileSize(file.file.size)}</p>
-                    {file.status === "uploading" && <Progress value={file.progress} className="h-1 mt-1" />}
-                    {file.status === "error" && <p className="text-xs text-red-500 mt-1">{file.error}</p>}
-                  </div>
-                  {file.status === "pending" && (
-                    <Button variant="ghost" size="sm" onClick={() => removeFile(file.id)} className="h-6 w-6 p-0">
-                      <X className="h-3 w-3" />
-                    </Button>
-                  )}
-                </div>
-              ))}
+          {selectedFile && (
+            <div className="p-3 bg-gray-50 rounded-lg">
+              <div className="text-sm font-medium">{selectedFile.name}</div>
+              <div className="text-xs text-gray-500 mt-1">
+                {formatFileSize(selectedFile.size)} • {selectedFile.type}
+              </div>
             </div>
           )}
 
-          {/* Actions */}
-          <div className="flex justify-between">
-            <Button variant="outline" onClick={handleClose} disabled={isUploading}>
-              {files.some((f) => f.status === "success") ? "Done" : "Cancel"}
-            </Button>
-            {files.length > 0 && pendingCount > 0 && (
-              <Button onClick={uploadAll} disabled={isUploading}>
-                {isUploading ? "Uploading..." : `Upload ${pendingCount} file${pendingCount !== 1 ? "s" : ""}`}
-              </Button>
-            )}
-          </div>
+          {uploading && (
+            <div className="space-y-3">
+              <Progress value={uploadProgress} className="w-full" />
+              <div className="flex items-center justify-center gap-2 text-sm text-gray-600">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Uploading... {uploadProgress}%
+              </div>
+              <div className="text-xs text-center text-gray-500">Please wait, do not close this window</div>
+            </div>
+          )}
+
+          {uploadComplete && (
+            <div className="flex items-center justify-center gap-2 text-sm text-green-600">
+              <CheckCircle className="h-4 w-4" />
+              Upload completed successfully!
+            </div>
+          )}
+
+          {error && (
+            <div className="flex items-start gap-2 p-3 bg-red-50 border border-red-200 rounded-lg">
+              <XCircle className="h-4 w-4 text-red-500 mt-0.5 flex-shrink-0" />
+              <div className="text-sm text-red-700">
+                <div className="font-medium">Upload Failed</div>
+                <div className="mt-1">{error}</div>
+              </div>
+            </div>
+          )}
         </div>
-      </DialogContent>
-    </Dialog>
+
+        <AlertDialogFooter>
+          <AlertDialogCancel
+            disabled={uploading}
+            onClick={(e) => {
+              if (uploading) {
+                e.preventDefault()
+                console.log("Cancel button disabled during upload")
+                return
+              }
+              handleClose()
+            }}
+            className={uploading ? "opacity-50 cursor-not-allowed" : ""}
+          >
+            {uploading ? "Uploading..." : "Cancel"}
+          </AlertDialogCancel>
+          <AlertDialogAction
+            onClick={(e) => {
+              e.preventDefault()
+              if (!uploading && !uploadComplete) {
+                handleUpload()
+              }
+            }}
+            disabled={!selectedFile || uploading || uploadComplete}
+            className={!selectedFile || uploading || uploadComplete ? "opacity-50 cursor-not-allowed" : ""}
+          >
+            {uploading ? (
+              <>
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                Uploading...
+              </>
+            ) : uploadComplete ? (
+              <>
+                <CheckCircle className="h-4 w-4 mr-2" />
+                Completed
+              </>
+            ) : (
+              <>
+                <Upload className="h-4 w-4 mr-2" />
+                Upload
+              </>
+            )}
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
   )
 }
+
+export default UploadMediaDialog

@@ -14,6 +14,7 @@ import {
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { AddScreenDialog } from "@/components/add-screen-dialog"
 import { AssignPlaylistDialog } from "@/components/assign-playlist-dialog"
+import { RepairScreenDialog } from "@/components/repair-screen-dialog"
 import { DashboardLayout } from "@/components/dashboard-layout"
 import { toast } from "sonner"
 import {
@@ -29,6 +30,7 @@ import {
   RefreshCw,
   AlertCircle,
   Clock,
+  Link,
 } from "lucide-react"
 
 interface Device {
@@ -69,6 +71,7 @@ export default function ScreensPage() {
   const [error, setError] = useState("")
   const [showAddDialog, setShowAddDialog] = useState(false)
   const [showAssignDialog, setShowAssignDialog] = useState(false)
+  const [showRepairDialog, setShowRepairDialog] = useState(false)
   const [selectedDevice, setSelectedDevice] = useState<Device | null>(null)
 
   useEffect(() => {
@@ -110,9 +113,20 @@ export default function ScreensPage() {
     setShowAssignDialog(false)
   }
 
+  const handleRepairCompleted = () => {
+    loadDevices()
+    setSelectedDevice(null)
+    setShowRepairDialog(false)
+  }
+
   const handleAssignPlaylist = (device: Device) => {
     setSelectedDevice(device)
     setShowAssignDialog(true)
+  }
+
+  const handleRepairScreen = (device: Device) => {
+    setSelectedDevice(device)
+    setShowRepairDialog(true)
   }
 
   const handleDeleteDevice = async (deviceId: string, deviceName: string) => {
@@ -285,6 +299,10 @@ export default function ScreensPage() {
                           <PlayCircle className="h-4 w-4 mr-2" />
                           Assign Playlist
                         </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => handleRepairScreen(device)}>
+                          <Link className="h-4 w-4 mr-2" />
+                          Re-pair Device
+                        </DropdownMenuItem>
                         <DropdownMenuItem disabled>
                           <Settings className="h-4 w-4 mr-2" />
                           Settings
@@ -364,6 +382,16 @@ export default function ScreensPage() {
             currentPlaylistId={selectedDevice.assigned_playlist_id}
             currentPlaylistName={selectedDevice.assigned_playlist_name}
             onPlaylistAssigned={handlePlaylistAssigned}
+          />
+        )}
+
+        {/* Re-pair Screen Dialog */}
+        {selectedDevice && (
+          <RepairScreenDialog
+            open={showRepairDialog}
+            onOpenChange={setShowRepairDialog}
+            device={selectedDevice}
+            onRepairCompleted={handleRepairCompleted}
           />
         )}
       </div>

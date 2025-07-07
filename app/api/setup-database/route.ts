@@ -1,114 +1,94 @@
 import { NextResponse } from "next/server"
-import { sql } from "@/lib/db"
+import { getDb } from "@/lib/db"
 
 export async function POST() {
   try {
-    // Create users table
+    const sql = getDb()
+
+    // Create tables one by one
     await sql`
       CREATE TABLE IF NOT EXISTS users (
-        id SERIAL PRIMARY KEY,
-        email VARCHAR(255) UNIQUE NOT NULL,
-        password_hash VARCHAR(255) NOT NULL,
-        name VARCHAR(255) NOT NULL,
-        company VARCHAR(255),
-        role VARCHAR(50) DEFAULT 'user',
-        plan_type VARCHAR(50) DEFAULT 'free',
-        plan_expires_at TIMESTAMP,
-        is_admin BOOLEAN DEFAULT FALSE,
-        created_at TIMESTAMP DEFAULT NOW(),
-        updated_at TIMESTAMP DEFAULT NOW()
+          id SERIAL PRIMARY KEY,
+          email VARCHAR(255) UNIQUE NOT NULL,
+          password_hash VARCHAR(255) NOT NULL,
+          first_name VARCHAR(100) NOT NULL,
+          last_name VARCHAR(100) NOT NULL,
+          company VARCHAR(255),
+          plan VARCHAR(50) DEFAULT 'monthly',
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `
 
-    // Create devices table
+    await sql`
+      CREATE TABLE IF NOT EXISTS device_codes (
+          id SERIAL PRIMARY KEY,
+          code VARCHAR(6) UNIQUE NOT NULL,
+          user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+          expires_at TIMESTAMP NOT NULL,
+          used BOOLEAN DEFAULT FALSE,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `
+
     await sql`
       CREATE TABLE IF NOT EXISTS devices (
-        id SERIAL PRIMARY KEY,
-        user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
-        name VARCHAR(255) NOT NULL,
-        device_code VARCHAR(10) UNIQUE NOT NULL,
-        status VARCHAR(50) DEFAULT 'offline',
-        last_heartbeat TIMESTAMP,
-        created_at TIMESTAMP DEFAULT NOW(),
-        updated_at TIMESTAMP DEFAULT NOW()
+          id SERIAL PRIMARY KEY,
+          device_id VARCHAR(255) UNIQUE NOT NULL,
+          user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+          screen_name VARCHAR(255) NOT NULL,
+          device_type VARCHAR(50) NOT NULL,
+          platform VARCHAR(50) NOT NULL,
+          api_key VARCHAR(255) UNIQUE NOT NULL,
+          status VARCHAR(20) DEFAULT 'offline',
+          location VARCHAR(255),
+          resolution VARCHAR(20) DEFAULT '1920x1080',
+          last_seen TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          registered_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `
 
-    // Create media table
+    // Insert demo user
     await sql`
-      CREATE TABLE IF NOT EXISTS media (
-        id SERIAL PRIMARY KEY,
-        user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
-        name VARCHAR(255) NOT NULL,
-        type VARCHAR(50) NOT NULL,
-        url TEXT NOT NULL,
-        size_bytes BIGINT,
-        duration_seconds INTEGER,
-        thumbnail_url TEXT,
-        is_deleted BOOLEAN DEFAULT FALSE,
-        created_at TIMESTAMP DEFAULT NOW(),
-        updated_at TIMESTAMP DEFAULT NOW()
-      )
+      INSERT INTO users (email, password_hash, first_name, last_name, company, plan) 
+      VALUES (
+          'demo@signagecloud.com', 
+          '$2b$10$rQZ9QmZ9QmZ9QmZ9QmZ9Qu',
+          'Demo', 
+          'User', 
+          'SignageCloud Demo', 
+          'monthly'
+      ) ON CONFLICT (email) DO NOTHING
     `
 
-    // Create playlists table
-    await sql`
-      CREATE TABLE IF NOT EXISTS playlists (
-        id SERIAL PRIMARY KEY,
-        user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
-        name VARCHAR(255) NOT NULL,
-        description TEXT,
-        media_items JSONB DEFAULT '[]',
-        is_active BOOLEAN DEFAULT FALSE,
-        created_at TIMESTAMP DEFAULT NOW(),
-        updated_at TIMESTAMP DEFAULT NOW()
-      )
-    `
+    // Get demo user ID
+    const userResult = await sql`SELECT id FROM users WHERE email = 'demo@signagecloud.com'`
+    const userId = userResult[0]?.id
 
-    // Create password_resets table
-    await sql`
-      CREATE TABLE IF NOT EXISTS password_resets (
-        id SERIAL PRIMARY KEY,
-        email VARCHAR(255) NOT NULL,
-        token VARCHAR(255) NOT NULL,
-        expires_at TIMESTAMP NOT NULL,
-        used BOOLEAN DEFAULT FALSE,
-        created_at TIMESTAMP DEFAULT NOW()
-      )
-    `
+    if (userId) {
+      // Insert demo devices
+      await sql`
+        INSERT INTO devices (device_id, user_id, screen_name, device_type, platform, api_key, status, location, last_seen)
+        VALUES 
+            ('device_demo1', ${userId}, 'Lobby Display', 'firestick', 'android-tv', 'api_demo_key_1', 'online', 'Main Lobby', CURRENT_TIMESTAMP),
+            ('device_demo2', ${userId}, 'Reception Desk', 'android-tv', 'android-tv', 'api_demo_key_2', 'online', 'Reception Area', CURRENT_TIMESTAMP - INTERVAL '2 minutes'),
+            ('device_demo3', ${userId}, 'Cafeteria TV', 'web-browser', 'web', 'api_demo_key_3', 'offline', 'Employee Cafeteria', CURRENT_TIMESTAMP - INTERVAL '10 minutes')
+        ON CONFLICT (device_id) DO NOTHING
+      `
+    }
 
     return NextResponse.json({
       success: true,
-      message: "Database tables created successfully",
+      message: "Database setup completed successfully",
     })
   } catch (error) {
     console.error("Database setup error:", error)
     return NextResponse.json(
       {
-        error: "Database setup failed",
-        details: error instanceof Error ? error.message : "Unknown error",
-      },
-      { status: 500 },
-    )
-  }
-}
-
-export async function GET() {
-  try {
-    // Test database connection
-    const result = await sql`SELECT NOW() as current_time`
-
-    return NextResponse.json({
-      success: true,
-      message: "Database connection successful",
-      timestamp: result[0].current_time,
-    })
-  } catch (error) {
-    console.error("Database test error:", error)
-    return NextResponse.json(
-      {
-        error: "Database connection failed",
-        details: error instanceof Error ? error.message : "Unknown error",
+        success: false,
+        message: "Database setup failed",
+        error: error.message,
       },
       { status: 500 },
     )
