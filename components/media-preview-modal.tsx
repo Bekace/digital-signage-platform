@@ -20,7 +20,7 @@ interface MediaFile {
   duration?: number
   media_source?: string
   external_url?: string
-  embed_settings?: string
+  embed_settings?: string | object
 }
 
 interface MediaPreviewModalProps {
@@ -61,6 +61,30 @@ export function MediaPreviewModal({ file, open, onOpenChange }: MediaPreviewModa
       minute: "2-digit",
     })
   }
+
+  // Safe function to parse embed settings
+  const getEmbedSettings = () => {
+    if (!file.embed_settings) return null
+
+    try {
+      // If it's already an object, return it
+      if (typeof file.embed_settings === "object") {
+        return file.embed_settings
+      }
+
+      // If it's a string, try to parse it
+      if (typeof file.embed_settings === "string") {
+        return JSON.parse(file.embed_settings)
+      }
+
+      return null
+    } catch (error) {
+      console.error("Error parsing embed_settings:", error)
+      return null
+    }
+  }
+
+  const embedSettings = getEmbedSettings()
 
   const isImage = file.mime_type?.startsWith("image/") || file.file_type === "image"
   const isVideo = file.mime_type?.startsWith("video/") || file.file_type === "video"
@@ -235,9 +259,9 @@ export function MediaPreviewModal({ file, open, onOpenChange }: MediaPreviewModa
                       Download Link
                     </Button>
                   </div>
-                  {file.embed_settings && (
+                  {embedSettings && embedSettings.duration && (
                     <div className="mt-4 text-sm text-gray-600">
-                      <p>Duration: {JSON.parse(file.embed_settings).duration || 10}s per slide</p>
+                      <p>Duration: {embedSettings.duration || 10}s per slide</p>
                     </div>
                   )}
                 </div>
@@ -328,10 +352,10 @@ export function MediaPreviewModal({ file, open, onOpenChange }: MediaPreviewModa
                     <span className="font-medium">{file.dimensions}</span>
                   </div>
                 )}
-                {file.embed_settings && JSON.parse(file.embed_settings).duration && (
+                {embedSettings && embedSettings.duration && (
                   <div className="flex justify-between">
                     <span className="text-gray-600">Duration:</span>
-                    <span className="font-medium">{JSON.parse(file.embed_settings).duration}s per slide</span>
+                    <span className="font-medium">{embedSettings.duration}s per slide</span>
                   </div>
                 )}
                 {file.duration && (
