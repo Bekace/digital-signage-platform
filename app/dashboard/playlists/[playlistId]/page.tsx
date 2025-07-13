@@ -293,6 +293,22 @@ export default function PlaylistEditorPage() {
     }),
   )
 
+  // Helper function to get auth headers
+  const getAuthHeaders = () => {
+    const token = localStorage.getItem("token")
+    console.log("🔑 [AUTH] Token exists:", !!token)
+    console.log("🔑 [AUTH] Token length:", token?.length || 0)
+
+    if (!token) {
+      console.error("🔑 [AUTH] No token found in localStorage")
+      return {}
+    }
+
+    return {
+      Authorization: `Bearer ${token}`,
+    }
+  }
+
   useEffect(() => {
     if (playlistId) {
       fetchPlaylist()
@@ -304,10 +320,17 @@ export default function PlaylistEditorPage() {
   const fetchPlaylist = async () => {
     try {
       console.log("🎵 [PLAYLIST EDITOR] Fetching playlist:", playlistId)
-      const token = localStorage.getItem("token")
+      const authHeaders = getAuthHeaders()
+
+      if (!authHeaders.Authorization) {
+        setError("Authentication required")
+        router.push("/login")
+        return
+      }
+
       const response = await fetch(`/api/playlists/${playlistId}`, {
         headers: {
-          Authorization: `Bearer ${token}`,
+          ...authHeaders,
         },
       })
       const data = await response.json()
@@ -330,10 +353,16 @@ export default function PlaylistEditorPage() {
   const fetchPlaylistItems = async () => {
     try {
       console.log("📋 [PLAYLIST EDITOR] Fetching playlist items for:", playlistId)
-      const token = localStorage.getItem("token")
+      const authHeaders = getAuthHeaders()
+
+      if (!authHeaders.Authorization) {
+        console.error("📋 [PLAYLIST EDITOR] No auth token for playlist items")
+        return
+      }
+
       const response = await fetch(`/api/playlists/${playlistId}/items`, {
         headers: {
-          Authorization: `Bearer ${token}`,
+          ...authHeaders,
         },
       })
       const data = await response.json()
@@ -358,10 +387,16 @@ export default function PlaylistEditorPage() {
       setMediaError(null)
       console.log("📁 [PLAYLIST EDITOR] Fetching media files...")
 
-      const token = localStorage.getItem("token")
+      const authHeaders = getAuthHeaders()
+
+      if (!authHeaders.Authorization) {
+        setMediaError("Authentication required")
+        return
+      }
+
       const response = await fetch("/api/media", {
         headers: {
-          Authorization: `Bearer ${token}`,
+          ...authHeaders,
         },
       })
       const data = await response.json()
@@ -417,12 +452,22 @@ export default function PlaylistEditorPage() {
 
     // Update positions on server
     try {
-      const token = localStorage.getItem("token")
+      const authHeaders = getAuthHeaders()
+
+      if (!authHeaders.Authorization) {
+        console.error("🎯 [PLAYLIST EDITOR] No auth token for reorder")
+        setPlaylistItems(originalItems)
+        toast.error("Authentication required")
+        return
+      }
+
+      console.log("🎯 [PLAYLIST EDITOR] Sending reorder request with auth headers:", authHeaders)
+
       const response = await fetch(`/api/playlists/${playlistId}/items/reorder`, {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
+          ...authHeaders,
         },
         body: JSON.stringify({
           items: newItems.map((item, index) => ({
@@ -458,12 +503,18 @@ export default function PlaylistEditorPage() {
     try {
       console.log("➕ [PLAYLIST EDITOR] Adding media to playlist:", mediaFile)
 
-      const token = localStorage.getItem("token")
+      const authHeaders = getAuthHeaders()
+
+      if (!authHeaders.Authorization) {
+        toast.error("Authentication required")
+        return
+      }
+
       const response = await fetch(`/api/playlists/${playlistId}/items`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
+          ...authHeaders,
         },
         body: JSON.stringify({
           media_id: mediaFile.id,
@@ -490,11 +541,17 @@ export default function PlaylistEditorPage() {
     try {
       console.log("🗑️ [PLAYLIST EDITOR] Removing item from playlist:", itemId)
 
-      const token = localStorage.getItem("token")
+      const authHeaders = getAuthHeaders()
+
+      if (!authHeaders.Authorization) {
+        toast.error("Authentication required")
+        return
+      }
+
       const response = await fetch(`/api/playlists/${playlistId}/items/${itemId}`, {
         method: "DELETE",
         headers: {
-          Authorization: `Bearer ${token}`,
+          ...authHeaders,
         },
       })
 
@@ -520,12 +577,18 @@ export default function PlaylistEditorPage() {
     try {
       console.log("⏱️ [PLAYLIST EDITOR] Updating item duration:", { itemId, duration, transition })
 
-      const token = localStorage.getItem("token")
+      const authHeaders = getAuthHeaders()
+
+      if (!authHeaders.Authorization) {
+        toast.error("Authentication required")
+        return
+      }
+
       const response = await fetch(`/api/playlists/${playlistId}/items/${itemId}`, {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
+          ...authHeaders,
         },
         body: JSON.stringify({
           duration,
@@ -864,12 +927,18 @@ export default function PlaylistEditorPage() {
             }}
             onSave={async (options) => {
               try {
-                const token = localStorage.getItem("token")
+                const authHeaders = getAuthHeaders()
+
+                if (!authHeaders.Authorization) {
+                  toast.error("Authentication required")
+                  return
+                }
+
                 const response = await fetch(`/api/playlists/${playlistId}`, {
                   method: "PUT",
                   headers: {
                     "Content-Type": "application/json",
-                    Authorization: `Bearer ${token}`,
+                    ...authHeaders,
                   },
                   body: JSON.stringify(options),
                 })
