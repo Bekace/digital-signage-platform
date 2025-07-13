@@ -1,8 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server"
-import { neon } from "@neondatabase/serverless"
 import { getCurrentUser } from "@/lib/auth"
-
-const sql = neon(process.env.DATABASE_URL!)
+import { getDb } from "@/lib/db"
 
 export const dynamic = "force-dynamic"
 
@@ -18,6 +16,8 @@ export async function GET(request: NextRequest) {
     }
 
     console.log("🎵 [PLAYLISTS] User ID:", user.id)
+
+    const sql = getDb()
 
     // Fetch playlists with item counts - using correct column names from database
     const playlists = await sql`
@@ -99,6 +99,8 @@ export async function POST(request: NextRequest) {
     if (!name || name.trim() === "") {
       return NextResponse.json({ success: false, error: "Playlist name is required" }, { status: 400 })
     }
+
+    const sql = getDb()
 
     // Create playlist using correct column names
     const result = await sql`

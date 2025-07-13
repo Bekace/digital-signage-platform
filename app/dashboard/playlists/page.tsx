@@ -2,28 +2,20 @@
 
 import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
-import {
-  Plus,
-  Play,
-  MoreHorizontal,
-  Edit,
-  Trash2,
-  Copy,
-  Clock,
-  Monitor,
-  AlertCircle,
-  RefreshCw,
-  Database,
-} from "lucide-react"
+import { Plus, Play, Trash2, Edit, Eye, Clock, Hash, Users, MoreHorizontal, Search } from "lucide-react"
 import { toast } from "sonner"
 
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Badge } from "@/components/ui/badge"
-import { DashboardLayout } from "@/components/dashboard-layout"
-import { CreatePlaylistDialog } from "@/components/create-playlist-dialog"
-import { Skeleton } from "@/components/ui/skeleton"
+import { Input } from "@/components/ui/input"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -34,16 +26,19 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
+import { DashboardLayout } from "@/components/dashboard-layout"
+import { CreatePlaylistDialog } from "@/components/create-playlist-dialog"
+import { PlaylistPreviewModal } from "@/components/playlist-preview-modal"
 
 interface Playlist {
   id: number
   name: string
   description: string
-  status: "draft" | "active" | "scheduled" | "paused"
+  status: string
   loop_enabled: boolean
   schedule_enabled: boolean
-  start_time: string | null
-  end_time: string | null
+  start_time?: string
+  end_time?: string
   selected_days: string[]
   item_count: number
   device_count: number
@@ -53,136 +48,112 @@ interface Playlist {
   updated_at: string
 }
 
+interface PlaylistItem {
+  id: number
+  playlist_id: number
+  media_id: number
+  position: number
+  duration?: number
+  transition_type: string
+  media?: {
+    id: number
+    filename: string
+    original_name?: string
+    original_filename?: string
+    file_type: string
+    file_size: number
+    url: string
+    thumbnail_url?: string
+    mime_type?: string
+    dimensions?: string
+    duration?: number
+    media_source?: string
+    external_url?: string
+  }
+}
+
 export default function PlaylistsPage() {
+  const router = useRouter()
   const [playlists, setPlaylists] = useState<Playlist[]>([])
   const [loading, setLoading] = useState(true)
+  const [searchQuery, setSearchQuery] = useState("")
   const [showCreateDialog, setShowCreateDialog] = useState(false)
   const [deletePlaylist, setDeletePlaylist] = useState<Playlist | null>(null)
-  const [error, setError] = useState<string | null>(null)
-  const [needsSetup, setNeedsSetup] = useState(false)
-
-  const router = useRouter()
+  const [previewPlaylist, setPreviewPlaylist] = useState<Playlist | null>(null)
+  const [previewItems, setPreviewItems] = useState<PlaylistItem[]>([])
+  const [previewLoading, setPreviewLoading] = useState(false)
 
   useEffect(() => {
     fetchPlaylists()
   }, [])
 
   const fetchPlaylists = async () => {
-    console.log("🎵 [PLAYLISTS PAGE] Fetching playlists...")
     try {
       setLoading(true)
-      setError(null)
-      setNeedsSetup(false)
+      console.log("🎵 [PLAYLISTS PAGE] Fetching playlists...")
 
       const response = await fetch("/api/playlists")
-      console.log("🎵 [PLAYLISTS PAGE] Response status:", response.status)
-
       const data = await response.json()
-      console.log("🎵 [PLAYLISTS PAGE] Response data:", data)
 
-      if (response.ok) {
-        if (data.needsSetup) {
-          setNeedsSetup(true)
-          setPlaylists([])
-        } else if (data.success) {
-          // Ensure playlists is always an array
-          setPlaylists(Array.isArray(data.playlists) ? data.playlists : [])
-        } else {
-          throw new Error(data.error || "Failed to fetch playlists")
-        }
+      console.log("🎵 [PLAYLISTS PAGE] Response:", data)
+
+      if (response.ok && data.success) {
+        setPlaylists(data.playlists || [])
+        console.log("🎵 [PLAYLISTS PAGE] Set playlists:", data.playlists?.length || 0)
       } else {
-        throw new Error(data.error || `HTTP ${response.status}: ${response.statusText}`)
+        console.error("🎵 [PLAYLISTS PAGE] Error:", data.error)
+        toast.error(data.error || "Failed to fetch playlists")
       }
     } catch (error) {
-      console.error("🎵 [PLAYLISTS PAGE] Error fetching playlists:", error)
-      setError(error instanceof Error ? error.message : "Failed to load playlists")
-      setPlaylists([]) // Ensure playlists is always an array
-      toast.error("Failed to load playlists")
+      console.error("🎵 [PLAYLISTS PAGE] Fetch error:", error)
+      toast.error("Failed to fetch playlists")
     } finally {
       setLoading(false)
     }
   }
 
-  const handlePlaylistCreated = () => {
-    console.log("🎵 [PLAYLISTS PAGE] Playlist created, refreshing list...")
-    fetchPlaylists()
-  }
-
   const handleDeletePlaylist = async (playlist: Playlist) => {
-    console.log("🎵 [PLAYLISTS PAGE] Deleting playlist:", playlist.id)
     try {
       const response = await fetch(`/api/playlists/${playlist.id}`, {
         method: "DELETE",
       })
 
-      if (!response.ok) {
+      if (response.ok) {
+        toast.success("Playlist deleted successfully")
+        setPlaylists((prev) => prev.filter((p) => p.id !== playlist.id))
+        setDeletePlaylist(null)
+      } else {
         const errorData = await response.json()
-        throw new Error(errorData.error || "Failed to delete playlist")
+        toast.error(errorData.error || "Failed to delete playlist")
       }
-
-      const data = await response.json()
-      console.log("🎵 [PLAYLISTS PAGE] Delete response:", data)
-
-      setPlaylists((prev) => prev.filter((p) => p.id !== playlist.id))
-      toast.success("Playlist deleted successfully")
-      setDeletePlaylist(null)
     } catch (error) {
-      console.error("🎵 [PLAYLISTS PAGE] Error deleting playlist:", error)
-      toast.error(error instanceof Error ? error.message : "Failed to delete playlist")
+      console.error("Error deleting playlist:", error)
+      toast.error("Failed to delete playlist")
     }
   }
 
-  const handleDuplicatePlaylist = async (playlist: Playlist) => {
-    console.log("🎵 [PLAYLISTS PAGE] Duplicating playlist:", playlist.id)
+  const handlePreviewPlaylist = async (playlist: Playlist) => {
     try {
-      const duplicateData = {
-        name: `${playlist.name} (Copy)`,
-        description: playlist.description,
-        loop_enabled: playlist.loop_enabled,
-        schedule_enabled: false, // Reset scheduling for duplicates
-        start_time: null,
-        end_time: null,
-        selected_days: [],
-      }
+      setPreviewLoading(true)
+      console.log("👁️ [PLAYLISTS PAGE] Loading preview for playlist:", playlist.id)
 
-      const response = await fetch("/api/playlists", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(duplicateData),
-      })
-
-      if (!response.ok) {
-        const errorData = await response.json()
-        throw new Error(errorData.error || "Failed to duplicate playlist")
-      }
-
+      // Fetch playlist items for preview
+      const response = await fetch(`/api/playlists/${playlist.id}/items`)
       const data = await response.json()
-      console.log("🎵 [PLAYLISTS PAGE] Duplicate response:", data)
 
-      if (data.success) {
-        setPlaylists((prev) => [data.playlist, ...prev])
-        toast.success("Playlist duplicated successfully")
+      if (response.ok && data.success) {
+        setPreviewItems(data.items || [])
+        setPreviewPlaylist(playlist)
+        console.log("👁️ [PLAYLISTS PAGE] Preview items loaded:", data.items?.length || 0)
+      } else {
+        console.error("👁️ [PLAYLISTS PAGE] Error loading preview:", data.error)
+        toast.error(data.error || "Failed to load playlist preview")
       }
     } catch (error) {
-      console.error("🎵 [PLAYLISTS PAGE] Error duplicating playlist:", error)
-      toast.error(error instanceof Error ? error.message : "Failed to duplicate playlist")
-    }
-  }
-
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case "active":
-        return "bg-green-100 text-green-800"
-      case "scheduled":
-        return "bg-blue-100 text-blue-800"
-      case "paused":
-        return "bg-yellow-100 text-yellow-800"
-      case "draft":
-        return "bg-gray-100 text-gray-800"
-      default:
-        return "bg-gray-100 text-gray-800"
+      console.error("👁️ [PLAYLISTS PAGE] Preview error:", error)
+      toast.error("Failed to load playlist preview")
+    } finally {
+      setPreviewLoading(false)
     }
   }
 
@@ -196,124 +167,31 @@ export default function PlaylistsPage() {
     return new Date(dateString).toLocaleDateString()
   }
 
-  // Ensure playlists is always an array
-  const safePlaylistsArray = Array.isArray(playlists) ? playlists : []
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case "active":
+        return "bg-green-100 text-green-800"
+      case "draft":
+        return "bg-gray-100 text-gray-800"
+      case "scheduled":
+        return "bg-blue-100 text-blue-800"
+      default:
+        return "bg-gray-100 text-gray-800"
+    }
+  }
+
+  const filteredPlaylists = playlists.filter(
+    (playlist) =>
+      playlist.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      playlist.description.toLowerCase().includes(searchQuery.toLowerCase()),
+  )
 
   if (loading) {
     return (
       <DashboardLayout>
-        <div className="space-y-6">
-          <div className="flex justify-between items-center">
-            <div>
-              <h1 className="text-3xl font-bold">Playlists</h1>
-              <p className="text-gray-600">Create and manage content playlists for your screens</p>
-            </div>
-            <Skeleton className="h-10 w-32" />
-          </div>
-
-          <div className="grid gap-4 md:grid-cols-4">
-            {[...Array(4)].map((_, i) => (
-              <Card key={i}>
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <Skeleton className="h-4 w-24" />
-                  <Skeleton className="h-4 w-4" />
-                </CardHeader>
-                <CardContent>
-                  <Skeleton className="h-8 w-12" />
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-
-          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-            {[...Array(6)].map((_, i) => (
-              <Card key={i}>
-                <CardHeader>
-                  <Skeleton className="h-6 w-48" />
-                  <Skeleton className="h-4 w-full" />
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <Skeleton className="h-20 w-full" />
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-        </div>
-      </DashboardLayout>
-    )
-  }
-
-  if (needsSetup) {
-    return (
-      <DashboardLayout>
-        <div className="space-y-6">
-          <div className="flex justify-between items-center">
-            <div>
-              <h1 className="text-3xl font-bold">Playlists</h1>
-              <p className="text-gray-600">Create and manage content playlists for your screens</p>
-            </div>
-          </div>
-
-          <Card>
-            <CardContent className="flex flex-col items-center justify-center py-12">
-              <Database className="h-12 w-12 text-blue-400 mb-4" />
-              <h3 className="text-lg font-semibold text-gray-900 mb-2">Database Setup Required</h3>
-              <p className="text-gray-600 text-center mb-4">
-                The playlist tables haven't been created yet. Please run the database setup script.
-              </p>
-              <div className="flex space-x-2">
-                <Button onClick={fetchPlaylists}>
-                  <RefreshCw className="h-4 w-4 mr-2" />
-                  Check Again
-                </Button>
-                <Button variant="outline" onClick={() => window.open("/api/debug-playlists", "_blank")}>
-                  Debug Info
-                </Button>
-                <Button variant="outline" onClick={() => window.open("/dashboard/debug", "_blank")}>
-                  Debug Dashboard
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      </DashboardLayout>
-    )
-  }
-
-  if (error) {
-    return (
-      <DashboardLayout>
-        <div className="space-y-6">
-          <div className="flex justify-between items-center">
-            <div>
-              <h1 className="text-3xl font-bold">Playlists</h1>
-              <p className="text-gray-600">Create and manage content playlists for your screens</p>
-            </div>
-            <Button onClick={fetchPlaylists}>
-              <RefreshCw className="h-4 w-4 mr-2" />
-              Retry
-            </Button>
-          </div>
-
-          <Card>
-            <CardContent className="flex flex-col items-center justify-center py-12">
-              <AlertCircle className="h-12 w-12 text-red-400 mb-4" />
-              <h3 className="text-lg font-semibold text-gray-900 mb-2">Failed to Load Playlists</h3>
-              <p className="text-gray-600 text-center mb-4">{error}</p>
-              <div className="flex space-x-2">
-                <Button onClick={fetchPlaylists}>
-                  <RefreshCw className="h-4 w-4 mr-2" />
-                  Try Again
-                </Button>
-                <Button variant="outline" onClick={() => window.open("/api/debug-playlists", "_blank")}>
-                  Debug Info
-                </Button>
-                <Button variant="outline" onClick={() => window.open("/dashboard/debug", "_blank")}>
-                  Debug Dashboard
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
+        <div className="flex items-center justify-center py-12">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+          <span className="ml-2">Loading playlists...</span>
         </div>
       </DashboardLayout>
     )
@@ -322,168 +200,173 @@ export default function PlaylistsPage() {
   return (
     <DashboardLayout>
       <div className="space-y-6">
-        <div className="flex justify-between items-center">
+        {/* Header */}
+        <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-3xl font-bold">Playlists</h1>
-            <p className="text-gray-600">Create and manage content playlists for your screens</p>
+            <h1 className="text-3xl font-bold tracking-tight">Playlists</h1>
+            <p className="text-muted-foreground">Manage your media playlists and content scheduling</p>
           </div>
-          <div className="flex space-x-2">
-            <Button variant="outline" onClick={fetchPlaylists}>
-              <RefreshCw className="h-4 w-4 mr-2" />
-              Refresh
-            </Button>
-            <Button onClick={() => setShowCreateDialog(true)}>
-              <Plus className="h-4 w-4 mr-2" />
-              Create Playlist
-            </Button>
+          <Button onClick={() => setShowCreateDialog(true)}>
+            <Plus className="h-4 w-4 mr-2" />
+            Create Playlist
+          </Button>
+        </div>
+
+        {/* Search */}
+        <div className="flex items-center space-x-4">
+          <div className="relative flex-1 max-w-sm">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+            <Input
+              placeholder="Search playlists..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pl-10"
+            />
           </div>
         </div>
 
         {/* Stats */}
-        <div className="grid gap-4 md:grid-cols-4">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">Total Playlists</CardTitle>
               <Play className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{safePlaylistsArray.length}</div>
+              <div className="text-2xl font-bold">{playlists.length}</div>
             </CardContent>
           </Card>
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Active</CardTitle>
-              <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+              <CardTitle className="text-sm font-medium">Active Playlists</CardTitle>
+              <Play className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold text-green-600">
-                {safePlaylistsArray.filter((p) => p.status === "active").length}
-              </div>
+              <div className="text-2xl font-bold">{playlists.filter((p) => p.status === "active").length}</div>
             </CardContent>
           </Card>
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Scheduled</CardTitle>
-              <Clock className="h-4 w-4 text-blue-500" />
+              <CardTitle className="text-sm font-medium">Total Items</CardTitle>
+              <Hash className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold text-blue-600">
-                {safePlaylistsArray.filter((p) => p.status === "scheduled").length}
-              </div>
+              <div className="text-2xl font-bold">{playlists.reduce((sum, p) => sum + p.item_count, 0)}</div>
             </CardContent>
           </Card>
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Drafts</CardTitle>
-              <Edit className="h-4 w-4 text-gray-500" />
+              <CardTitle className="text-sm font-medium">Connected Devices</CardTitle>
+              <Users className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold text-gray-600">
-                {safePlaylistsArray.filter((p) => p.status === "draft").length}
-              </div>
+              <div className="text-2xl font-bold">{playlists.reduce((sum, p) => sum + p.device_count, 0)}</div>
             </CardContent>
           </Card>
         </div>
 
         {/* Playlists Grid */}
-        {safePlaylistsArray.length === 0 ? (
+        {filteredPlaylists.length === 0 ? (
           <Card>
             <CardContent className="flex flex-col items-center justify-center py-12">
               <Play className="h-12 w-12 text-gray-400 mb-4" />
-              <h3 className="text-lg font-semibold text-gray-900 mb-2">No playlists yet</h3>
-              <p className="text-gray-600 text-center mb-4">
-                Create your first playlist to start organizing your content for display
+              <h3 className="text-lg font-medium text-gray-900 mb-2">
+                {searchQuery ? "No playlists found" : "No playlists yet"}
+              </h3>
+              <p className="text-gray-500 text-center mb-4">
+                {searchQuery
+                  ? "Try adjusting your search terms"
+                  : "Create your first playlist to start organizing your media content"}
               </p>
-              <Button onClick={() => setShowCreateDialog(true)}>
-                <Plus className="h-4 w-4 mr-2" />
-                Create Your First Playlist
-              </Button>
+              {!searchQuery && (
+                <Button onClick={() => setShowCreateDialog(true)}>
+                  <Plus className="h-4 w-4 mr-2" />
+                  Create Your First Playlist
+                </Button>
+              )}
             </CardContent>
           </Card>
         ) : (
-          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-            {safePlaylistsArray.map((playlist) => (
-              <Card key={playlist.id} className="hover:shadow-md transition-shadow">
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <div className="flex items-center space-x-2">
-                    <Play className="h-5 w-5" />
-                    <CardTitle className="text-lg">{playlist.name}</CardTitle>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {filteredPlaylists.map((playlist) => (
+              <Card key={playlist.id} className="hover:shadow-lg transition-shadow">
+                <CardHeader className="pb-3">
+                  <div className="flex items-start justify-between">
+                    <div className="space-y-1 flex-1">
+                      <CardTitle className="text-lg line-clamp-1">{playlist.name}</CardTitle>
+                      <CardDescription className="line-clamp-2">
+                        {playlist.description || "No description"}
+                      </CardDescription>
+                    </div>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="ghost" size="sm">
+                          <MoreHorizontal className="h-4 w-4" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuItem onClick={() => router.push(`/dashboard/playlists/${playlist.id}`)}>
+                          <Edit className="h-4 w-4 mr-2" />
+                          Edit
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => handlePreviewPlaylist(playlist)}>
+                          <Eye className="h-4 w-4 mr-2" />
+                          Preview
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem
+                          onClick={() => setDeletePlaylist(playlist)}
+                          className="text-red-600 focus:text-red-600"
+                        >
+                          <Trash2 className="h-4 w-4 mr-2" />
+                          Delete
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
                   </div>
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button variant="ghost" className="h-8 w-8 p-0">
-                        <MoreHorizontal className="h-4 w-4" />
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                      <DropdownMenuItem onClick={() => router.push(`/dashboard/playlists/${playlist.id}`)}>
-                        <Edit className="h-4 w-4 mr-2" />
-                        Edit
-                      </DropdownMenuItem>
-                      <DropdownMenuItem onClick={() => handleDuplicatePlaylist(playlist)}>
-                        <Copy className="h-4 w-4 mr-2" />
-                        Duplicate
-                      </DropdownMenuItem>
-                      <DropdownMenuItem className="text-red-600" onClick={() => setDeletePlaylist(playlist)}>
-                        <Trash2 className="h-4 w-4 mr-2" />
-                        Delete
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                  <CardDescription>{playlist.description || "No description"}</CardDescription>
-
-                  <div className="flex justify-between items-center">
-                    <Badge className={getStatusColor(playlist.status)}>
-                      {playlist.status.charAt(0).toUpperCase() + playlist.status.slice(1)}
-                    </Badge>
-                  </div>
-
-                  <div className="space-y-2 text-sm">
-                    <div className="flex justify-between">
-                      <span className="text-gray-600">Items:</span>
-                      <span>{playlist.item_count}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-gray-600">Duration:</span>
-                      <span>{formatDuration(playlist.total_duration)}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-gray-600">Screens:</span>
-                      <span>{playlist.device_count}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-gray-600">Modified:</span>
-                      <span>{formatDate(playlist.updated_at)}</span>
-                    </div>
-                  </div>
-
-                  {Array.isArray(playlist.assigned_devices) && playlist.assigned_devices.length > 0 && (
-                    <div className="space-y-2">
-                      <div className="text-sm font-medium">Active on:</div>
-                      <div className="flex flex-wrap gap-1">
-                        {playlist.assigned_devices.map((device, index) => (
-                          <Badge key={index} variant="outline" className="text-xs">
-                            <Monitor className="h-3 w-3 mr-1" />
-                            {device}
-                          </Badge>
-                        ))}
+                  <div className="flex items-center justify-between">
+                    <Badge className={getStatusColor(playlist.status)}>{playlist.status}</Badge>
+                    <div className="flex items-center space-x-4 text-sm text-gray-500">
+                      <div className="flex items-center space-x-1">
+                        <Hash className="h-3 w-3" />
+                        <span>{playlist.item_count}</span>
+                      </div>
+                      <div className="flex items-center space-x-1">
+                        <Clock className="h-3 w-3" />
+                        <span>{formatDuration(playlist.total_duration)}</span>
+                      </div>
+                      <div className="flex items-center space-x-1">
+                        <Users className="h-3 w-3" />
+                        <span>{playlist.device_count}</span>
                       </div>
                     </div>
-                  )}
+                  </div>
 
-                  <div className="flex space-x-2">
+                  <div className="flex items-center justify-between text-xs text-gray-500">
+                    <span>Created {formatDate(playlist.created_at)}</span>
+                    <span>Updated {formatDate(playlist.updated_at)}</span>
+                  </div>
+
+                  <div className="flex items-center space-x-2">
                     <Button
                       variant="outline"
                       size="sm"
-                      className="flex-1 bg-transparent"
                       onClick={() => router.push(`/dashboard/playlists/${playlist.id}`)}
+                      className="flex-1"
                     >
+                      <Edit className="h-4 w-4 mr-2" />
                       Edit
                     </Button>
-                    <Button size="sm" className="flex-1">
-                      {playlist.status === "draft" ? "Publish" : "Preview"}
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handlePreviewPlaylist(playlist)}
+                      disabled={previewLoading || playlist.item_count === 0}
+                    >
+                      <Eye className="h-4 w-4 mr-2" />
+                      Preview
                     </Button>
                   </div>
                 </CardContent>
@@ -492,18 +375,50 @@ export default function PlaylistsPage() {
           </div>
         )}
 
+        {/* Create Playlist Dialog */}
         <CreatePlaylistDialog
           open={showCreateDialog}
           onOpenChange={setShowCreateDialog}
-          onPlaylistCreated={handlePlaylistCreated}
+          onPlaylistCreated={fetchPlaylists}
         />
 
+        {/* Preview Modal */}
+        {previewPlaylist && (
+          <PlaylistPreviewModal
+            open={!!previewPlaylist}
+            onOpenChange={(open) => !open && setPreviewPlaylist(null)}
+            playlist={{
+              id: previewPlaylist.id,
+              name: previewPlaylist.name,
+              description: previewPlaylist.description,
+              status: previewPlaylist.status,
+              loop_enabled: previewPlaylist.loop_enabled,
+              schedule_enabled: previewPlaylist.schedule_enabled,
+              start_time: previewPlaylist.start_time,
+              end_time: previewPlaylist.end_time,
+              selected_days: previewPlaylist.selected_days,
+              scale_image: "fit",
+              scale_video: "fit",
+              scale_document: "fit",
+              shuffle: false,
+              default_transition: "fade",
+              transition_speed: "normal",
+              auto_advance: true,
+              background_color: "#000000",
+              text_overlay: false,
+            }}
+            items={previewItems}
+          />
+        )}
+
+        {/* Delete Confirmation Dialog */}
         <AlertDialog open={!!deletePlaylist} onOpenChange={() => setDeletePlaylist(null)}>
           <AlertDialogContent>
             <AlertDialogHeader>
               <AlertDialogTitle>Delete Playlist</AlertDialogTitle>
               <AlertDialogDescription>
-                Are you sure you want to delete "{deletePlaylist?.name}"? This action cannot be undone.
+                Are you sure you want to delete "{deletePlaylist?.name}"? This action cannot be undone and will remove
+                all playlist items.
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
