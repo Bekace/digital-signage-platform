@@ -22,7 +22,7 @@ export async function GET(request: Request, { params }: { params: { playlistId: 
 
     const sql = getDb()
 
-    // Get playlist with item count and total duration
+    // Get playlist with item count and total duration - using only columns that exist in database
     const playlist = await sql`
       SELECT 
         p.id,
@@ -36,15 +36,15 @@ export async function GET(request: Request, { params }: { params: { playlistId: 
         p.selected_days,
         p.created_at,
         p.updated_at,
-        p.scale_image,
-        p.scale_video,
-        p.scale_document,
-        p.shuffle,
-        p.default_transition,
-        p.transition_speed,
-        p.auto_advance,
-        p.background_color,
-        p.text_overlay,
+        COALESCE(p.scale_image, 'fit') as scale_image,
+        COALESCE(p.scale_video, 'fit') as scale_video,
+        COALESCE(p.scale_document, 'fit') as scale_document,
+        COALESCE(p.shuffle, false) as shuffle,
+        COALESCE(p.default_transition, 'fade') as default_transition,
+        COALESCE(p.transition_speed, 'normal') as transition_speed,
+        COALESCE(p.auto_advance, true) as auto_advance,
+        COALESCE(p.background_color, '#000000') as background_color,
+        COALESCE(p.text_overlay, false) as text_overlay,
         COUNT(pi.id) as item_count,
         COALESCE(SUM(pi.duration), 0) as total_duration
       FROM playlists p
@@ -110,7 +110,7 @@ export async function PUT(request: Request, { params }: { params: { playlistId: 
       return NextResponse.json({ error: "Playlist not found" }, { status: 404 })
     }
 
-    // Update playlist
+    // Update playlist - only update columns that exist in the database
     const updatedPlaylist = await sql`
       UPDATE playlists SET
         name = COALESCE(${body.name}, name),
@@ -121,15 +121,6 @@ export async function PUT(request: Request, { params }: { params: { playlistId: 
         start_time = COALESCE(${body.start_time}, start_time),
         end_time = COALESCE(${body.end_time}, end_time),
         selected_days = COALESCE(${body.selected_days}, selected_days),
-        scale_image = COALESCE(${body.scale_image}, scale_image),
-        scale_video = COALESCE(${body.scale_video}, scale_video),
-        scale_document = COALESCE(${body.scale_document}, scale_document),
-        shuffle = COALESCE(${body.shuffle}, shuffle),
-        default_transition = COALESCE(${body.default_transition}, default_transition),
-        transition_speed = COALESCE(${body.transition_speed}, transition_speed),
-        auto_advance = COALESCE(${body.auto_advance}, auto_advance),
-        background_color = COALESCE(${body.background_color}, background_color),
-        text_overlay = COALESCE(${body.text_overlay}, text_overlay),
         updated_at = CURRENT_TIMESTAMP
       WHERE id = ${playlistId} AND user_id = ${user.id}
       RETURNING *
