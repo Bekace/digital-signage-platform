@@ -41,6 +41,7 @@ interface MediaFile {
   duration?: number
   media_source?: string
   external_url?: string
+  embed_settings?: string | object
 }
 
 interface PlaylistItem {
@@ -91,6 +92,7 @@ export function PlaylistPreviewModal({ open, onOpenChange, playlist, items }: Pl
   const [mediaError, setMediaError] = useState(false)
   const [mediaLoading, setMediaLoading] = useState(true)
   const [isFullscreen, setIsFullscreen] = useState(false)
+  const [iframeError, setIframeError] = useState(false)
 
   const intervalRef = useRef<NodeJS.Timeout | null>(null)
   const videoRef = useRef<HTMLVideoElement>(null)
@@ -101,17 +103,33 @@ export function PlaylistPreviewModal({ open, onOpenChange, playlist, items }: Pl
   const currentMedia = currentItem?.media || currentItem?.media_file
   const itemDuration = (currentItem?.duration || 30) * 1000 // Convert to milliseconds
 
-  // Function to modify Google Slides URL to hide menu bar
-  const getCleanPresentationUrl = (url: string) => {
+  // Safe function to get embed settings
+  const getEmbedSettings = (media: MediaFile) => {
+    if (!media.embed_settings) return {}
+
+    try {
+      if (typeof media.embed_settings === "string") {
+        return JSON.parse(media.embed_settings)
+      }
+      return media.embed_settings
+    } catch (error) {
+      console.error("Error parsing embed settings:", error)
+      return {}
+    }
+  }
+
+  // Function to convert Google Slides URL to embeddable format
+  const getEmbedUrl = (url: string) => {
     if (!url) return url
+
+    console.log("🔗 [PLAYLIST PREVIEW] Original URL:", url)
 
     // Check if it's a Google Slides URL
     if (url.includes("docs.google.com/presentation")) {
       try {
-        const urlObj = new URL(url)
-
         // If it's already an embed URL, return as is
         if (url.includes("/embed")) {
+          console.log("🔗 [PLAYLIST PREVIEW] Already embed URL:", url)
           return url
         }
 
@@ -119,7 +137,19 @@ export function PlaylistPreviewModal({ open, onOpenChange, playlist, items }: Pl
         if (url.includes("/d/")) {
           const presentationId = url.match(/\/d\/([a-zA-Z0-9-_]+)/)?.[1]
           if (presentationId) {
-            return `https://docs.google.com/presentation/d/${presentationId}/embed?start=false&loop=false&delayms=3000&rm=minimal`
+            const embedUrl = `https://docs.google.com/presentation/d/${presentationId}/embed?start=true&loop=true&delayms=5000&rm=minimal`
+            console.log("🔗 [PLAYLIST PREVIEW] Converted to embed URL:", embedUrl)
+            return embedUrl
+          }
+        }
+
+        // Handle sharing URLs like /d/e/2PACX-...
+        if (url.includes("/d/e/")) {
+          const presentationId = url.match(/\/d\/e\/([a-zA-Z0-9-_]+)/)?.[1]
+          if (presentationId) {
+            const embedUrl = `https://docs.google.com/presentation/d/e/${presentationId}/embed?start=true&loop=true&delayms=5000&rm=minimal`
+            console.log("🔗 [PLAYLIST PREVIEW] Converted sharing URL to embed:", embedUrl)
+            return embedUrl
           }
         }
 
@@ -127,14 +157,22 @@ export function PlaylistPreviewModal({ open, onOpenChange, playlist, items }: Pl
         if (url.includes("presentation/d/")) {
           const presentationId = url.match(/presentation\/d\/([a-zA-Z0-9-_]+)/)?.[1]
           if (presentationId) {
-            return `https://docs.google.com/presentation/d/${presentationId}/embed?start=false&loop=false&delayms=3000&rm=minimal`
+            const embedUrl = `https://docs.google.com/presentation/d/${presentationId}/embed?start=true&loop=true&delayms=5000&rm=minimal`
+            console.log("🔗 [PLAYLIST PREVIEW] Converted presentation URL to embed:", embedUrl)
+            return embedUrl
           }
         }
 
         // Add minimal UI parameters to existing URL
+        const urlObj = new URL(url)
         urlObj.searchParams.set("rm", "minimal")
         urlObj.searchParams.set("embedded", "true")
-        return urlObj.toString()
+        urlObj.searchParams.set("start", "true")
+        urlObj.searchParams.set("loop", "true")
+        urlObj.searchParams.set("delayms", "5000")
+        const finalUrl = urlObj.toString()
+        console.log("🔗 [PLAYLIST PREVIEW] Added parameters to URL:", finalUrl)
+        return finalUrl
       } catch (error) {
         console.error("Error processing Google Slides URL:", error)
         return url
@@ -162,7 +200,7 @@ export function PlaylistPreviewModal({ open, onOpenChange, playlist, items }: Pl
   }
 
   const isSlidesFile = (media: MediaFile) => {
-    return media.media_source === "google_slides"
+    return media.media_source === "google_slides" || media.file_type === "presentation"
   }
 
   // Reset when modal opens/closes or item changes
@@ -174,6 +212,7 @@ export function PlaylistPreviewModal({ open, onOpenChange, playlist, items }: Pl
       setMediaError(false)
       setMediaLoading(true)
       setIsFullscreen(false)
+      setIframeError(false)
     } else {
       setIsPlaying(false)
       setIsFullscreen(false)
@@ -188,6 +227,7 @@ export function PlaylistPreviewModal({ open, onOpenChange, playlist, items }: Pl
     setMediaError(false)
     setMediaLoading(true)
     setTimeRemaining(itemDuration)
+    setIframeError(false)
 
     // Auto-play when item changes (if we were already playing)
     if (open && isPlaying) {
@@ -223,7 +263,7 @@ export function PlaylistPreviewModal({ open, onOpenChange, playlist, items }: Pl
         return
       }
 
-      // For images and other static content, use timer
+      // For images, slides, and other static content, use timer
       intervalRef.current = setInterval(() => {
         setProgress((prev) => {
           const newProgress = prev + 100 / (itemDuration / 100)
@@ -300,6 +340,7 @@ export function PlaylistPreviewModal({ open, onOpenChange, playlist, items }: Pl
   }
 
   const handleMediaLoad = () => {
+    console.log("📺 [PLAYLIST PREVIEW] Media loaded successfully")
     setMediaLoading(false)
     setMediaError(false)
 
@@ -315,9 +356,23 @@ export function PlaylistPreviewModal({ open, onOpenChange, playlist, items }: Pl
   }
 
   const handleMediaError = () => {
+    console.error("❌ [PLAYLIST PREVIEW] Media failed to load")
     setMediaLoading(false)
     setMediaError(true)
     setIsPlaying(false)
+  }
+
+  const handleIframeLoad = () => {
+    console.log("📺 [PLAYLIST PREVIEW] Google Slides iframe loaded successfully")
+    setMediaLoading(false)
+    setMediaError(false)
+    setIframeError(false)
+  }
+
+  const handleIframeError = () => {
+    console.error("❌ [PLAYLIST PREVIEW] Google Slides iframe failed to load")
+    setIframeError(true)
+    setMediaLoading(false)
   }
 
   const handleVideoTimeUpdate = () => {
@@ -592,15 +647,38 @@ export function PlaylistPreviewModal({ open, onOpenChange, playlist, items }: Pl
               )}
 
               {/* Google Slides Display */}
-              {isSlidesFile(currentMedia) && !mediaError && (
+              {isSlidesFile(currentMedia) && !mediaError && !iframeError && (
                 <iframe
-                  src={getCleanPresentationUrl(currentMedia.external_url || currentMedia.url)}
+                  src={getEmbedUrl(currentMedia.external_url || currentMedia.url)}
                   className="w-full h-full border-0"
-                  onLoad={handleMediaLoad}
-                  onError={handleMediaError}
+                  onLoad={handleIframeLoad}
+                  onError={handleIframeError}
                   title={currentMedia.original_name || currentMedia.filename}
                   allow="autoplay"
                 />
+              )}
+
+              {/* Google Slides Error Fallback */}
+              {isSlidesFile(currentMedia) && (mediaError || iframeError) && (
+                <div className="absolute inset-0 flex items-center justify-center text-white">
+                  <div className="text-center">
+                    <div className="bg-white/10 rounded-lg p-8 backdrop-blur-sm max-w-md">
+                      <ExternalLink className="h-16 w-16 mx-auto mb-4" />
+                      <h3 className="text-xl font-medium mb-2">Google Slides Presentation</h3>
+                      <p className="text-gray-300 mb-4">{currentMedia.original_name || currentMedia.filename}</p>
+                      <p className="text-sm text-gray-400 mb-4">
+                        Unable to embed presentation. Click below to open in Google Slides.
+                      </p>
+                      <Button
+                        onClick={() => window.open(currentMedia.external_url || currentMedia.url, "_blank")}
+                        className="bg-blue-600 hover:bg-blue-700 text-white"
+                      >
+                        <ExternalLink className="h-4 w-4 mr-2" />
+                        Open in Google Slides
+                      </Button>
+                    </div>
+                  </div>
+                </div>
               )}
 
               {/* Text Overlay */}
