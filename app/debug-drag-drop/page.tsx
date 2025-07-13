@@ -8,7 +8,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Separator } from "@/components/ui/separator"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { CheckCircle, XCircle, AlertCircle, RefreshCw, Database, User, Loader2, ArrowUpDown } from "lucide-react"
+import { CheckCircle, XCircle, AlertCircle, RefreshCw, Database, User, Loader2, ArrowUpDown, Key } from "lucide-react"
 import { DashboardLayout } from "@/components/dashboard-layout"
 
 interface DebugResult {
@@ -84,23 +84,37 @@ export default function DebugDragDropPage() {
       if (token) {
         try {
           const tokenParts = token.split(".")
-          const payload = JSON.parse(atob(tokenParts[1]))
-          diagnostics.token_analysis = {
-            success: true,
-            data: {
-              token_exists: true,
-              token_length: token.length,
-              token_parts: tokenParts.length,
-              payload: payload,
-              expires: new Date(payload.exp * 1000).toISOString(),
-              user_id: payload.userId,
-              is_expired: Date.now() > payload.exp * 1000,
-            },
+          if (tokenParts.length === 3) {
+            const payload = JSON.parse(atob(tokenParts[1]))
+            const isExpired = Date.now() > payload.exp * 1000
+            diagnostics.token_analysis = {
+              success: !isExpired,
+              data: {
+                token_exists: true,
+                token_length: token.length,
+                token_parts: tokenParts.length,
+                payload: payload,
+                expires: new Date(payload.exp * 1000).toISOString(),
+                user_id: payload.userId,
+                email: payload.email,
+                is_expired: isExpired,
+                time_until_expiry: isExpired
+                  ? "EXPIRED"
+                  : `${Math.round((payload.exp * 1000 - Date.now()) / 1000 / 60)} minutes`,
+              },
+              error: isExpired ? "Token is expired" : undefined,
+            }
+          } else {
+            diagnostics.token_analysis = {
+              success: false,
+              error: "Token format is invalid (not 3 parts)",
+              data: { token_exists: true, token_length: token.length, token_parts: tokenParts.length },
+            }
           }
         } catch (error) {
           diagnostics.token_analysis = {
             success: false,
-            error: "Token parsing failed",
+            error: "Token parsing failed - malformed JWT",
             details: error instanceof Error ? error.message : "Unknown error",
             data: { token_exists: true, token_length: token.length },
           }
@@ -117,6 +131,8 @@ export default function DebugDragDropPage() {
       console.log("🔍 [DEBUG] Testing authentication...")
       try {
         const authHeaders = token ? { Authorization: `Bearer ${token}` } : {}
+        console.log("🔍 [DEBUG] Using auth headers:", { hasAuth: !!authHeaders.Authorization })
+
         const authResponse = await fetch("/api/test-auth", {
           headers: authHeaders,
         })
@@ -172,6 +188,7 @@ export default function DebugDragDropPage() {
 
       // Test GET /api/playlists
       try {
+        console.log("🔍 [DEBUG] Testing GET /api/playlists with headers:", { hasAuth: !!authHeaders.Authorization })
         const playlistsResponse = await fetch("/api/playlists", {
           headers: authHeaders,
         })
@@ -202,6 +219,7 @@ export default function DebugDragDropPage() {
       ) {
         const firstPlaylistId = diagnostics.api_endpoints.get_playlists.data.playlists[0].id
         try {
+          console.log("🔍 [DEBUG] Testing GET playlist items for playlist:", firstPlaylistId)
           const itemsResponse = await fetch(`/api/playlists/${firstPlaylistId}/items`, {
             headers: authHeaders,
           })
@@ -223,6 +241,7 @@ export default function DebugDragDropPage() {
                 })),
               }
 
+              console.log("🔍 [DEBUG] Testing reorder with payload:", reorderPayload)
               const reorderResponse = await fetch(`/api/playlists/${firstPlaylistId}/items/reorder`, {
                 method: "PUT",
                 headers: {
@@ -249,6 +268,7 @@ export default function DebugDragDropPage() {
             diagnostics.api_endpoints.reorder_items = {
               success: false,
               error: "No items available for reorder test",
+              data: { available_items: itemsData.items?.length || 0 },
             }
           }
         } catch (error) {
@@ -287,6 +307,7 @@ export default function DebugDragDropPage() {
           diagnostics.drag_drop_simulation = {
             success: false,
             error: "Not enough items to simulate drag drop",
+            data: { available_items: items.length },
           }
         }
       } else {
@@ -301,6 +322,18 @@ export default function DebugDragDropPage() {
 
     setResults(diagnostics)
     setLoading(false)
+  }
+
+  const fixAuthenticationIssue = async () => {
+    try {
+      // Clear existing token
+      localStorage.removeItem("token")
+
+      // Redirect to login
+      window.location.href = "/login"
+    } catch (error) {
+      console.error("Error clearing token:", error)
+    }
   }
 
   useEffect(() => {
@@ -333,10 +366,18 @@ export default function DebugDragDropPage() {
             <h1 className="text-3xl font-bold">Drag & Drop Debug Center</h1>
             <p className="text-gray-600">Comprehensive diagnostics for playlist item reordering functionality</p>
           </div>
-          <Button onClick={runComprehensiveDiagnostics} disabled={loading}>
-            {loading ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <RefreshCw className="h-4 w-4 mr-2" />}
-            Run Diagnostics
-          </Button>
+          <div className="flex space-x-2">
+            <Button onClick={runComprehensiveDiagnostics} disabled={loading}>
+              {loading ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <RefreshCw className="h-4 w-4 mr-2" />}
+              Run Diagnostics
+            </Button>
+            {results && !results.token_analysis.success && (
+              <Button onClick={fixAuthenticationIssue} variant="destructive">
+                <Key className="h-4 w-4 mr-2" />
+                Fix Auth
+              </Button>
+            )}
+          </div>
         </div>
 
         {results && (
@@ -404,7 +445,9 @@ export default function DebugDragDropPage() {
                         {results.token_analysis.data.token_exists && (
                           <>
                             <div>Token Length: {results.token_analysis.data.token_length}</div>
+                            <div>Token Parts: {results.token_analysis.data.token_parts}/3</div>
                             <div>User ID: {results.token_analysis.data.user_id || "N/A"}</div>
+                            <div>Email: {results.token_analysis.data.email || "N/A"}</div>
                             <div>
                               Expires: {results.token_analysis.data.expires || "N/A"}{" "}
                               {results.token_analysis.data.is_expired && (
@@ -413,6 +456,7 @@ export default function DebugDragDropPage() {
                                 </Badge>
                               )}
                             </div>
+                            <div>Time Until Expiry: {results.token_analysis.data.time_until_expiry}</div>
                           </>
                         )}
                       </div>
@@ -420,7 +464,12 @@ export default function DebugDragDropPage() {
                     {results.token_analysis.error && (
                       <Alert>
                         <AlertCircle className="h-4 w-4" />
-                        <AlertDescription>{results.token_analysis.error}</AlertDescription>
+                        <AlertDescription>
+                          {results.token_analysis.error}
+                          {results.token_analysis.details && (
+                            <div className="mt-2 text-xs text-gray-600">{results.token_analysis.details}</div>
+                          )}
+                        </AlertDescription>
                       </Alert>
                     )}
                   </CardContent>
@@ -454,7 +503,14 @@ export default function DebugDragDropPage() {
                     {results.drag_drop_simulation.error && (
                       <Alert>
                         <AlertCircle className="h-4 w-4" />
-                        <AlertDescription>{results.drag_drop_simulation.error}</AlertDescription>
+                        <AlertDescription>
+                          {results.drag_drop_simulation.error}
+                          {results.drag_drop_simulation.data && (
+                            <div className="mt-2 text-xs text-gray-600">
+                              Available items: {results.drag_drop_simulation.data.available_items}
+                            </div>
+                          )}
+                        </AlertDescription>
                       </Alert>
                     )}
                   </CardContent>

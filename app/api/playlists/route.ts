@@ -1,75 +1,98 @@
 import { type NextRequest, NextResponse } from "next/server"
+import { neon } from "@neondatabase/serverless"
 import { getCurrentUser } from "@/lib/auth"
-import { getDb } from "@/lib/db"
 
-export const dynamic = "force-dynamic"
+const sql = neon(process.env.DATABASE_URL!)
 
-// GET all playlists for the current user
 export async function GET(request: NextRequest) {
   try {
-    console.log("🎵 [PLAYLISTS] Fetching playlists...")
+    console.log("🎵 [PLAYLISTS API] GET request received")
+
+    // Check authorization header
+    const authHeader = request.headers.get("authorization")
+    console.log("🎵 [PLAYLISTS API] Auth header present:", !!authHeader)
+    console.log("🎵 [PLAYLISTS API] Auth header value:", authHeader?.substring(0, 20) + "...")
 
     const user = await getCurrentUser(request)
     if (!user) {
-      console.log("🎵 [PLAYLISTS] No user found")
-      return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 })
+      console.log("🎵 [PLAYLISTS API] No authenticated user found")
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Unauthorized",
+          debug: {
+            authHeader: !!authHeader,
+            authHeaderFormat: authHeader?.startsWith("Bearer ") ? "correct" : "incorrect",
+          },
+        },
+        { status: 401 },
+      )
     }
 
-    console.log("🎵 [PLAYLISTS] User ID:", user.id)
+    console.log("🎵 [PLAYLISTS API] Authenticated user:", user.id, user.email)
 
-    const sql = getDb()
-
-    // Fetch playlists with item counts - using correct column names from database
+    // Get playlists for the user
     const playlists = await sql`
       SELECT 
-        p.id,
-        p.name,
-        p.description,
-        p.status,
-        p.loop_enabled,
-        p.schedule_enabled,
-        p.start_time,
-        p.end_time,
-        p.selected_days,
-        p.created_at,
-        p.updated_at,
-        COUNT(pi.id) as item_count,
-        COALESCE(SUM(pi.duration), 0) as total_duration
-      FROM playlists p
-      LEFT JOIN playlist_items pi ON p.id = pi.playlist_id
-      WHERE p.user_id = ${user.id}
-      GROUP BY p.id, p.name, p.description, p.status, p.loop_enabled, p.schedule_enabled, 
-               p.start_time, p.end_time, p.selected_days, p.created_at, p.updated_at
-      ORDER BY p.created_at DESC
+        id, 
+        name, 
+        description, 
+        status, 
+        loop_enabled, 
+        schedule_enabled, 
+        start_time, 
+        end_time, 
+        selected_days, 
+        scale_image, 
+        scale_video, 
+        scale_document, 
+        shuffle, 
+        default_transition, 
+        transition_speed, 
+        auto_advance, 
+        background_color, 
+        text_overlay, 
+        created_at, 
+        updated_at,
+        user_id
+      FROM playlists 
+      WHERE user_id = ${user.id} 
+      AND deleted_at IS NULL
+      ORDER BY updated_at DESC
     `
 
-    console.log("🎵 [PLAYLISTS] Found playlists:", playlists.length)
+    console.log("🎵 [PLAYLISTS API] Found", playlists.length, "playlists for user", user.id)
 
-    // Format playlists to match frontend expectations
-    const formattedPlaylists = playlists.map((playlist) => ({
-      id: Number(playlist.id),
-      name: String(playlist.name || "Untitled Playlist"),
-      description: String(playlist.description || ""),
-      status: String(playlist.status || "draft"),
-      loop_enabled: Boolean(playlist.loop_enabled),
-      schedule_enabled: Boolean(playlist.schedule_enabled),
-      start_time: playlist.start_time,
-      end_time: playlist.end_time,
-      selected_days: Array.isArray(playlist.selected_days) ? playlist.selected_days : [],
-      item_count: Number(playlist.item_count) || 0,
-      device_count: 0, // TODO: Add device count query
-      total_duration: Number(playlist.total_duration) || 0,
-      assigned_devices: [], // TODO: Add assigned devices query
-      created_at: playlist.created_at,
-      updated_at: playlist.updated_at,
-    }))
+    // Get item counts for each playlist
+    const playlistsWithCounts = await Promise.all(
+      playlists.map(async (playlist) => {
+        try {
+          const itemCount = await sql`
+            SELECT COUNT(*) as count 
+            FROM playlist_items 
+            WHERE playlist_id = ${playlist.id}
+          `
+          return {
+            ...playlist,
+            item_count: Number.parseInt(itemCount[0].count) || 0,
+          }
+        } catch (error) {
+          console.error("Error getting item count for playlist", playlist.id, ":", error)
+          return {
+            ...playlist,
+            item_count: 0,
+          }
+        }
+      }),
+    )
 
     return NextResponse.json({
       success: true,
-      playlists: formattedPlaylists,
+      playlists: playlistsWithCounts,
+      total: playlistsWithCounts.length,
     })
   } catch (error) {
-    console.error("🎵 [PLAYLISTS] Error:", error)
+    console.error("🎵 [PLAYLISTS API] Error:", error)
     return NextResponse.json(
       {
         success: false,
@@ -81,85 +104,77 @@ export async function GET(request: NextRequest) {
   }
 }
 
-// POST create new playlist
 export async function POST(request: NextRequest) {
   try {
-    console.log("🎵 [PLAYLISTS] Creating new playlist...")
+    console.log("🎵 [PLAYLISTS API] POST request received")
 
     const user = await getCurrentUser(request)
     if (!user) {
-      return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 })
+      console.log("🎵 [PLAYLISTS API] No authenticated user found for POST")
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
     const body = await request.json()
-    const { name, description, loop_enabled = true, schedule_enabled = false } = body
+    const { name, description } = body
 
-    console.log("🎵 [PLAYLISTS] Create request:", { name, description, userId: user.id })
-
-    if (!name || name.trim() === "") {
-      return NextResponse.json({ success: false, error: "Playlist name is required" }, { status: 400 })
+    if (!name) {
+      return NextResponse.json({ error: "Playlist name is required" }, { status: 400 })
     }
 
-    const sql = getDb()
+    console.log("🎵 [PLAYLISTS API] Creating playlist:", name, "for user:", user.id)
 
-    // Create playlist using correct column names
     const result = await sql`
       INSERT INTO playlists (
-        user_id, 
         name, 
         description, 
+        user_id, 
         status, 
         loop_enabled, 
         schedule_enabled, 
+        scale_image, 
+        scale_video, 
+        scale_document, 
+        shuffle, 
+        default_transition, 
+        transition_speed, 
+        auto_advance, 
+        background_color, 
+        text_overlay,
         created_at, 
         updated_at
-      )
-      VALUES (
+      ) VALUES (
+        ${name}, 
+        ${description || ""}, 
         ${user.id}, 
-        ${name.trim()}, 
-        ${description?.trim() || null}, 
         'draft', 
-        ${loop_enabled}, 
-        ${schedule_enabled}, 
+        true, 
+        false, 
+        'fit', 
+        'fit', 
+        'fit', 
+        false, 
+        'fade', 
+        'normal', 
+        true, 
+        '#000000', 
+        false,
         NOW(), 
         NOW()
-      )
-      RETURNING id, name, description, status, loop_enabled, schedule_enabled, created_at, updated_at
+      ) RETURNING *
     `
 
-    console.log("🎵 [PLAYLISTS] Playlist created:", result[0])
-
-    const newPlaylist = result[0]
-
-    // Format response to match frontend expectations
-    const formattedPlaylist = {
-      id: Number(newPlaylist.id),
-      name: String(newPlaylist.name),
-      description: String(newPlaylist.description || ""),
-      status: String(newPlaylist.status),
-      loop_enabled: Boolean(newPlaylist.loop_enabled),
-      schedule_enabled: Boolean(newPlaylist.schedule_enabled),
-      start_time: null,
-      end_time: null,
-      selected_days: [],
-      item_count: 0,
-      device_count: 0,
-      total_duration: 0,
-      assigned_devices: [],
-      created_at: newPlaylist.created_at,
-      updated_at: newPlaylist.updated_at,
-    }
+    const playlist = result[0]
+    console.log("🎵 [PLAYLISTS API] Created playlist:", playlist.id)
 
     return NextResponse.json({
       success: true,
+      playlist,
       message: "Playlist created successfully",
-      playlist: formattedPlaylist,
     })
   } catch (error) {
-    console.error("🎵 [PLAYLISTS] Error:", error)
+    console.error("🎵 [PLAYLISTS API] Error creating playlist:", error)
     return NextResponse.json(
       {
-        success: false,
         error: "Failed to create playlist",
         details: error instanceof Error ? error.message : "Unknown error",
       },

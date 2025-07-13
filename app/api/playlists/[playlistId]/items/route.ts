@@ -1,26 +1,41 @@
-import { NextResponse } from "next/server"
+import { type NextRequest, NextResponse } from "next/server"
+import { neon } from "@neondatabase/serverless"
 import { getCurrentUser } from "@/lib/auth"
-import { getDb } from "@/lib/db"
+
+const sql = neon(process.env.DATABASE_URL!)
 
 export const dynamic = "force-dynamic"
 
-export async function GET(request: Request, { params }: { params: { playlistId: string } }) {
+export async function GET(request: NextRequest, { params }: { params: { playlistId: string } }) {
   console.log("📋 [PLAYLIST ITEMS API] Starting GET request for playlist items:", params.playlistId)
 
   try {
-    const user = await getCurrentUser()
+    const authHeader = request.headers.get("authorization")
+    console.log("📋 [PLAYLIST ITEMS API] Auth header present:", !!authHeader)
+
+    const user = await getCurrentUser(request)
     if (!user) {
-      console.log("❌ [PLAYLIST ITEMS API] No user authenticated")
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+      console.log("📋 [PLAYLIST ITEMS API] No authenticated user found")
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Unauthorized",
+          debug: {
+            authHeader: !!authHeader,
+            authHeaderFormat: authHeader?.startsWith("Bearer ") ? "correct" : "incorrect",
+          },
+        },
+        { status: 401 },
+      )
     }
+
+    console.log("📋 [PLAYLIST ITEMS API] Authenticated user:", user.id)
 
     const playlistId = Number.parseInt(params.playlistId)
     if (isNaN(playlistId)) {
       console.log("❌ [PLAYLIST ITEMS API] Invalid playlist ID:", params.playlistId)
       return NextResponse.json({ error: "Invalid playlist ID" }, { status: 400 })
     }
-
-    const sql = getDb()
 
     // Verify playlist ownership
     const playlist = await sql`
@@ -31,6 +46,8 @@ export async function GET(request: Request, { params }: { params: { playlistId: 
       console.log("❌ [PLAYLIST ITEMS API] Playlist not found or not owned by user")
       return NextResponse.json({ error: "Playlist not found" }, { status: 404 })
     }
+
+    console.log(`✅ [PLAYLIST ITEMS API] Found playlist ${playlistId}`)
 
     // Get playlist items with media information - using correct table name media_files
     const items = await sql`
@@ -45,6 +62,7 @@ export async function GET(request: Request, { params }: { params: { playlistId: 
         mf.id as media_file_id,
         mf.filename,
         mf.original_name,
+        mf.original_filename,
         mf.file_type,
         mf.file_size,
         mf.url,
@@ -59,7 +77,7 @@ export async function GET(request: Request, { params }: { params: { playlistId: 
       FROM playlist_items pi
       LEFT JOIN media_files mf ON pi.media_file_id = mf.id
       WHERE pi.playlist_id = ${playlistId}
-      ORDER BY pi.position ASC
+      ORDER BY pi.position ASC, pi.created_at ASC
     `
 
     console.log(`✅ [PLAYLIST ITEMS API] Found ${items.length} items for playlist ${playlistId}`)
@@ -117,6 +135,7 @@ export async function GET(request: Request, { params }: { params: { playlistId: 
     return NextResponse.json({
       success: true,
       items: formattedItems,
+      total: formattedItems.length,
     })
   } catch (error) {
     console.error("❌ [PLAYLIST ITEMS API] Error:", error)
@@ -130,19 +149,19 @@ export async function GET(request: Request, { params }: { params: { playlistId: 
   }
 }
 
-export async function POST(request: Request, { params }: { params: { playlistId: string } }) {
+export async function POST(request: NextRequest, { params }: { params: { playlistId: string } }) {
   console.log("➕ [PLAYLIST ITEMS API] Starting POST request for playlist items:", params.playlistId)
 
   try {
-    const user = await getCurrentUser()
+    const user = await getCurrentUser(request)
     if (!user) {
-      console.log("❌ [PLAYLIST ITEMS API] No user authenticated")
+      console.log("➕ [PLAYLIST ITEMS API] No authenticated user found for POST")
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
     const playlistId = Number.parseInt(params.playlistId)
     if (isNaN(playlistId)) {
-      console.log("❌ [PLAYLIST ITEMS API] Invalid playlist ID:", params.playlistId)
+      console.log("➕ [PLAYLIST ITEMS API] Invalid playlist ID:", params.playlistId)
       return NextResponse.json({ error: "Invalid playlist ID" }, { status: 400 })
     }
 
@@ -153,17 +172,17 @@ export async function POST(request: Request, { params }: { params: { playlistId:
       return NextResponse.json({ error: "Media ID is required" }, { status: 400 })
     }
 
-    const sql = getDb()
-
     // Verify playlist ownership
     const playlist = await sql`
       SELECT id FROM playlists WHERE id = ${playlistId} AND user_id = ${user.id}
     `
 
     if (playlist.length === 0) {
-      console.log("❌ [PLAYLIST ITEMS API] Playlist not found or not owned by user")
+      console.log("➕ [PLAYLIST ITEMS API] Playlist not found or not owned by user")
       return NextResponse.json({ error: "Playlist not found" }, { status: 404 })
     }
+
+    console.log(`➕ [PLAYLIST ITEMS API] Playlist verified: ${playlistId}`)
 
     // Verify media ownership - using correct table name media_files
     const media = await sql`
@@ -171,9 +190,11 @@ export async function POST(request: Request, { params }: { params: { playlistId:
     `
 
     if (media.length === 0) {
-      console.log("❌ [PLAYLIST ITEMS API] Media not found or not owned by user")
+      console.log("➕ [PLAYLIST ITEMS API] Media not found or not owned by user")
       return NextResponse.json({ error: "Media not found" }, { status: 404 })
     }
+
+    console.log(`➕ [PLAYLIST ITEMS API] Media verified: ${media_id}`)
 
     // Get next position
     const positionResult = await sql`
@@ -205,14 +226,24 @@ export async function POST(request: Request, { params }: { params: { playlistId:
       RETURNING id, playlist_id, media_file_id as media_id, position, duration, transition_type, created_at
     `
 
-    console.log(`✅ [PLAYLIST ITEMS API] Added item to playlist ${playlistId}`)
+    console.log(`➕ [PLAYLIST ITEMS API] Added item to playlist ${playlistId}`)
+
+    const newItem = result[0]
+
+    // Update playlist timestamp
+    await sql`
+      UPDATE playlists 
+      SET updated_at = NOW() 
+      WHERE id = ${playlistId}
+    `
 
     return NextResponse.json({
       success: true,
-      item: result[0],
+      item: newItem,
+      message: "Item added to playlist",
     })
   } catch (error) {
-    console.error("❌ [PLAYLIST ITEMS API] Error:", error)
+    console.error("➕ [PLAYLIST ITEMS API] Error adding item:", error)
     return NextResponse.json(
       {
         error: "Failed to add item to playlist",
