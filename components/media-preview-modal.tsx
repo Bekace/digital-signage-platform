@@ -215,23 +215,31 @@ export function MediaPreviewModal({ file, open, onOpenChange }: MediaPreviewModa
             )}
 
             {isGoogleSlides && (
-              <div className="relative max-w-full max-h-[60vh]">
-                <iframe
-                  src={file.url}
-                  className="w-full h-[60vh] rounded-lg shadow-lg border"
-                  frameBorder="0"
-                  allowFullScreen
-                  title={file.original_name}
-                />
-                <div className="absolute bottom-4 right-4">
-                  <Button
-                    size="sm"
-                    variant="secondary"
-                    onClick={() => window.open(file.external_url || file.url, "_blank")}
-                  >
-                    <ExternalLink className="h-4 w-4 mr-2" />
-                    Open in Google Slides
-                  </Button>
+              <div className="text-center py-12">
+                <div className="bg-blue-50 border border-blue-200 p-8 rounded-lg inline-block max-w-2xl">
+                  <svg className="h-16 w-16 text-blue-600 mx-auto mb-4" fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M14,2H6A2,2 0 0,0 4,4V20A2,2 0 0,0 6,22H18A2,2 0 0,0 20,20V8L14,2M18,20H6V4H13V9H18V20Z" />
+                  </svg>
+                  <h3 className="text-lg font-medium text-gray-900 mb-2">Google Slides Presentation</h3>
+                  <p className="text-gray-600 mb-4">Click to view this presentation in Google Slides</p>
+                  <div className="space-y-2">
+                    <Button
+                      onClick={() => window.open(file.external_url || file.url, "_blank")}
+                      className="bg-blue-600 hover:bg-blue-700"
+                    >
+                      <ExternalLink className="h-4 w-4 mr-2" />
+                      Open in Google Slides
+                    </Button>
+                    <Button onClick={handleDownload} variant="outline">
+                      <Download className="h-4 w-4 mr-2" />
+                      Download Link
+                    </Button>
+                  </div>
+                  {file.embed_settings && (
+                    <div className="mt-4 text-sm text-gray-600">
+                      <p>Duration: {JSON.parse(file.embed_settings).duration || 10}s per slide</p>
+                    </div>
+                  )}
                 </div>
               </div>
             )}

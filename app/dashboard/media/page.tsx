@@ -50,6 +50,8 @@ interface MediaFile {
   mime_type?: string
   dimensions?: string
   duration?: number
+  media_source?: string
+  external_url?: string
 }
 
 export default function MediaPage() {
@@ -213,6 +215,32 @@ export default function MediaPage() {
     return fileName.toLowerCase().includes(searchTerm.toLowerCase())
   })
 
+  const handleDownload = (file: MediaFile) => {
+    if (file.file_type === "presentation" && file.media_source === "google_slides") {
+      // For Google Slides, copy the link to clipboard and open in new tab
+      if (navigator.clipboard) {
+        navigator.clipboard
+          .writeText(file.external_url || file.url)
+          .then(() => {
+            console.log("Google Slides link copied to clipboard")
+          })
+          .catch(() => {
+            console.log("Failed to copy link to clipboard")
+          })
+      }
+      window.open(file.external_url || file.url, "_blank")
+    } else {
+      // Regular file download
+      const link = document.createElement("a")
+      link.href = file.url
+      link.download = file.original_name
+      link.target = "_blank"
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+    }
+  }
+
   return (
     <DashboardLayout>
       <div className="space-y-6">
@@ -325,7 +353,7 @@ export default function MediaPage() {
                               <Eye className="h-4 w-4 mr-2" />
                               Preview
                             </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => window.open(file.url, "_blank")}>
+                            <DropdownMenuItem onClick={() => handleDownload(file)}>
                               <Download className="h-4 w-4 mr-2" />
                               Download
                             </DropdownMenuItem>
