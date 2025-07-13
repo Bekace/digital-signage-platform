@@ -22,7 +22,7 @@ export async function GET(request: Request, { params }: { params: { playlistId: 
 
     const sql = getDb()
 
-    // Get playlist with item count and total duration - using only columns that exist in database
+    // Get playlist with item count and total duration - only using columns that exist
     const playlist = await sql`
       SELECT 
         p.id,
@@ -36,24 +36,13 @@ export async function GET(request: Request, { params }: { params: { playlistId: 
         p.selected_days,
         p.created_at,
         p.updated_at,
-        COALESCE(p.scale_image, 'fit') as scale_image,
-        COALESCE(p.scale_video, 'fit') as scale_video,
-        COALESCE(p.scale_document, 'fit') as scale_document,
-        COALESCE(p.shuffle, false) as shuffle,
-        COALESCE(p.default_transition, 'fade') as default_transition,
-        COALESCE(p.transition_speed, 'normal') as transition_speed,
-        COALESCE(p.auto_advance, true) as auto_advance,
-        COALESCE(p.background_color, '#000000') as background_color,
-        COALESCE(p.text_overlay, false) as text_overlay,
         COUNT(pi.id) as item_count,
         COALESCE(SUM(pi.duration), 0) as total_duration
       FROM playlists p
       LEFT JOIN playlist_items pi ON p.id = pi.playlist_id
       WHERE p.id = ${playlistId} AND p.user_id = ${user.id}
       GROUP BY p.id, p.name, p.description, p.status, p.loop_enabled, p.schedule_enabled,
-               p.start_time, p.end_time, p.selected_days, p.created_at, p.updated_at,
-               p.scale_image, p.scale_video, p.scale_document, p.shuffle, p.default_transition,
-               p.transition_speed, p.auto_advance, p.background_color, p.text_overlay
+               p.start_time, p.end_time, p.selected_days, p.created_at, p.updated_at
     `
 
     if (playlist.length === 0) {
@@ -61,11 +50,25 @@ export async function GET(request: Request, { params }: { params: { playlistId: 
       return NextResponse.json({ error: "Playlist not found" }, { status: 404 })
     }
 
+    // Add default values for columns that don't exist in database but are expected by frontend
+    const playlistWithDefaults = {
+      ...playlist[0],
+      scale_image: "fit",
+      scale_video: "fit",
+      scale_document: "fit",
+      shuffle: false,
+      default_transition: "fade",
+      transition_speed: "normal",
+      auto_advance: true,
+      background_color: "#000000",
+      text_overlay: false,
+    }
+
     console.log(`✅ [PLAYLIST API] Found playlist ${playlistId}`)
 
     return NextResponse.json({
       success: true,
-      playlist: playlist[0],
+      playlist: playlistWithDefaults,
     })
   } catch (error) {
     console.error("❌ [PLAYLIST API] Error:", error)
@@ -126,11 +129,25 @@ export async function PUT(request: Request, { params }: { params: { playlistId: 
       RETURNING *
     `
 
+    // Add default values for frontend compatibility
+    const playlistWithDefaults = {
+      ...updatedPlaylist[0],
+      scale_image: body.scale_image || "fit",
+      scale_video: body.scale_video || "fit",
+      scale_document: body.scale_document || "fit",
+      shuffle: body.shuffle || false,
+      default_transition: body.default_transition || "fade",
+      transition_speed: body.transition_speed || "normal",
+      auto_advance: body.auto_advance !== undefined ? body.auto_advance : true,
+      background_color: body.background_color || "#000000",
+      text_overlay: body.text_overlay || false,
+    }
+
     console.log(`✅ [PLAYLIST API] Updated playlist ${playlistId}`)
 
     return NextResponse.json({
       success: true,
-      playlist: updatedPlaylist[0],
+      playlist: playlistWithDefaults,
     })
   } catch (error) {
     console.error("❌ [PLAYLIST API] Error:", error)

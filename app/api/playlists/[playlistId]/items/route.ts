@@ -32,7 +32,7 @@ export async function GET(request: Request, { params }: { params: { playlistId: 
       return NextResponse.json({ error: "Playlist not found" }, { status: 404 })
     }
 
-    // Get playlist items with media information - using correct column name media_file_id
+    // Get playlist items with media information - using correct table name media_files
     const items = await sql`
       SELECT 
         pi.id,
@@ -42,22 +42,22 @@ export async function GET(request: Request, { params }: { params: { playlistId: 
         pi.duration,
         pi.transition_type,
         pi.created_at,
-        m.id as media_file_id,
-        m.filename,
-        m.original_name,
-        m.file_type,
-        m.file_size,
-        m.url,
-        m.thumbnail_url,
-        m.mime_type,
-        m.dimensions,
-        m.duration as media_duration,
-        m.media_source,
-        m.external_url,
-        m.embed_settings,
-        m.created_at as media_created_at
+        mf.id as media_file_id,
+        mf.filename,
+        mf.original_name,
+        mf.file_type,
+        mf.file_size,
+        mf.url,
+        mf.thumbnail_url,
+        mf.mime_type,
+        mf.dimensions,
+        mf.duration as media_duration,
+        mf.media_source,
+        mf.external_url,
+        mf.embed_settings,
+        mf.created_at as media_created_at
       FROM playlist_items pi
-      LEFT JOIN media m ON pi.media_file_id = m.id
+      LEFT JOIN media_files mf ON pi.media_file_id = mf.id
       WHERE pi.playlist_id = ${playlistId}
       ORDER BY pi.position ASC
     `
@@ -74,6 +74,26 @@ export async function GET(request: Request, { params }: { params: { playlistId: 
       transition_type: String(item.transition_type || "fade"),
       created_at: item.created_at,
       media: item.media_file_id
+        ? {
+            id: Number(item.media_file_id),
+            filename: String(item.filename || ""),
+            original_name: String(item.original_name || ""),
+            original_filename: String(item.original_name || item.filename || ""),
+            file_type: String(item.file_type || ""),
+            file_size: Number(item.file_size) || 0,
+            url: String(item.url || ""),
+            thumbnail_url: item.thumbnail_url ? String(item.thumbnail_url) : undefined,
+            mime_type: item.mime_type ? String(item.mime_type) : undefined,
+            dimensions: item.dimensions ? String(item.dimensions) : undefined,
+            duration: item.media_duration ? Number(item.media_duration) : undefined,
+            media_source: item.media_source ? String(item.media_source) : undefined,
+            external_url: item.external_url ? String(item.external_url) : undefined,
+            embed_settings: item.embed_settings ? String(item.embed_settings) : undefined,
+            created_at: item.media_created_at,
+          }
+        : null,
+      // Also add media_file for compatibility
+      media_file: item.media_file_id
         ? {
             id: Number(item.media_file_id),
             filename: String(item.filename || ""),
@@ -145,9 +165,9 @@ export async function POST(request: Request, { params }: { params: { playlistId:
       return NextResponse.json({ error: "Playlist not found" }, { status: 404 })
     }
 
-    // Verify media ownership
+    // Verify media ownership - using correct table name media_files
     const media = await sql`
-      SELECT id FROM media WHERE id = ${media_id} AND user_id = ${user.id}
+      SELECT id FROM media_files WHERE id = ${media_id} AND user_id = ${user.id}
     `
 
     if (media.length === 0) {

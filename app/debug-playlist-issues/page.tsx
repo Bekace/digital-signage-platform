@@ -1,149 +1,125 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Alert, AlertDescription } from "@/components/ui/alert"
+import { ScrollArea } from "@/components/ui/scroll-area"
 import { Separator } from "@/components/ui/separator"
-import { CheckCircle, XCircle, AlertCircle, Database, User, Code, RefreshCw } from "lucide-react"
+import { Alert, AlertDescription } from "@/components/ui/alert"
+import {
+  CheckCircle,
+  XCircle,
+  AlertCircle,
+  RefreshCw,
+  Database,
+  User,
+  Settings,
+  FileText,
+  Play,
+  Loader2,
+} from "lucide-react"
+import { DashboardLayout } from "@/components/dashboard-layout"
 
 interface DebugResult {
   success: boolean
   data?: any
   error?: string
-  details?: any
+  details?: string
 }
 
-interface TableInfo {
-  exists: boolean
-  columns: Array<{
-    column_name: string
-    data_type: string
-    is_nullable: string
-    column_default: string | null
-  }>
-  sample_data: any[]
-}
-
-interface DebugData {
+interface DebugResults {
   authentication: DebugResult
-  database_connection: DebugResult
-  table_structure: {
-    playlists: TableInfo
-    playlist_items: TableInfo
-  }
-  api_tests: {
-    get_playlists: DebugResult
-    create_playlist: DebugResult
-    get_single_playlist: DebugResult
-  }
-  frontend_tests: {
-    fetch_playlists: DebugResult
-    create_playlist_dialog: DebugResult
-  }
+  database: DebugResult
+  playlists_api: DebugResult
+  playlist_create: DebugResult
+  playlist_fetch: DebugResult
+  playlist_items: DebugResult
+  media_api: DebugResult
+  table_structure: DebugResult
 }
 
 export default function DebugPlaylistIssuesPage() {
-  const [debugData, setDebugData] = useState<DebugData | null>(null)
+  const [results, setResults] = useState<DebugResults | null>(null)
   const [loading, setLoading] = useState(false)
   const [activeTab, setActiveTab] = useState("overview")
 
-  const runFullDiagnostic = async () => {
+  const runDiagnostics = async () => {
     setLoading(true)
-    const results: DebugData = {
+    setResults(null)
+
+    const diagnostics: DebugResults = {
       authentication: { success: false },
-      database_connection: { success: false },
-      table_structure: {
-        playlists: { exists: false, columns: [], sample_data: [] },
-        playlist_items: { exists: false, columns: [], sample_data: [] },
-      },
-      api_tests: {
-        get_playlists: { success: false },
-        create_playlist: { success: false },
-        get_single_playlist: { success: false },
-      },
-      frontend_tests: {
-        fetch_playlists: { success: false },
-        create_playlist_dialog: { success: false },
-      },
+      database: { success: false },
+      playlists_api: { success: false },
+      playlist_create: { success: false },
+      playlist_fetch: { success: false },
+      playlist_items: { success: false },
+      media_api: { success: false },
+      table_structure: { success: false },
     }
 
     try {
-      // Test 1: Authentication
-      console.log("🔍 Testing authentication...")
+      // Test Authentication
+      console.log("🔐 Testing authentication...")
       try {
         const authResponse = await fetch("/api/test-auth")
         const authData = await authResponse.json()
-        results.authentication = {
-          success: authResponse.ok && authData.success,
+        diagnostics.authentication = {
+          success: authResponse.ok,
           data: authData,
-          error: authData.error,
+          error: authResponse.ok ? undefined : authData.error,
         }
       } catch (error) {
-        results.authentication = {
+        diagnostics.authentication = {
           success: false,
-          error: error instanceof Error ? error.message : "Authentication test failed",
+          error: "Authentication test failed",
+          details: error instanceof Error ? error.message : "Unknown error",
         }
       }
 
-      // Test 2: Database Connection
-      console.log("🔍 Testing database connection...")
+      // Test Database Connection
+      console.log("🗄️ Testing database connection...")
       try {
         const dbResponse = await fetch("/api/test-db")
         const dbData = await dbResponse.json()
-        results.database_connection = {
-          success: dbResponse.ok && dbData.success,
+        diagnostics.database = {
+          success: dbResponse.ok,
           data: dbData,
-          error: dbData.error,
+          error: dbResponse.ok ? undefined : dbData.error,
         }
       } catch (error) {
-        results.database_connection = {
+        diagnostics.database = {
           success: false,
-          error: error instanceof Error ? error.message : "Database connection test failed",
+          error: "Database test failed",
+          details: error instanceof Error ? error.message : "Unknown error",
         }
       }
 
-      // Test 3: Table Structure
-      console.log("🔍 Testing table structure...")
+      // Test Playlists API (GET)
+      console.log("🎵 Testing playlists API...")
       try {
-        const tableResponse = await fetch("/api/debug-table-structure")
-        const tableData = await tableResponse.json()
-        if (tableResponse.ok && tableData.success) {
-          results.table_structure = {
-            playlists: tableData.tables?.playlists || { exists: false, columns: [], sample_data: [] },
-            playlist_items: tableData.tables?.playlist_items || { exists: false, columns: [], sample_data: [] },
-          }
+        const playlistsResponse = await fetch("/api/playlists")
+        const playlistsData = await playlistsResponse.json()
+        diagnostics.playlists_api = {
+          success: playlistsResponse.ok,
+          data: playlistsData,
+          error: playlistsResponse.ok ? undefined : playlistsData.error,
         }
+        console.log("GET /api/playlists", playlistsResponse.ok ? "PASS" : "FAIL")
+        console.log("HTTP Status:", playlistsResponse.status)
+        console.log("Response:", playlistsData)
       } catch (error) {
-        console.error("Table structure test failed:", error)
-      }
-
-      // Test 4: API Endpoints
-      console.log("🔍 Testing API endpoints...")
-
-      // Test GET /api/playlists
-      try {
-        const getPlaylistsResponse = await fetch("/api/playlists")
-        const getPlaylistsData = await getPlaylistsResponse.json()
-        results.api_tests.get_playlists = {
-          success: getPlaylistsResponse.ok,
-          data: getPlaylistsData,
-          error: getPlaylistsData.error,
-          details: {
-            status: getPlaylistsResponse.status,
-            headers: Object.fromEntries(getPlaylistsResponse.headers.entries()),
-          },
-        }
-      } catch (error) {
-        results.api_tests.get_playlists = {
+        diagnostics.playlists_api = {
           success: false,
-          error: error instanceof Error ? error.message : "GET playlists failed",
+          error: "Playlists API test failed",
+          details: error instanceof Error ? error.message : "Unknown error",
         }
       }
 
-      // Test POST /api/playlists (create playlist)
+      // Test Playlist Creation (POST)
+      console.log("➕ Testing playlist creation...")
       try {
         const createPayload = {
           name: `Debug Test Playlist ${Date.now()}`,
@@ -151,73 +127,131 @@ export default function DebugPlaylistIssuesPage() {
           loop_enabled: true,
           schedule_enabled: false,
         }
+
         const createResponse = await fetch("/api/playlists", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: {
+            "Content-Type": "application/json",
+          },
           body: JSON.stringify(createPayload),
         })
         const createData = await createResponse.json()
-        results.api_tests.create_playlist = {
+        diagnostics.playlist_create = {
           success: createResponse.ok,
-          data: createData,
-          error: createData.error,
-          details: {
-            status: createResponse.status,
-            payload: createPayload,
-          },
+          data: { payload: createPayload, response: createData },
+          error: createResponse.ok ? undefined : createData.error,
         }
+        console.log("POST /api/playlists", createResponse.ok ? "PASS" : "FAIL")
+        console.log("HTTP Status:", createResponse.status)
+        console.log("Payload Sent:", createPayload)
+        console.log("Response:", createData)
+      } catch (error) {
+        diagnostics.playlist_create = {
+          success: false,
+          error: "Playlist creation test failed",
+          details: error instanceof Error ? error.message : "Unknown error",
+        }
+      }
 
-        // If playlist was created successfully, test GET single playlist
-        if (createResponse.ok && createData.playlist?.id) {
-          try {
-            const getSingleResponse = await fetch(`/api/playlists/${createData.playlist.id}`)
-            const getSingleData = await getSingleResponse.json()
-            results.api_tests.get_single_playlist = {
-              success: getSingleResponse.ok,
-              data: getSingleData,
-              error: getSingleData.error,
-              details: {
-                status: getSingleResponse.status,
-                playlist_id: createData.playlist.id,
-              },
-            }
-          } catch (error) {
-            results.api_tests.get_single_playlist = {
-              success: false,
-              error: error instanceof Error ? error.message : "GET single playlist failed",
-            }
+      // Test Individual Playlist Fetch
+      console.log("🎯 Testing individual playlist fetch...")
+      if (diagnostics.playlists_api.success && diagnostics.playlists_api.data?.playlists?.length > 0) {
+        try {
+          const firstPlaylistId = diagnostics.playlists_api.data.playlists[0].id
+          const fetchResponse = await fetch(`/api/playlists/${firstPlaylistId}`)
+          const fetchData = await fetchResponse.json()
+          diagnostics.playlist_fetch = {
+            success: fetchResponse.ok,
+            data: fetchData,
+            error: fetchResponse.ok ? undefined : fetchData.error,
+          }
+          console.log(`GET /api/playlists/[id]`, fetchResponse.ok ? "PASS" : "FAIL")
+          console.log("Response:", fetchData)
+        } catch (error) {
+          diagnostics.playlist_fetch = {
+            success: false,
+            error: "Individual playlist fetch failed",
+            details: error instanceof Error ? error.message : "Unknown error",
           }
         }
-      } catch (error) {
-        results.api_tests.create_playlist = {
+      } else {
+        diagnostics.playlist_fetch = {
           success: false,
-          error: error instanceof Error ? error.message : "POST playlist failed",
+          error: "No playlists available to test individual fetch",
         }
       }
 
-      // Test 5: Frontend Integration
-      console.log("🔍 Testing frontend integration...")
-      results.frontend_tests.fetch_playlists = {
-        success: results.api_tests.get_playlists.success,
-        data: results.api_tests.get_playlists.data,
-        error: results.api_tests.get_playlists.error,
+      // Test Playlist Items
+      console.log("📋 Testing playlist items...")
+      if (diagnostics.playlists_api.success && diagnostics.playlists_api.data?.playlists?.length > 0) {
+        try {
+          const firstPlaylistId = diagnostics.playlists_api.data.playlists[0].id
+          const itemsResponse = await fetch(`/api/playlists/${firstPlaylistId}/items`)
+          const itemsData = await itemsResponse.json()
+          diagnostics.playlist_items = {
+            success: itemsResponse.ok,
+            data: itemsData,
+            error: itemsResponse.ok ? undefined : itemsData.error,
+          }
+        } catch (error) {
+          diagnostics.playlist_items = {
+            success: false,
+            error: "Playlist items test failed",
+            details: error instanceof Error ? error.message : "Unknown error",
+          }
+        }
+      } else {
+        diagnostics.playlist_items = {
+          success: false,
+          error: "No playlists available to test items",
+        }
       }
 
-      results.frontend_tests.create_playlist_dialog = {
-        success: results.api_tests.create_playlist.success,
-        data: results.api_tests.create_playlist.data,
-        error: results.api_tests.create_playlist.error,
+      // Test Media API
+      console.log("📁 Testing media API...")
+      try {
+        const mediaResponse = await fetch("/api/media")
+        const mediaData = await mediaResponse.json()
+        diagnostics.media_api = {
+          success: mediaResponse.ok,
+          data: mediaData,
+          error: mediaResponse.ok ? undefined : mediaData.error,
+        }
+      } catch (error) {
+        diagnostics.media_api = {
+          success: false,
+          error: "Media API test failed",
+          details: error instanceof Error ? error.message : "Unknown error",
+        }
+      }
+
+      // Test Table Structure
+      console.log("🏗️ Testing table structure...")
+      try {
+        const structureResponse = await fetch("/api/debug-table-structure")
+        const structureData = await structureResponse.json()
+        diagnostics.table_structure = {
+          success: structureResponse.ok,
+          data: structureData,
+          error: structureResponse.ok ? undefined : structureData.error,
+        }
+      } catch (error) {
+        diagnostics.table_structure = {
+          success: false,
+          error: "Table structure test failed",
+          details: error instanceof Error ? error.message : "Unknown error",
+        }
       }
     } catch (error) {
-      console.error("Full diagnostic failed:", error)
+      console.error("Diagnostic error:", error)
     }
 
-    setDebugData(results)
+    setResults(diagnostics)
     setLoading(false)
   }
 
   useEffect(() => {
-    runFullDiagnostic()
+    runDiagnostics()
   }, [])
 
   const getStatusIcon = (success: boolean) => {
@@ -225,523 +259,345 @@ export default function DebugPlaylistIssuesPage() {
   }
 
   const getStatusBadge = (success: boolean) => {
-    return (
-      <Badge variant={success ? "default" : "destructive"} className={success ? "bg-green-100 text-green-800" : ""}>
-        {success ? "PASS" : "FAIL"}
-      </Badge>
-    )
+    return <Badge variant={success ? "default" : "destructive"}>{success ? "PASS" : "FAIL"}</Badge>
   }
 
-  if (loading) {
-    return (
-      <div className="container mx-auto py-8">
-        <div className="flex items-center justify-center py-12">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-          <span className="ml-2">Running diagnostic tests...</span>
-        </div>
-      </div>
-    )
-  }
-
-  if (!debugData) {
-    return (
-      <div className="container mx-auto py-8">
-        <Card>
-          <CardContent className="flex flex-col items-center justify-center py-12">
-            <AlertCircle className="h-12 w-12 text-red-400 mb-4" />
-            <h3 className="text-lg font-medium text-gray-900 mb-2">Failed to Load Debug Data</h3>
-            <Button onClick={runFullDiagnostic}>
-              <RefreshCw className="h-4 w-4 mr-2" />
-              Retry Diagnostic
-            </Button>
-          </CardContent>
-        </Card>
-      </div>
-    )
-  }
+  const overallHealth = results ? Object.values(results).filter((r) => r.success).length : 0
+  const totalTests = results ? Object.keys(results).length : 0
 
   return (
-    <div className="container mx-auto py-8 space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold">Playlist Debug Dashboard</h1>
-          <p className="text-gray-600">Comprehensive diagnostic tool for playlist functionality</p>
+    <DashboardLayout>
+      <div className="space-y-6">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-3xl font-bold">Playlist Debug Center</h1>
+            <p className="text-gray-600">Comprehensive diagnostics for playlist functionality</p>
+          </div>
+          <Button onClick={runDiagnostics} disabled={loading}>
+            {loading ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <RefreshCw className="h-4 w-4 mr-2" />}
+            Run Diagnostics
+          </Button>
         </div>
-        <Button onClick={runFullDiagnostic} disabled={loading}>
-          <RefreshCw className="h-4 w-4 mr-2" />
-          Re-run Tests
-        </Button>
-      </div>
 
-      <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="grid w-full grid-cols-5">
-          <TabsTrigger value="overview">Overview</TabsTrigger>
-          <TabsTrigger value="auth">Authentication</TabsTrigger>
-          <TabsTrigger value="database">Database</TabsTrigger>
-          <TabsTrigger value="api">API Tests</TabsTrigger>
-          <TabsTrigger value="solutions">Solutions</TabsTrigger>
-        </TabsList>
+        {results && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center justify-between">
+                <span>System Health Overview</span>
+                <Badge
+                  variant={
+                    overallHealth === totalTests
+                      ? "default"
+                      : overallHealth > totalTests / 2
+                        ? "secondary"
+                        : "destructive"
+                  }
+                >
+                  {overallHealth}/{totalTests} Tests Passing
+                </Badge>
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div className="flex items-center space-x-2">
+                  {getStatusIcon(results.authentication.success)}
+                  <span className="text-sm">Authentication</span>
+                </div>
+                <div className="flex items-center space-x-2">
+                  {getStatusIcon(results.database.success)}
+                  <span className="text-sm">Database</span>
+                </div>
+                <div className="flex items-center space-x-2">
+                  {getStatusIcon(results.playlists_api.success)}
+                  <span className="text-sm">Playlists API</span>
+                </div>
+                <div className="flex items-center space-x-2">
+                  {getStatusIcon(results.media_api.success)}
+                  <span className="text-sm">Media API</span>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
-        <TabsContent value="overview" className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <Tabs value={activeTab} onValueChange={setActiveTab}>
+          <TabsList className="grid w-full grid-cols-5">
+            <TabsTrigger value="overview">Overview</TabsTrigger>
+            <TabsTrigger value="authentication">Auth</TabsTrigger>
+            <TabsTrigger value="database">Database</TabsTrigger>
+            <TabsTrigger value="apis">APIs</TabsTrigger>
+            <TabsTrigger value="solutions">Solutions</TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="overview" className="space-y-4">
+            {results && (
+              <div className="grid gap-4">
+                {Object.entries(results).map(([key, result]) => (
+                  <Card key={key}>
+                    <CardContent className="pt-6">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center space-x-3">
+                          {getStatusIcon(result.success)}
+                          <div>
+                            <h3 className="font-medium capitalize">{key.replace(/_/g, " ")}</h3>
+                            {result.error && <p className="text-sm text-red-600">{result.error}</p>}
+                            {result.details && <p className="text-xs text-gray-500">{result.details}</p>}
+                          </div>
+                        </div>
+                        {getStatusBadge(result.success)}
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            )}
+          </TabsContent>
+
+          <TabsContent value="authentication" className="space-y-4">
             <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Authentication</CardTitle>
-                {getStatusIcon(debugData.authentication.success)}
-              </CardHeader>
-              <CardContent>{getStatusBadge(debugData.authentication.success)}</CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Database</CardTitle>
-                {getStatusIcon(debugData.database_connection.success)}
-              </CardHeader>
-              <CardContent>{getStatusBadge(debugData.database_connection.success)}</CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">API Endpoints</CardTitle>
-                {getStatusIcon(
-                  debugData.api_tests.get_playlists.success && debugData.api_tests.create_playlist.success,
-                )}
+              <CardHeader>
+                <CardTitle className="flex items-center space-x-2">
+                  <User className="h-5 w-5" />
+                  <span>Authentication Test</span>
+                  {results && getStatusBadge(results.authentication.success)}
+                </CardTitle>
               </CardHeader>
               <CardContent>
-                {getStatusBadge(
-                  debugData.api_tests.get_playlists.success && debugData.api_tests.create_playlist.success,
+                {results?.authentication.data && (
+                  <ScrollArea className="h-64">
+                    <pre className="text-xs bg-gray-50 p-4 rounded">
+                      {JSON.stringify(results.authentication.data, null, 2)}
+                    </pre>
+                  </ScrollArea>
                 )}
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Frontend</CardTitle>
-                {getStatusIcon(debugData.frontend_tests.fetch_playlists.success)}
-              </CardHeader>
-              <CardContent>{getStatusBadge(debugData.frontend_tests.fetch_playlists.success)}</CardContent>
-            </Card>
-          </div>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>Quick Issues Summary</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {!debugData.authentication.success && (
-                <Alert>
-                  <AlertCircle className="h-4 w-4" />
-                  <AlertDescription>
-                    <strong>Authentication Issue:</strong> {debugData.authentication.error}
-                  </AlertDescription>
-                </Alert>
-              )}
-
-              {!debugData.database_connection.success && (
-                <Alert>
-                  <AlertCircle className="h-4 w-4" />
-                  <AlertDescription>
-                    <strong>Database Issue:</strong> {debugData.database_connection.error}
-                  </AlertDescription>
-                </Alert>
-              )}
-
-              {!debugData.api_tests.get_playlists.success && (
-                <Alert>
-                  <AlertCircle className="h-4 w-4" />
-                  <AlertDescription>
-                    <strong>API Issue:</strong> GET /api/playlists failed - {debugData.api_tests.get_playlists.error}
-                  </AlertDescription>
-                </Alert>
-              )}
-
-              {!debugData.api_tests.create_playlist.success && (
-                <Alert>
-                  <AlertCircle className="h-4 w-4" />
-                  <AlertDescription>
-                    <strong>API Issue:</strong> POST /api/playlists failed - {debugData.api_tests.create_playlist.error}
-                  </AlertDescription>
-                </Alert>
-              )}
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="auth" className="space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center space-x-2">
-                <User className="h-5 w-5" />
-                <span>Authentication Status</span>
-                {getStatusIcon(debugData.authentication.success)}
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <strong>Status:</strong> {getStatusBadge(debugData.authentication.success)}
-                </div>
-                <div>
-                  <strong>User ID:</strong> {debugData.authentication.data?.user?.id || "N/A"}
-                </div>
-              </div>
-
-              {debugData.authentication.error && (
-                <Alert>
-                  <AlertCircle className="h-4 w-4" />
-                  <AlertDescription>{debugData.authentication.error}</AlertDescription>
-                </Alert>
-              )}
-
-              <Separator />
-
-              <div>
-                <strong>Full Response:</strong>
-                <pre className="mt-2 p-4 bg-gray-100 rounded text-sm overflow-auto">
-                  {JSON.stringify(debugData.authentication.data, null, 2)}
-                </pre>
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="database" className="space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center space-x-2">
-                <Database className="h-5 w-5" />
-                <span>Database Connection & Tables</span>
-                {getStatusIcon(debugData.database_connection.success)}
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              <div>
-                <strong>Connection Status:</strong> {getStatusBadge(debugData.database_connection.success)}
-              </div>
-
-              <Separator />
-
-              <div className="space-y-4">
-                <h4 className="font-semibold">Playlists Table</h4>
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <strong>Exists:</strong> {debugData.table_structure.playlists.exists ? "Yes" : "No"}
-                  </div>
-                  <div>
-                    <strong>Columns:</strong> {debugData.table_structure.playlists.columns.length}
-                  </div>
-                </div>
-
-                {debugData.table_structure.playlists.columns.length > 0 && (
-                  <div>
-                    <strong>Column Details:</strong>
-                    <div className="mt-2 overflow-auto">
-                      <table className="min-w-full text-sm">
-                        <thead>
-                          <tr className="border-b">
-                            <th className="text-left p-2">Column</th>
-                            <th className="text-left p-2">Type</th>
-                            <th className="text-left p-2">Nullable</th>
-                            <th className="text-left p-2">Default</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {debugData.table_structure.playlists.columns.map((col, idx) => (
-                            <tr key={idx} className="border-b">
-                              <td className="p-2 font-mono">{col.column_name}</td>
-                              <td className="p-2">{col.data_type}</td>
-                              <td className="p-2">{col.is_nullable}</td>
-                              <td className="p-2 font-mono text-xs">{col.column_default || "NULL"}</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
-                )}
-
-                <div>
-                  <strong>Sample Data:</strong>
-                  <pre className="mt-2 p-4 bg-gray-100 rounded text-sm overflow-auto max-h-64">
-                    {JSON.stringify(debugData.table_structure.playlists.sample_data, null, 2)}
-                  </pre>
-                </div>
-              </div>
-
-              <Separator />
-
-              <div className="space-y-4">
-                <h4 className="font-semibold">Playlist Items Table</h4>
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <strong>Exists:</strong> {debugData.table_structure.playlist_items.exists ? "Yes" : "No"}
-                  </div>
-                  <div>
-                    <strong>Columns:</strong> {debugData.table_structure.playlist_items.columns.length}
-                  </div>
-                </div>
-
-                {debugData.table_structure.playlist_items.columns.length > 0 && (
-                  <div>
-                    <strong>Column Details:</strong>
-                    <div className="mt-2 overflow-auto">
-                      <table className="min-w-full text-sm">
-                        <thead>
-                          <tr className="border-b">
-                            <th className="text-left p-2">Column</th>
-                            <th className="text-left p-2">Type</th>
-                            <th className="text-left p-2">Nullable</th>
-                            <th className="text-left p-2">Default</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {debugData.table_structure.playlist_items.columns.map((col, idx) => (
-                            <tr key={idx} className="border-b">
-                              <td className="p-2 font-mono">{col.column_name}</td>
-                              <td className="p-2">{col.data_type}</td>
-                              <td className="p-2">{col.is_nullable}</td>
-                              <td className="p-2 font-mono text-xs">{col.column_default || "NULL"}</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
-                )}
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="api" className="space-y-4">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center space-x-2">
-                  <Code className="h-5 w-5" />
-                  <span>GET /api/playlists</span>
-                  {getStatusIcon(debugData.api_tests.get_playlists.success)}
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div>
-                  <strong>Status:</strong> {getStatusBadge(debugData.api_tests.get_playlists.success)}
-                </div>
-
-                {debugData.api_tests.get_playlists.details && (
-                  <div>
-                    <strong>HTTP Status:</strong> {debugData.api_tests.get_playlists.details.status}
-                  </div>
-                )}
-
-                {debugData.api_tests.get_playlists.error && (
+                {results?.authentication.error && (
                   <Alert>
                     <AlertCircle className="h-4 w-4" />
-                    <AlertDescription>{debugData.api_tests.get_playlists.error}</AlertDescription>
+                    <AlertDescription>
+                      {results.authentication.error}
+                      {results.authentication.details && (
+                        <div className="mt-2 text-xs text-gray-600">{results.authentication.details}</div>
+                      )}
+                    </AlertDescription>
                   </Alert>
                 )}
-
-                <div>
-                  <strong>Response:</strong>
-                  <pre className="mt-2 p-4 bg-gray-100 rounded text-sm overflow-auto max-h-64">
-                    {JSON.stringify(debugData.api_tests.get_playlists.data, null, 2)}
-                  </pre>
-                </div>
               </CardContent>
             </Card>
+          </TabsContent>
 
+          <TabsContent value="database" className="space-y-4">
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center space-x-2">
-                  <Code className="h-5 w-5" />
-                  <span>POST /api/playlists</span>
-                  {getStatusIcon(debugData.api_tests.create_playlist.success)}
+                  <Database className="h-5 w-5" />
+                  <span>Database Connection</span>
+                  {results && getStatusBadge(results.database.success)}
                 </CardTitle>
               </CardHeader>
-              <CardContent className="space-y-4">
-                <div>
-                  <strong>Status:</strong> {getStatusBadge(debugData.api_tests.create_playlist.success)}
-                </div>
-
-                {debugData.api_tests.create_playlist.details && (
-                  <div>
-                    <strong>HTTP Status:</strong> {debugData.api_tests.create_playlist.details.status}
-                  </div>
+              <CardContent>
+                {results?.database.data && (
+                  <ScrollArea className="h-64">
+                    <pre className="text-xs bg-gray-50 p-4 rounded">
+                      {JSON.stringify(results.database.data, null, 2)}
+                    </pre>
+                  </ScrollArea>
                 )}
-
-                {debugData.api_tests.create_playlist.error && (
+                {results?.database.error && (
                   <Alert>
                     <AlertCircle className="h-4 w-4" />
-                    <AlertDescription>{debugData.api_tests.create_playlist.error}</AlertDescription>
+                    <AlertDescription>
+                      {results.database.error}
+                      {results.database.details && (
+                        <div className="mt-2 text-xs text-gray-600">{results.database.details}</div>
+                      )}
+                    </AlertDescription>
                   </Alert>
                 )}
-
-                <div>
-                  <strong>Payload Sent:</strong>
-                  <pre className="mt-2 p-4 bg-gray-100 rounded text-sm overflow-auto">
-                    {JSON.stringify(debugData.api_tests.create_playlist.details?.payload, null, 2)}
-                  </pre>
-                </div>
-
-                <div>
-                  <strong>Response:</strong>
-                  <pre className="mt-2 p-4 bg-gray-100 rounded text-sm overflow-auto max-h-64">
-                    {JSON.stringify(debugData.api_tests.create_playlist.data, null, 2)}
-                  </pre>
-                </div>
               </CardContent>
             </Card>
-          </div>
 
-          {debugData.api_tests.get_single_playlist.data && (
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center space-x-2">
-                  <Code className="h-5 w-5" />
-                  <span>GET /api/playlists/[id]</span>
-                  {getStatusIcon(debugData.api_tests.get_single_playlist.success)}
+                  <Settings className="h-5 w-5" />
+                  <span>Table Structure</span>
+                  {results && getStatusBadge(results.table_structure.success)}
                 </CardTitle>
+              </CardHeader>
+              <CardContent>
+                {results?.table_structure.data && (
+                  <ScrollArea className="h-64">
+                    <pre className="text-xs bg-gray-50 p-4 rounded">
+                      {JSON.stringify(results.table_structure.data, null, 2)}
+                    </pre>
+                  </ScrollArea>
+                )}
+                {results?.table_structure.error && (
+                  <Alert>
+                    <AlertCircle className="h-4 w-4" />
+                    <AlertDescription>{results.table_structure.error}</AlertDescription>
+                  </Alert>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="apis" className="space-y-4">
+            <div className="grid gap-4">
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center space-x-2">
+                    <Play className="h-5 w-5" />
+                    <span>Playlists API</span>
+                    {results && getStatusBadge(results.playlists_api.success)}
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {results?.playlists_api.data && (
+                    <ScrollArea className="h-48">
+                      <pre className="text-xs bg-gray-50 p-4 rounded">
+                        {JSON.stringify(results.playlists_api.data, null, 2)}
+                      </pre>
+                    </ScrollArea>
+                  )}
+                  {results?.playlists_api.error && (
+                    <Alert>
+                      <AlertCircle className="h-4 w-4" />
+                      <AlertDescription>{results.playlists_api.error}</AlertDescription>
+                    </Alert>
+                  )}
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center space-x-2">
+                    <FileText className="h-5 w-5" />
+                    <span>Media API</span>
+                    {results && getStatusBadge(results.media_api.success)}
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {results?.media_api.data && (
+                    <ScrollArea className="h-48">
+                      <pre className="text-xs bg-gray-50 p-4 rounded">
+                        {JSON.stringify(results.media_api.data, null, 2)}
+                      </pre>
+                    </ScrollArea>
+                  )}
+                  {results?.media_api.error && (
+                    <Alert>
+                      <AlertCircle className="h-4 w-4" />
+                      <AlertDescription>{results.media_api.error}</AlertDescription>
+                    </Alert>
+                  )}
+                </CardContent>
+              </Card>
+            </div>
+          </TabsContent>
+
+          <TabsContent value="solutions" className="space-y-4">
+            <Card>
+              <CardHeader>
+                <CardTitle>Systematic Solution Approach</CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div>
-                  <strong>Status:</strong> {getStatusBadge(debugData.api_tests.get_single_playlist.success)}
+                  <h3 className="font-semibold mb-2">
+                    Based on the diagnostic results, here are the recommended solutions in order of priority:
+                  </h3>
                 </div>
+
+                <Separator />
 
                 <div>
-                  <strong>Response:</strong>
-                  <pre className="mt-2 p-4 bg-gray-100 rounded text-sm overflow-auto max-h-64">
-                    {JSON.stringify(debugData.api_tests.get_single_playlist.data, null, 2)}
-                  </pre>
+                  <h4 className="font-medium mb-2">1. Root Cause Analysis</h4>
+                  <ul className="text-sm space-y-1 ml-4">
+                    <li>
+                      • <strong>Column Name Mismatches:</strong> The most common issue is API code referring to database
+                      columns that don't exist or have different names.
+                    </li>
+                    <li>
+                      • <strong>Authentication Inconsistencies:</strong> Different parts of the codebase using different
+                      authentication patterns.
+                    </li>
+                    <li>
+                      • <strong>Database Connection Issues:</strong> Inconsistent database connection handling across
+                      API routes.
+                    </li>
+                  </ul>
                 </div>
-              </CardContent>
-            </Card>
-          )}
-        </TabsContent>
 
-        <TabsContent value="solutions" className="space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle>Systematic Solution Approach</CardTitle>
-              <CardDescription>
-                Based on the diagnostic results, here are the recommended solutions in order of priority
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              <div className="space-y-4">
-                <h4 className="font-semibold text-lg">1. Root Cause Analysis</h4>
-                <div className="pl-4 space-y-2">
-                  <p>
-                    <strong>Column Name Mismatches:</strong> The most common issue is API code referring to database
-                    columns that don't exist or have different names.
-                  </p>
-                  <p>
-                    <strong>Authentication Inconsistencies:</strong> Different parts of the codebase using different
-                    authentication patterns.
-                  </p>
-                  <p>
-                    <strong>Database Connection Issues:</strong> Inconsistent database connection handling across API
-                    routes.
-                  </p>
+                <Separator />
+
+                <div>
+                  <h4 className="font-medium mb-2">2. Immediate Fixes</h4>
+                  <ul className="text-sm space-y-1 ml-4">
+                    <li>• Fix table name mismatches (media vs media_files)</li>
+                    <li>• Fix column name mismatches (scale_image, etc.)</li>
+                    <li>• Standardize authentication patterns across all API routes</li>
+                    <li>• Add proper error handling and logging</li>
+                  </ul>
                 </div>
-              </div>
 
-              <Separator />
+                <Separator />
 
-              <div className="space-y-4">
-                <h4 className="font-semibold text-lg">2. Immediate Fixes</h4>
-                <div className="pl-4 space-y-2">
-                  {!debugData.authentication.success && (
-                    <Alert>
-                      <AlertCircle className="h-4 w-4" />
-                      <AlertDescription>
-                        <strong>Fix Authentication:</strong> Update all API routes to use consistent getCurrentUser()
-                        function
-                      </AlertDescription>
-                    </Alert>
-                  )}
-
-                  {!debugData.database_connection.success && (
-                    <Alert>
-                      <AlertCircle className="h-4 w-4" />
-                      <AlertDescription>
-                        <strong>Fix Database Connection:</strong> Ensure all API routes use getDb() consistently
-                      </AlertDescription>
-                    </Alert>
-                  )}
-
-                  {!debugData.api_tests.create_playlist.success && (
-                    <Alert>
-                      <AlertCircle className="h-4 w-4" />
-                      <AlertDescription>
-                        <strong>Fix Column Names:</strong> Update API routes to match actual database schema
-                      </AlertDescription>
-                    </Alert>
-                  )}
-                </div>
-              </div>
-
-              <Separator />
-
-              <div className="space-y-4">
-                <h4 className="font-semibold text-lg">3. Long-term Prevention Strategy</h4>
-                <div className="pl-4 space-y-3">
-                  <div>
-                    <strong>Schema-First Development:</strong>
-                    <ul className="list-disc list-inside ml-4 space-y-1">
-                      <li>Create TypeScript interfaces that match database schema exactly</li>
-                      <li>Use these interfaces consistently across all API routes</li>
-                      <li>Generate types from database schema automatically</li>
-                    </ul>
-                  </div>
-
-                  <div>
-                    <strong>Centralized Database Layer:</strong>
-                    <ul className="list-disc list-inside ml-4 space-y-1">
-                      <li>Create repository pattern for database operations</li>
-                      <li>Single source of truth for all SQL queries</li>
-                      <li>Consistent error handling and logging</li>
-                    </ul>
-                  </div>
-
-                  <div>
-                    <strong>Automated Testing:</strong>
-                    <ul className="list-disc list-inside ml-4 space-y-1">
-                      <li>API integration tests for all endpoints</li>
-                      <li>Database schema validation tests</li>
-                      <li>Frontend-to-backend integration tests</li>
-                    </ul>
-                  </div>
-
-                  <div>
-                    <strong>Development Workflow:</strong>
-                    <ul className="list-disc list-inside ml-4 space-y-1">
-                      <li>Always run this debug page after making changes</li>
-                      <li>Test API endpoints directly before testing frontend</li>
-                      <li>Use consistent naming conventions across all layers</li>
-                    </ul>
+                <div>
+                  <h4 className="font-medium mb-2">3. Long-term Prevention Strategy</h4>
+                  <div className="space-y-2">
+                    <div>
+                      <strong>Schema-First Development:</strong>
+                      <ul className="text-sm ml-4 mt-1">
+                        <li>• Create TypeScript interfaces that match database schema exactly</li>
+                        <li>• Use these interfaces consistently across all API routes</li>
+                        <li>• Generate types from database schema automatically</li>
+                      </ul>
+                    </div>
+                    <div>
+                      <strong>Centralized Database Layer:</strong>
+                      <ul className="text-sm ml-4 mt-1">
+                        <li>• Create repository pattern for database operations</li>
+                        <li>• Single source of truth for all SQL queries</li>
+                        <li>• Consistent error handling and logging</li>
+                      </ul>
+                    </div>
+                    <div>
+                      <strong>Automated Testing:</strong>
+                      <ul className="text-sm ml-4 mt-1">
+                        <li>• API integration tests for all endpoints</li>
+                        <li>• Database schema validation tests</li>
+                        <li>• Frontend-to-backend integration tests</li>
+                      </ul>
+                    </div>
+                    <div>
+                      <strong>Development Workflow:</strong>
+                      <ul className="text-sm ml-4 mt-1">
+                        <li>• Always run this debug page after making changes</li>
+                        <li>• Test API endpoints directly before testing frontend</li>
+                        <li>• Use consistent naming conventions across all layers</li>
+                      </ul>
+                    </div>
                   </div>
                 </div>
-              </div>
 
-              <Separator />
+                <Separator />
 
-              <div className="space-y-4">
-                <h4 className="font-semibold text-lg">4. Recommended Next Steps</h4>
-                <div className="pl-4 space-y-2">
-                  <ol className="list-decimal list-inside space-y-2">
-                    <li>Fix the immediate issues identified in this diagnostic</li>
-                    <li>Create TypeScript interfaces for all database tables</li>
-                    <li>Refactor API routes to use consistent patterns</li>
-                    <li>Add comprehensive error logging</li>
-                    <li>Create automated tests for critical paths</li>
-                    <li>Document the correct patterns for future development</li>
+                <div>
+                  <h4 className="font-medium mb-2">4. Recommended Next Steps</h4>
+                  <ol className="text-sm space-y-1 ml-4">
+                    <li>1. Fix the immediate issues identified in this diagnostic</li>
+                    <li>2. Create TypeScript interfaces for all database tables</li>
+                    <li>3. Refactor API routes to use consistent patterns</li>
+                    <li>4. Add comprehensive error logging</li>
+                    <li>5. Create automated tests for critical paths</li>
+                    <li>6. Document the correct patterns for future development</li>
                   </ol>
                 </div>
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-      </Tabs>
-    </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+        </Tabs>
+      </div>
+    </DashboardLayout>
   )
 }
