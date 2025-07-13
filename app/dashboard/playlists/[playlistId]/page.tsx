@@ -304,7 +304,12 @@ export default function PlaylistEditorPage() {
   const fetchPlaylist = async () => {
     try {
       console.log("🎵 [PLAYLIST EDITOR] Fetching playlist:", playlistId)
-      const response = await fetch(`/api/playlists/${playlistId}`)
+      const token = localStorage.getItem("token")
+      const response = await fetch(`/api/playlists/${playlistId}`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      })
       const data = await response.json()
 
       console.log("🎵 [PLAYLIST EDITOR] Playlist response:", data)
@@ -325,7 +330,12 @@ export default function PlaylistEditorPage() {
   const fetchPlaylistItems = async () => {
     try {
       console.log("📋 [PLAYLIST EDITOR] Fetching playlist items for:", playlistId)
-      const response = await fetch(`/api/playlists/${playlistId}/items`)
+      const token = localStorage.getItem("token")
+      const response = await fetch(`/api/playlists/${playlistId}/items`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      })
       const data = await response.json()
 
       console.log("📋 [PLAYLIST EDITOR] Playlist items response:", data)
@@ -348,7 +358,12 @@ export default function PlaylistEditorPage() {
       setMediaError(null)
       console.log("📁 [PLAYLIST EDITOR] Fetching media files...")
 
-      const response = await fetch("/api/media")
+      const token = localStorage.getItem("token")
+      const response = await fetch("/api/media", {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      })
       const data = await response.json()
 
       console.log("📁 [PLAYLIST EDITOR] Media response:", data)
@@ -393,6 +408,7 @@ export default function PlaylistEditorPage() {
     }
 
     const newItems = arrayMove(playlistItems, oldIndex, newIndex)
+    const originalItems = [...playlistItems]
 
     // Update local state immediately for better UX
     setPlaylistItems(newItems)
@@ -401,10 +417,12 @@ export default function PlaylistEditorPage() {
 
     // Update positions on server
     try {
+      const token = localStorage.getItem("token")
       const response = await fetch(`/api/playlists/${playlistId}/items/reorder`, {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
           items: newItems.map((item, index) => ({
@@ -420,20 +438,18 @@ export default function PlaylistEditorPage() {
       if (!response.ok) {
         console.error("🎯 [PLAYLIST EDITOR] Server reorder failed, reverting...")
         // Revert on error
-        setPlaylistItems(playlistItems) // Revert to original order
+        setPlaylistItems(originalItems)
         toast.error(data.error || "Failed to reorder items")
       } else {
         console.log("🎯 [PLAYLIST EDITOR] Server reorder successful")
-        // Update with server response to ensure consistency
-        if (data.items) {
-          setPlaylistItems(data.items)
-        }
         toast.success("Playlist order updated")
+        // Refresh items to ensure consistency
+        await fetchPlaylistItems()
       }
     } catch (error) {
       console.error("🎯 [PLAYLIST EDITOR] Reorder error:", error)
       // Revert on error
-      setPlaylistItems(playlistItems) // Revert to original order
+      setPlaylistItems(originalItems)
       toast.error("Failed to reorder items")
     }
   }
@@ -442,10 +458,12 @@ export default function PlaylistEditorPage() {
     try {
       console.log("➕ [PLAYLIST EDITOR] Adding media to playlist:", mediaFile)
 
+      const token = localStorage.getItem("token")
       const response = await fetch(`/api/playlists/${playlistId}/items`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
           media_id: mediaFile.id,
@@ -472,8 +490,12 @@ export default function PlaylistEditorPage() {
     try {
       console.log("🗑️ [PLAYLIST EDITOR] Removing item from playlist:", itemId)
 
+      const token = localStorage.getItem("token")
       const response = await fetch(`/api/playlists/${playlistId}/items/${itemId}`, {
         method: "DELETE",
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
       })
 
       console.log("🗑️ [PLAYLIST EDITOR] Delete response status:", response.status)
@@ -498,10 +520,12 @@ export default function PlaylistEditorPage() {
     try {
       console.log("⏱️ [PLAYLIST EDITOR] Updating item duration:", { itemId, duration, transition })
 
+      const token = localStorage.getItem("token")
       const response = await fetch(`/api/playlists/${playlistId}/items/${itemId}`, {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
           duration,
@@ -840,10 +864,12 @@ export default function PlaylistEditorPage() {
             }}
             onSave={async (options) => {
               try {
+                const token = localStorage.getItem("token")
                 const response = await fetch(`/api/playlists/${playlistId}`, {
                   method: "PUT",
                   headers: {
                     "Content-Type": "application/json",
+                    Authorization: `Bearer ${token}`,
                   },
                   body: JSON.stringify(options),
                 })

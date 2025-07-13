@@ -4,7 +4,7 @@ import jwt from "jsonwebtoken"
 
 const sql = neon(process.env.DATABASE_URL!)
 
-export async function POST(request: NextRequest, { params }: { params: { playlistId: string } }) {
+export async function PUT(request: NextRequest, { params }: { params: { playlistId: string } }) {
   try {
     console.log(`🎯 [REORDER API] Starting reorder for playlist: ${params.playlistId}`)
 
