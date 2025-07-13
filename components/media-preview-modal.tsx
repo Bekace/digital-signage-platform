@@ -34,11 +34,13 @@ export function MediaPreviewModal({ file, open, onOpenChange }: MediaPreviewModa
   const [isMuted, setIsMuted] = useState(false)
   const [imageError, setImageError] = useState(false)
   const [videoError, setVideoError] = useState(false)
+  const [iframeError, setIframeError] = useState(false)
 
   // Reset errors when file changes
   useEffect(() => {
     setImageError(false)
     setVideoError(false)
+    setIframeError(false)
     setIsPlaying(false)
   }, [file])
 
@@ -84,6 +86,33 @@ export function MediaPreviewModal({ file, open, onOpenChange }: MediaPreviewModa
     }
   }
 
+  // Convert Google Slides URL to embeddable format
+  const getEmbedUrl = (url: string) => {
+    try {
+      // Handle different Google Slides URL formats
+      if (url.includes("/presentation/d/")) {
+        // Extract the presentation ID
+        const match = url.match(/\/presentation\/d\/([a-zA-Z0-9-_]+)/)
+        if (match) {
+          const presentationId = match[1]
+          // Return embed URL with autoplay
+          return `https://docs.google.com/presentation/d/${presentationId}/embed?start=true&loop=true&delayms=5000`
+        }
+      }
+
+      // If it's already an embed URL, return as is
+      if (url.includes("/embed")) {
+        return url
+      }
+
+      // Fallback: try to convert any Google Slides URL
+      return url.replace("/edit", "/embed?start=true&loop=true&delayms=5000")
+    } catch (error) {
+      console.error("Error converting URL to embed format:", error)
+      return url
+    }
+  }
+
   const embedSettings = getEmbedSettings()
 
   const isImage = file.mime_type?.startsWith("image/") || file.file_type === "image"
@@ -111,9 +140,14 @@ export function MediaPreviewModal({ file, open, onOpenChange }: MediaPreviewModa
     setVideoError(true)
   }
 
+  const handleIframeError = () => {
+    console.error("Iframe failed to load:", file.url)
+    setIframeError(true)
+  }
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-4xl max-h-[90vh] overflow-hidden">
+      <DialogContent className="max-w-5xl max-h-[95vh] overflow-hidden">
         <DialogHeader>
           <DialogTitle className="flex items-center justify-between">
             <span className="truncate pr-4">{file.original_name}</span>
@@ -133,10 +167,15 @@ export function MediaPreviewModal({ file, open, onOpenChange }: MediaPreviewModa
           {/* Debug Info */}
           <div className="text-xs text-gray-500 bg-gray-50 p-2 rounded">
             <strong>Debug:</strong> Type: {file.file_type}, MIME: {file.mime_type}, URL: {file.url?.substring(0, 50)}...
+            {isGoogleSlides && (
+              <div className="mt-1">
+                <strong>Embed URL:</strong> {getEmbedUrl(file.url)?.substring(0, 80)}...
+              </div>
+            )}
           </div>
 
           {/* Media Preview */}
-          <div className="flex justify-center bg-gray-50 rounded-lg p-4 min-h-[300px]">
+          <div className="flex justify-center bg-gray-50 rounded-lg p-4 min-h-[400px]">
             {isImage && !imageError && (
               <div className="relative max-w-full max-h-[60vh]">
                 <img
@@ -238,14 +277,41 @@ export function MediaPreviewModal({ file, open, onOpenChange }: MediaPreviewModa
               </div>
             )}
 
-            {isGoogleSlides && (
+            {isGoogleSlides && !iframeError && (
+              <div className="relative w-full max-w-4xl">
+                <div className="aspect-video w-full">
+                  <iframe
+                    src={getEmbedUrl(file.url)}
+                    className="w-full h-full rounded-lg shadow-lg border"
+                    frameBorder="0"
+                    allowFullScreen
+                    title={file.original_name}
+                    onError={handleIframeError}
+                    onLoad={() => console.log("Google Slides iframe loaded successfully")}
+                  />
+                </div>
+                <div className="absolute bottom-4 right-4 flex space-x-2">
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    onClick={() => window.open(file.external_url || file.url, "_blank")}
+                    className="bg-white/90 hover:bg-white"
+                  >
+                    <ExternalLink className="h-4 w-4 mr-2" />
+                    Open in Google Slides
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            {isGoogleSlides && iframeError && (
               <div className="text-center py-12">
                 <div className="bg-blue-50 border border-blue-200 p-8 rounded-lg inline-block max-w-2xl">
                   <svg className="h-16 w-16 text-blue-600 mx-auto mb-4" fill="currentColor" viewBox="0 0 24 24">
                     <path d="M14,2H6A2,2 0 0,0 4,4V20A2,2 0 0,0 6,22H18A2,2 0 0,0 20,20V8L14,2M18,20H6V4H13V9H18V20Z" />
                   </svg>
                   <h3 className="text-lg font-medium text-gray-900 mb-2">Google Slides Presentation</h3>
-                  <p className="text-gray-600 mb-4">Click to view this presentation in Google Slides</p>
+                  <p className="text-gray-600 mb-4">Unable to embed presentation. Click to view in Google Slides.</p>
                   <div className="space-y-2">
                     <Button
                       onClick={() => window.open(file.external_url || file.url, "_blank")}
@@ -382,7 +448,9 @@ export function MediaPreviewModal({ file, open, onOpenChange }: MediaPreviewModa
                 </div>
                 <div className="flex justify-between">
                   <span className="text-gray-600">Storage:</span>
-                  <span className="font-medium text-green-600">Vercel Blob</span>
+                  <span className="font-medium text-green-600">
+                    {file.media_source === "google_slides" ? "Google Slides" : "Vercel Blob"}
+                  </span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-gray-600">URL:</span>
