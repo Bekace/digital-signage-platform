@@ -8,7 +8,18 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Separator } from "@/components/ui/separator"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { CheckCircle, XCircle, AlertCircle, RefreshCw, Database, User, Loader2, ArrowUpDown, Key } from "lucide-react"
+import {
+  CheckCircle,
+  XCircle,
+  AlertCircle,
+  RefreshCw,
+  Database,
+  User,
+  Loader2,
+  ArrowUpDown,
+  Key,
+  LogIn,
+} from "lucide-react"
 import { DashboardLayout } from "@/components/dashboard-layout"
 
 interface DebugResult {
@@ -108,7 +119,13 @@ export default function DebugDragDropPage() {
             diagnostics.token_analysis = {
               success: false,
               error: "Token format is invalid (not 3 parts)",
-              data: { token_exists: true, token_length: token.length, token_parts: tokenParts.length },
+              data: {
+                token_exists: true,
+                token_length: token.length,
+                token_parts: tokenParts.length,
+                token_preview: token.substring(0, 50) + "...",
+                issue: "JWT tokens must have 3 parts separated by dots (header.payload.signature)",
+              },
             }
           }
         } catch (error) {
@@ -116,7 +133,11 @@ export default function DebugDragDropPage() {
             success: false,
             error: "Token parsing failed - malformed JWT",
             details: error instanceof Error ? error.message : "Unknown error",
-            data: { token_exists: true, token_length: token.length },
+            data: {
+              token_exists: true,
+              token_length: token.length,
+              token_preview: token.substring(0, 50) + "...",
+            },
           }
         }
       } else {
@@ -182,101 +203,117 @@ export default function DebugDragDropPage() {
         console.error("Table structure analysis failed:", error)
       }
 
-      // 5. API Endpoints Testing
-      console.log("🔍 [DEBUG] Testing API endpoints...")
-      const authHeaders = token ? { Authorization: `Bearer ${token}` } : {}
+      // 5. API Endpoints Testing (only if we have a valid token)
+      if (diagnostics.token_analysis.success) {
+        console.log("🔍 [DEBUG] Testing API endpoints...")
+        const authHeaders = token ? { Authorization: `Bearer ${token}` } : {}
 
-      // Test GET /api/playlists
-      try {
-        console.log("🔍 [DEBUG] Testing GET /api/playlists with headers:", { hasAuth: !!authHeaders.Authorization })
-        const playlistsResponse = await fetch("/api/playlists", {
-          headers: authHeaders,
-        })
-        const playlistsData = await playlistsResponse.json()
-        diagnostics.api_endpoints.get_playlists = {
-          success: playlistsResponse.ok,
-          data: playlistsData,
-          error: playlistsResponse.ok ? undefined : playlistsData.error,
-          httpStatus: playlistsResponse.status,
-        }
-
-        // Set test playlist ID if available
-        if (playlistsResponse.ok && playlistsData.playlists?.length > 0) {
-          setTestPlaylistId(playlistsData.playlists[0].id.toString())
-        }
-      } catch (error) {
-        diagnostics.api_endpoints.get_playlists = {
-          success: false,
-          error: "GET playlists failed",
-          details: error instanceof Error ? error.message : "Unknown error",
-        }
-      }
-
-      // Test playlist items if we have a playlist
-      if (
-        diagnostics.api_endpoints.get_playlists.success &&
-        diagnostics.api_endpoints.get_playlists.data?.playlists?.length > 0
-      ) {
-        const firstPlaylistId = diagnostics.api_endpoints.get_playlists.data.playlists[0].id
+        // Test GET /api/playlists
         try {
-          console.log("🔍 [DEBUG] Testing GET playlist items for playlist:", firstPlaylistId)
-          const itemsResponse = await fetch(`/api/playlists/${firstPlaylistId}/items`, {
+          console.log("🔍 [DEBUG] Testing GET /api/playlists with headers:", { hasAuth: !!authHeaders.Authorization })
+          const playlistsResponse = await fetch("/api/playlists", {
             headers: authHeaders,
           })
-          const itemsData = await itemsResponse.json()
-          diagnostics.api_endpoints.get_playlist_items = {
-            success: itemsResponse.ok,
-            data: itemsData,
-            error: itemsResponse.ok ? undefined : itemsData.error,
-            httpStatus: itemsResponse.status,
+          const playlistsData = await playlistsResponse.json()
+          diagnostics.api_endpoints.get_playlists = {
+            success: playlistsResponse.ok,
+            data: playlistsData,
+            error: playlistsResponse.ok ? undefined : playlistsData.error,
+            httpStatus: playlistsResponse.status,
           }
 
-          // Test reorder if we have items
-          if (itemsResponse.ok && itemsData.items?.length > 1) {
-            try {
-              const reorderPayload = {
-                items: itemsData.items.map((item: any, index: number) => ({
-                  id: item.id,
-                  position: index + 1, // Keep same order for test
-                })),
-              }
-
-              console.log("🔍 [DEBUG] Testing reorder with payload:", reorderPayload)
-              const reorderResponse = await fetch(`/api/playlists/${firstPlaylistId}/items/reorder`, {
-                method: "PUT",
-                headers: {
-                  "Content-Type": "application/json",
-                  ...authHeaders,
-                },
-                body: JSON.stringify(reorderPayload),
-              })
-              const reorderData = await reorderResponse.json()
-              diagnostics.api_endpoints.reorder_items = {
-                success: reorderResponse.ok,
-                data: { request: reorderPayload, response: reorderData },
-                error: reorderResponse.ok ? undefined : reorderData.error,
-                httpStatus: reorderResponse.status,
-              }
-            } catch (error) {
-              diagnostics.api_endpoints.reorder_items = {
-                success: false,
-                error: "Reorder test failed",
-                details: error instanceof Error ? error.message : "Unknown error",
-              }
-            }
-          } else {
-            diagnostics.api_endpoints.reorder_items = {
-              success: false,
-              error: "No items available for reorder test",
-              data: { available_items: itemsData.items?.length || 0 },
-            }
+          // Set test playlist ID if available
+          if (playlistsResponse.ok && playlistsData.playlists?.length > 0) {
+            setTestPlaylistId(playlistsData.playlists[0].id.toString())
           }
         } catch (error) {
-          diagnostics.api_endpoints.get_playlist_items = {
+          diagnostics.api_endpoints.get_playlists = {
             success: false,
-            error: "GET playlist items failed",
+            error: "GET playlists failed",
             details: error instanceof Error ? error.message : "Unknown error",
           }
+        }
+
+        // Test playlist items if we have a playlist
+        if (
+          diagnostics.api_endpoints.get_playlists.success &&
+          diagnostics.api_endpoints.get_playlists.data?.playlists?.length > 0
+        ) {
+          const firstPlaylistId = diagnostics.api_endpoints.get_playlists.data.playlists[0].id
+          try {
+            console.log("🔍 [DEBUG] Testing GET playlist items for playlist:", firstPlaylistId)
+            const itemsResponse = await fetch(`/api/playlists/${firstPlaylistId}/items`, {
+              headers: authHeaders,
+            })
+            const itemsData = await itemsResponse.json()
+            diagnostics.api_endpoints.get_playlist_items = {
+              success: itemsResponse.ok,
+              data: itemsData,
+              error: itemsResponse.ok ? undefined : itemsData.error,
+              httpStatus: itemsResponse.status,
+            }
+
+            // Test reorder if we have items
+            if (itemsResponse.ok && itemsData.items?.length > 1) {
+              try {
+                const reorderPayload = {
+                  items: itemsData.items.map((item: any, index: number) => ({
+                    id: item.id,
+                    position: index + 1, // Keep same order for test
+                  })),
+                }
+
+                console.log("🔍 [DEBUG] Testing reorder with payload:", reorderPayload)
+                const reorderResponse = await fetch(`/api/playlists/${firstPlaylistId}/items/reorder`, {
+                  method: "PUT",
+                  headers: {
+                    "Content-Type": "application/json",
+                    ...authHeaders,
+                  },
+                  body: JSON.stringify(reorderPayload),
+                })
+                const reorderData = await reorderResponse.json()
+                diagnostics.api_endpoints.reorder_items = {
+                  success: reorderResponse.ok,
+                  data: { request: reorderPayload, response: reorderData },
+                  error: reorderResponse.ok ? undefined : reorderData.error,
+                  httpStatus: reorderResponse.status,
+                }
+              } catch (error) {
+                diagnostics.api_endpoints.reorder_items = {
+                  success: false,
+                  error: "Reorder test failed",
+                  details: error instanceof Error ? error.message : "Unknown error",
+                }
+              }
+            } else {
+              diagnostics.api_endpoints.reorder_items = {
+                success: false,
+                error: "No items available for reorder test",
+                data: { available_items: itemsData.items?.length || 0 },
+              }
+            }
+          } catch (error) {
+            diagnostics.api_endpoints.get_playlist_items = {
+              success: false,
+              error: "GET playlist items failed",
+              details: error instanceof Error ? error.message : "Unknown error",
+            }
+          }
+        }
+      } else {
+        // Skip API tests if token is invalid
+        diagnostics.api_endpoints.get_playlists = {
+          success: false,
+          error: "Skipped due to invalid token",
+        }
+        diagnostics.api_endpoints.get_playlist_items = {
+          success: false,
+          error: "Skipped due to invalid token",
+        }
+        diagnostics.api_endpoints.reorder_items = {
+          success: false,
+          error: "Skipped due to invalid token",
         }
       }
 
@@ -326,14 +363,21 @@ export default function DebugDragDropPage() {
 
   const fixAuthenticationIssue = async () => {
     try {
-      // Clear existing token
+      // Clear existing invalid token
       localStorage.removeItem("token")
+
+      // Show success message
+      alert("Invalid token cleared. You will be redirected to login.")
 
       // Redirect to login
       window.location.href = "/login"
     } catch (error) {
       console.error("Error clearing token:", error)
     }
+  }
+
+  const goToLogin = () => {
+    window.location.href = "/login"
   }
 
   useEffect(() => {
@@ -372,49 +416,70 @@ export default function DebugDragDropPage() {
               Run Diagnostics
             </Button>
             {results && !results.token_analysis.success && (
-              <Button onClick={fixAuthenticationIssue} variant="destructive">
-                <Key className="h-4 w-4 mr-2" />
-                Fix Auth
-              </Button>
+              <>
+                <Button onClick={fixAuthenticationIssue} variant="destructive">
+                  <Key className="h-4 w-4 mr-2" />
+                  Clear Invalid Token
+                </Button>
+                <Button onClick={goToLogin} variant="default">
+                  <LogIn className="h-4 w-4 mr-2" />
+                  Go to Login
+                </Button>
+              </>
             )}
           </div>
         </div>
 
         {results && (
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center justify-between">
-                <span>System Health Overview</span>
-                <Badge variant={overallHealth >= 4 ? "default" : overallHealth >= 2 ? "secondary" : "destructive"}>
-                  {overallHealth}/5 Tests Passing
-                </Badge>
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-                <div className="flex items-center space-x-2">
-                  {getStatusIcon(results.authentication.success)}
-                  <span className="text-sm">Authentication</span>
+          <>
+            {!results.token_analysis.success && (
+              <Alert>
+                <AlertCircle className="h-4 w-4" />
+                <AlertDescription>
+                  <strong>Authentication Issue Detected:</strong> {results.token_analysis.error}
+                  <br />
+                  <span className="text-sm text-gray-600 mt-2 block">
+                    The token in your browser is invalid. Click "Clear Invalid Token" to fix this, then log in again.
+                  </span>
+                </AlertDescription>
+              </Alert>
+            )}
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center justify-between">
+                  <span>System Health Overview</span>
+                  <Badge variant={overallHealth >= 4 ? "default" : overallHealth >= 2 ? "secondary" : "destructive"}>
+                    {overallHealth}/5 Tests Passing
+                  </Badge>
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+                  <div className="flex items-center space-x-2">
+                    {getStatusIcon(results.authentication.success)}
+                    <span className="text-sm">Authentication</span>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    {getStatusIcon(results.database_connection.success)}
+                    <span className="text-sm">Database</span>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    {getStatusIcon(results.api_endpoints.get_playlists.success)}
+                    <span className="text-sm">Playlists API</span>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    {getStatusIcon(results.api_endpoints.get_playlist_items.success)}
+                    <span className="text-sm">Items API</span>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    {getStatusIcon(results.api_endpoints.reorder_items.success)}
+                    <span className="text-sm">Reorder API</span>
+                  </div>
                 </div>
-                <div className="flex items-center space-x-2">
-                  {getStatusIcon(results.database_connection.success)}
-                  <span className="text-sm">Database</span>
-                </div>
-                <div className="flex items-center space-x-2">
-                  {getStatusIcon(results.api_endpoints.get_playlists.success)}
-                  <span className="text-sm">Playlists API</span>
-                </div>
-                <div className="flex items-center space-x-2">
-                  {getStatusIcon(results.api_endpoints.get_playlist_items.success)}
-                  <span className="text-sm">Items API</span>
-                </div>
-                <div className="flex items-center space-x-2">
-                  {getStatusIcon(results.api_endpoints.reorder_items.success)}
-                  <span className="text-sm">Reorder API</span>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+              </CardContent>
+            </Card>
+          </>
         )}
 
         <Tabs value={activeTab} onValueChange={setActiveTab}>
@@ -445,18 +510,39 @@ export default function DebugDragDropPage() {
                         {results.token_analysis.data.token_exists && (
                           <>
                             <div>Token Length: {results.token_analysis.data.token_length}</div>
-                            <div>Token Parts: {results.token_analysis.data.token_parts}/3</div>
-                            <div>User ID: {results.token_analysis.data.user_id || "N/A"}</div>
-                            <div>Email: {results.token_analysis.data.email || "N/A"}</div>
-                            <div>
-                              Expires: {results.token_analysis.data.expires || "N/A"}{" "}
-                              {results.token_analysis.data.is_expired && (
-                                <Badge variant="destructive" className="ml-2">
-                                  EXPIRED
+                            <div className="flex items-center space-x-2">
+                              <span>Token Parts: {results.token_analysis.data.token_parts}/3</span>
+                              {results.token_analysis.data.token_parts !== 3 && (
+                                <Badge variant="destructive" className="text-xs">
+                                  INVALID FORMAT
                                 </Badge>
                               )}
                             </div>
-                            <div>Time Until Expiry: {results.token_analysis.data.time_until_expiry}</div>
+                            {results.token_analysis.data.token_preview && (
+                              <div className="text-xs text-gray-500">
+                                Preview: {results.token_analysis.data.token_preview}
+                              </div>
+                            )}
+                            {results.token_analysis.data.user_id && (
+                              <>
+                                <div>User ID: {results.token_analysis.data.user_id}</div>
+                                <div>Email: {results.token_analysis.data.email || "N/A"}</div>
+                                <div>
+                                  Expires: {results.token_analysis.data.expires || "N/A"}{" "}
+                                  {results.token_analysis.data.is_expired && (
+                                    <Badge variant="destructive" className="ml-2">
+                                      EXPIRED
+                                    </Badge>
+                                  )}
+                                </div>
+                                <div>Time Until Expiry: {results.token_analysis.data.time_until_expiry}</div>
+                              </>
+                            )}
+                            {results.token_analysis.data.issue && (
+                              <div className="text-xs text-red-600 bg-red-50 p-2 rounded">
+                                {results.token_analysis.data.issue}
+                              </div>
+                            )}
                           </>
                         )}
                       </div>
@@ -702,16 +788,33 @@ export default function DebugDragDropPage() {
               </CardHeader>
               <CardContent className="space-y-4">
                 <div>
-                  <h3 className="font-semibold mb-2">Common Issues and Solutions:</h3>
+                  <h3 className="font-semibold mb-2">Current Issue Detected:</h3>
+                  {results && !results.token_analysis.success && (
+                    <Alert className="mb-4">
+                      <AlertCircle className="h-4 w-4" />
+                      <AlertDescription>
+                        <strong>Invalid Authentication Token</strong>
+                        <br />
+                        Your token has {results.token_analysis.data?.token_parts || 0} parts instead of the required 3
+                        parts for a valid JWT.
+                        <br />
+                        <strong>Solution:</strong> Clear the invalid token and log in again.
+                      </AlertDescription>
+                    </Alert>
+                  )}
                 </div>
 
                 <Separator />
 
                 <div>
+                  <h3 className="font-semibold mb-2">Common Issues and Solutions:</h3>
+                </div>
+
+                <div>
                   <h4 className="font-medium mb-2">1. Authentication Issues</h4>
                   <ul className="text-sm space-y-1 ml-4">
                     <li>
-                      • <strong>JWT Malformed:</strong> Token is corrupted or invalid format
+                      • <strong>JWT Malformed:</strong> Token is corrupted or invalid format (not 3 parts)
                     </li>
                     <li>
                       • <strong>Token Expired:</strong> User needs to log in again
@@ -720,7 +823,7 @@ export default function DebugDragDropPage() {
                       • <strong>Missing Authorization Header:</strong> API calls not including Bearer token
                     </li>
                     <li>
-                      • <strong>Solution:</strong> Check token format, expiration, and header inclusion
+                      • <strong>Solution:</strong> Clear invalid token and re-authenticate
                     </li>
                   </ul>
                 </div>
@@ -790,7 +893,7 @@ export default function DebugDragDropPage() {
                 <div>
                   <h4 className="font-medium mb-2">5. Recommended Fix Order</h4>
                   <ol className="text-sm space-y-1 ml-4">
-                    <li>1. Fix authentication token issues first</li>
+                    <li>1. Fix authentication token issues first (CURRENT ISSUE)</li>
                     <li>2. Verify and correct table/column names</li>
                     <li>3. Test API endpoints individually</li>
                     <li>4. Fix reorder API implementation</li>
