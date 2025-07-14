@@ -251,6 +251,26 @@ export default function DebugAuthIssuesPage() {
     }
   }
 
+  const testAuthentication = async () => {
+    setLoading(true)
+    try {
+      const response = await fetch("/api/debug-auth-test")
+      const result = await response.json()
+
+      console.log("Auth test result:", result)
+
+      if (result.success) {
+        alert(`Authentication successful! User: ${result.user.email}`)
+      } else {
+        alert(`Authentication failed: ${result.error}`)
+      }
+    } catch (error) {
+      alert(`Authentication test failed: ${error.message}`)
+    } finally {
+      setLoading(false)
+    }
+  }
+
   useEffect(() => {
     runAuthDiagnostics()
     runDatabaseDiagnostics()
@@ -384,6 +404,9 @@ export default function DebugAuthIssuesPage() {
                   <div className="flex gap-2">
                     <Button onClick={runAuthDiagnostics} disabled={loading}>
                       Re-run Auth Diagnostics
+                    </Button>
+                    <Button onClick={testAuthentication} variant="outline" disabled={loading}>
+                      Test Authentication
                     </Button>
                     <Button onClick={refreshAuth} variant="outline">
                       Clear Auth & Login
