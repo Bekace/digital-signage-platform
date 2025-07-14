@@ -131,15 +131,18 @@ export default function DebugAuthSessionPage() {
     console.log("🔍 [DEBUG] Starting authentication debugging...")
 
     // Test 1: Check localStorage token
-    const token = localStorage.getItem("token")
+    const token = typeof window !== "undefined" ? localStorage.getItem("token") : null
     const tokenInfo = getTokenInfo(token)
     setTokenInfo(tokenInfo)
 
     // Test 2: Check cookies
-    const allCookies = document.cookie
-      .split(";")
-      .map((c) => c.trim())
-      .filter((c) => c.length > 0)
+    const allCookies =
+      typeof window !== "undefined"
+        ? document.cookie
+            .split(";")
+            .map((c) => c.trim())
+            .filter((c) => c.length > 0)
+        : []
     setCookies(allCookies)
 
     // Test 3: Basic auth tests
@@ -182,7 +185,7 @@ export default function DebugAuthSessionPage() {
 
     try {
       // Test auth headers generation
-      const token = localStorage.getItem("token")
+      const token = typeof window !== "undefined" ? localStorage.getItem("token") : null
       let authHeaders = null
       let authHeadersError = null
 
@@ -290,8 +293,10 @@ export default function DebugAuthSessionPage() {
   }
 
   const clearToken = () => {
-    localStorage.removeItem("token")
-    runInitialTests()
+    if (typeof window !== "undefined") {
+      localStorage.removeItem("token")
+      runInitialTests()
+    }
   }
 
   const testPageAccess = (page: string) => {
@@ -661,7 +666,7 @@ export default function DebugAuthSessionPage() {
 
                 <div className="flex items-center justify-between p-3 border rounded-lg">
                   <div className="flex items-center space-x-3">
-                    {localStorage.getItem("token") ? (
+                    {typeof window !== "undefined" && localStorage.getItem("token") ? (
                       <CheckCircle className="h-4 w-4 text-green-500" />
                     ) : (
                       <XCircle className="h-4 w-4 text-red-500" />
@@ -669,16 +674,20 @@ export default function DebugAuthSessionPage() {
                     <div>
                       <div className="font-medium">LocalStorage Token</div>
                       <div className="text-sm text-gray-600">
-                        {localStorage.getItem("token") ? "Token present in localStorage" : "No token in localStorage"}
+                        {typeof window !== "undefined" && localStorage.getItem("token")
+                          ? "Token present in localStorage"
+                          : "No token in localStorage"}
                       </div>
                     </div>
                   </div>
                   <Badge
                     className={
-                      localStorage.getItem("token") ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"
+                      typeof window !== "undefined" && localStorage.getItem("token")
+                        ? "bg-green-100 text-green-800"
+                        : "bg-red-100 text-red-800"
                     }
                   >
-                    {localStorage.getItem("token") ? "success" : "error"}
+                    {typeof window !== "undefined" && localStorage.getItem("token") ? "success" : "error"}
                   </Badge>
                 </div>
 
