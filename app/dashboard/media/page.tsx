@@ -39,7 +39,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
 import { GoogleSlidesDialog } from "@/components/google-slides-dialog"
-import { getAuthHeaders, isTokenValid, redirectToLogin } from "@/lib/auth-utils"
+import { getAuthHeaders, isTokenValid, redirectToLogin, getTokenInfo } from "@/lib/auth-utils"
 
 interface MediaFile {
   id: number
@@ -78,8 +78,17 @@ export default function MediaPage() {
       setError(null)
       setAuthError(null)
 
+      console.log("📁 [MEDIA PAGE] Starting to load media files...")
+
+      // Debug token information
+      const tokenInfo = getTokenInfo()
+      console.log("📁 [MEDIA PAGE] Token info:", tokenInfo)
+
       // Check if token is valid before making request
-      if (!isTokenValid()) {
+      const tokenValid = isTokenValid()
+      console.log("📁 [MEDIA PAGE] Token valid:", tokenValid)
+
+      if (!tokenValid) {
         console.log("📁 [MEDIA PAGE] Invalid token detected, redirecting to login")
         setAuthError("Your session has expired. Please log in again.")
         setTimeout(() => redirectToLogin(), 2000)
@@ -87,6 +96,8 @@ export default function MediaPage() {
       }
 
       const authHeaders = getAuthHeaders()
+      console.log("📁 [MEDIA PAGE] Auth headers:", authHeaders ? "Available" : "Not available")
+
       if (!authHeaders) {
         console.log("📁 [MEDIA PAGE] No auth headers available")
         setAuthError("Authentication required. Redirecting to login...")
@@ -109,6 +120,7 @@ export default function MediaPage() {
         console.log("📁 [MEDIA PAGE] Loaded", data.files?.length || 0, "media files")
       } else {
         if (response.status === 401) {
+          console.log("📁 [MEDIA PAGE] 401 Unauthorized response")
           setAuthError("Authentication failed. Please log in again.")
           setTimeout(() => redirectToLogin(), 2000)
         } else {

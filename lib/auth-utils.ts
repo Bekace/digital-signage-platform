@@ -19,6 +19,40 @@ export interface TokenInfo {
 }
 
 /**
+ * Get token from multiple possible locations
+ */
+function getStoredToken(): string | null {
+  if (typeof window === "undefined") return null
+
+  // Try multiple possible storage locations
+  const possibleKeys = ["auth-token", "token", "authToken"]
+
+  for (const key of possibleKeys) {
+    const token = localStorage.getItem(key)
+    if (token) {
+      console.log(`🔐 [AUTH] Found token in localStorage["${key}"]`)
+      return token
+    }
+  }
+
+  // Try to get from cookies as fallback
+  try {
+    const cookies = document.cookie.split(";")
+    for (const cookie of cookies) {
+      const [name, value] = cookie.trim().split("=")
+      if (name === "auth-token" && value) {
+        console.log("🔐 [AUTH] Found token in cookies")
+        return decodeURIComponent(value)
+      }
+    }
+  } catch (error) {
+    console.log("🔐 [AUTH] Could not read cookies:", error)
+  }
+
+  return null
+}
+
+/**
  * Get authentication headers for API requests
  * Validates token before returning headers
  */
@@ -29,9 +63,9 @@ export function getAuthHeaders(): AuthHeaders | null {
       return null
     }
 
-    const token = localStorage.getItem("auth-token")
+    const token = getStoredToken()
     if (!token) {
-      console.log("🔐 [AUTH] No token found in localStorage")
+      console.log("🔐 [AUTH] No token found in any storage location")
       return null
     }
 
@@ -43,6 +77,7 @@ export function getAuthHeaders(): AuthHeaders | null {
       return null
     }
 
+    console.log("🔐 [AUTH] Valid token found, creating auth headers")
     return {
       Authorization: `Bearer ${token}`,
       "Content-Type": "application/json",
@@ -59,12 +94,19 @@ export function getAuthHeaders(): AuthHeaders | null {
  */
 export function isTokenValid(): boolean {
   try {
-    if (typeof window === "undefined") return false
+    if (typeof window === "undefined") {
+      console.log("🔐 [AUTH] Server-side context, cannot validate token")
+      return false
+    }
 
-    const token = localStorage.getItem("auth-token")
-    if (!token) return false
+    const token = getStoredToken()
+    if (!token) {
+      console.log("🔐 [AUTH] No token found for validation")
+      return false
+    }
 
     const tokenInfo = getTokenInfo(token)
+    console.log("🔐 [AUTH] Token validation result:", tokenInfo.valid, tokenInfo.error || "OK")
     return tokenInfo.valid
   } catch (error) {
     console.error("🔐 [AUTH] Error checking token validity:", error)
@@ -73,13 +115,21 @@ export function isTokenValid(): boolean {
 }
 
 /**
- * Clear invalid authentication token
+ * Clear invalid authentication token from all possible locations
  */
 export function clearAuthToken(): void {
   try {
     if (typeof window !== "undefined") {
-      localStorage.removeItem("auth-token")
-      console.log("🔐 [AUTH] Token cleared from localStorage")
+      // Clear from all possible localStorage keys
+      const possibleKeys = ["auth-token", "token", "authToken"]
+      for (const key of possibleKeys) {
+        localStorage.removeItem(key)
+      }
+
+      // Clear from cookies
+      document.cookie = "auth-token=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;"
+
+      console.log("🔐 [AUTH] Token cleared from all storage locations")
     }
   } catch (error) {
     console.error("🔐 [AUTH] Error clearing token:", error)
@@ -91,7 +141,7 @@ export function clearAuthToken(): void {
  */
 export function getTokenInfo(token?: string): TokenInfo {
   try {
-    const actualToken = token || (typeof window !== "undefined" ? localStorage.getItem("auth-token") : null)
+    const actualToken = token || getStoredToken()
 
     if (!actualToken) {
       return {
@@ -193,7 +243,11 @@ export function extractTokenFromRequest(request: NextRequest): string | null {
  */
 export function verifyToken(token: string): any {
   try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET!)
+    if (!process.env.JWT_SECRET) {
+      console.error("🔐 [AUTH] JWT_SECRET not available in client")
+      return null
+    }
+    const decoded = jwt.verify(token, process.env.JWT_SECRET)
     return decoded
   } catch (error) {
     console.error("🔐 [AUTH] Token verification failed:", error)
