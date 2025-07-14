@@ -29,7 +29,7 @@ export function getAuthHeaders(): AuthHeaders | null {
       return null
     }
 
-    const token = localStorage.getItem("token")
+    const token = localStorage.getItem("auth-token")
     if (!token) {
       console.log("🔐 [AUTH] No token found in localStorage")
       return null
@@ -61,7 +61,7 @@ export function isTokenValid(): boolean {
   try {
     if (typeof window === "undefined") return false
 
-    const token = localStorage.getItem("token")
+    const token = localStorage.getItem("auth-token")
     if (!token) return false
 
     const tokenInfo = getTokenInfo(token)
@@ -78,7 +78,7 @@ export function isTokenValid(): boolean {
 export function clearAuthToken(): void {
   try {
     if (typeof window !== "undefined") {
-      localStorage.removeItem("token")
+      localStorage.removeItem("auth-token")
       console.log("🔐 [AUTH] Token cleared from localStorage")
     }
   } catch (error) {
@@ -91,7 +91,7 @@ export function clearAuthToken(): void {
  */
 export function getTokenInfo(token?: string): TokenInfo {
   try {
-    const actualToken = token || (typeof window !== "undefined" ? localStorage.getItem("token") : null)
+    const actualToken = token || (typeof window !== "undefined" ? localStorage.getItem("auth-token") : null)
 
     if (!actualToken) {
       return {
@@ -184,6 +184,19 @@ export function extractTokenFromRequest(request: NextRequest): string | null {
     return authHeader.substring(7) // Remove 'Bearer ' prefix
   } catch (error) {
     console.error("🔐 [AUTH] Error extracting token from request:", error)
+    return null
+  }
+}
+
+/**
+ * Verify token using the same logic as the server
+ */
+export function verifyToken(token: string): any {
+  try {
+    const decoded = jwt.verify(token, process.env.JWT_SECRET!)
+    return decoded
+  } catch (error) {
+    console.error("🔐 [AUTH] Token verification failed:", error)
     return null
   }
 }
