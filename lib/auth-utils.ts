@@ -29,7 +29,7 @@ export function getAuthHeaders(): AuthHeaders | null {
       return null
     }
 
-    const token = localStorage.getItem("token")
+    const token = localStorage.getItem("auth-token")
     if (!token) {
       console.log("🔐 [AUTH] No token found in localStorage")
       return null

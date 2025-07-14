@@ -1,7 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { neon } from "@neondatabase/serverless"
 import { getCurrentUser } from "@/lib/auth"
-import { extractTokenFromRequest } from "@/lib/auth-utils"
+import { extractTokenFromRequest, verifyToken } from "@/lib/auth-utils"
 
 const sql = neon(process.env.DATABASE_URL!)
 
@@ -53,6 +53,24 @@ export async function GET(request: NextRequest) {
               cookieHeader: !!cookieHeader,
               urlParameter: !!request.url.includes("token="),
             },
+          },
+        },
+        { status: 401 },
+      )
+    }
+
+    const decoded = verifyToken(token)
+    if (!decoded) {
+      console.log("🔐 [AUTH] Token verification failed")
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Invalid or expired authentication token",
+          debug: {
+            authHeader: !!authHeader,
+            tokenPresent: !!token,
+            tokenLength: token.length,
+            tokenValid: false, // Indicate token is invalid
           },
         },
         { status: 401 },
