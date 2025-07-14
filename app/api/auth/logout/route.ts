@@ -3,17 +3,27 @@ import { cookies } from "next/headers"
 
 export async function POST() {
   try {
-    const cookieStore = await cookies()
+    console.log("🔐 [LOGOUT] Logout request received")
 
-    // Clear the auth token cookie
+    // Clear the auth cookie
+    const cookieStore = await cookies()
     cookieStore.delete("auth-token")
+
+    console.log("🔐 [LOGOUT] Auth cookie cleared")
 
     return NextResponse.json({
       success: true,
       message: "Logged out successfully",
     })
   } catch (error) {
-    console.error("Logout error:", error)
-    return NextResponse.json({ success: false, message: "Logout failed" }, { status: 500 })
+    console.error("🔐 [LOGOUT] Logout error:", error)
+    return NextResponse.json(
+      {
+        success: false,
+        message: "Logout failed",
+        details: error instanceof Error ? error.message : "Unknown error",
+      },
+      { status: 500 },
+    )
   }
 }

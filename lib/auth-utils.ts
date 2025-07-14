@@ -79,7 +79,8 @@ export function clearAuthToken(): void {
   try {
     if (typeof window !== "undefined") {
       localStorage.removeItem("token")
-      console.log("🔐 [AUTH] Token cleared from localStorage")
+      localStorage.removeItem("user")
+      console.log("🔐 [AUTH] Token and user data cleared from localStorage")
     }
   } catch (error) {
     console.error("🔐 [AUTH] Error clearing token:", error)
