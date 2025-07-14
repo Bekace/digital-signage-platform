@@ -13,6 +13,78 @@ export async function POST(request: NextRequest) {
       indexesCreated: [],
       triggersCreated: [],
       errors: [],
+      success: true,
+      operations: [],
+      timestamp: new Date().toISOString(),
+    }
+
+    // Check if playlists table exists and has all required columns
+    try {
+      const tableExists = await sql`
+        SELECT EXISTS (
+          SELECT FROM information_schema.tables 
+          WHERE table_schema = 'public' 
+          AND table_name = 'playlists'
+        )
+      `
+
+      if (tableExists[0].exists) {
+        // Get current columns
+        const currentColumns = await sql`
+          SELECT column_name 
+          FROM information_schema.columns 
+          WHERE table_name = 'playlists'
+          AND table_schema = 'public'
+        `
+
+        const columnNames = currentColumns.map((col) => col.column_name)
+        console.log("🔧 [DB INIT] Current playlist columns:", columnNames)
+
+        // Define required columns that might be missing
+        const requiredColumns = [
+          { name: "scale_image", type: "VARCHAR(20)", default: "'fit'" },
+          { name: "scale_video", type: "VARCHAR(20)", default: "'fit'" },
+          { name: "scale_document", type: "VARCHAR(20)", default: "'fit'" },
+          { name: "shuffle", type: "BOOLEAN", default: "false" },
+          { name: "default_transition", type: "VARCHAR(50)", default: "'fade'" },
+          { name: "transition_speed", type: "VARCHAR(20)", default: "'normal'" },
+          { name: "auto_advance", type: "BOOLEAN", default: "true" },
+          { name: "background_color", type: "VARCHAR(7)", default: "'#000000'" },
+          { name: "text_overlay", type: "BOOLEAN", default: "false" },
+        ]
+
+        // Add missing columns
+        for (const column of requiredColumns) {
+          if (!columnNames.includes(column.name)) {
+            try {
+              await sql.unsafe(`
+                ALTER TABLE playlists 
+                ADD COLUMN ${column.name} ${column.type} DEFAULT ${column.default}
+              `)
+              results.columnsAdded.push(`playlists.${column.name}`)
+              results.operations.push(`Added column: ${column.name}`)
+              console.log(`🔧 [DB INIT] Added column: ${column.name}`)
+            } catch (error) {
+              const errorMsg = `Failed to add column ${column.name}: ${error.message}`
+              results.errors.push(errorMsg)
+              results.operations.push(errorMsg)
+              console.error(`🔧 [DB INIT] ${errorMsg}`)
+            }
+          } else {
+            results.operations.push(`Column already exists: ${column.name}`)
+          }
+        }
+      } else {
+        results.errors.push("Playlists table does not exist")
+        results.success = false
+        results.operations.push("Playlists table does not exist")
+      }
+    } catch (error) {
+      const errorMsg = `Database initialization failed: ${error.message}`
+      results.errors.push(errorMsg)
+      results.success = false
+      results.operations.push(errorMsg)
+      console.error("🔧 [DB INIT]", errorMsg)
     }
 
     // Create users table if it doesn't exist
@@ -41,66 +113,10 @@ export async function POST(request: NextRequest) {
         )
       `
       results.tablesCreated.push("users")
+      results.operations.push("Created table: users")
     } catch (error) {
       results.errors.push({ table: "users", error: error.message })
-    }
-
-    // Create playlists table if it doesn't exist
-    try {
-      await sql`
-        CREATE TABLE IF NOT EXISTS playlists (
-          id SERIAL PRIMARY KEY,
-          name VARCHAR(255) NOT NULL,
-          description TEXT,
-          user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
-          status VARCHAR(50) DEFAULT 'draft',
-          loop_enabled BOOLEAN DEFAULT true,
-          schedule_enabled BOOLEAN DEFAULT false,
-          start_time TIME,
-          end_time TIME,
-          selected_days VARCHAR(20),
-          scale_image VARCHAR(20) DEFAULT 'fit',
-          scale_video VARCHAR(20) DEFAULT 'fit',
-          scale_document VARCHAR(20) DEFAULT 'fit',
-          shuffle BOOLEAN DEFAULT false,
-          default_transition VARCHAR(50) DEFAULT 'fade',
-          transition_speed VARCHAR(20) DEFAULT 'normal',
-          auto_advance BOOLEAN DEFAULT true,
-          background_color VARCHAR(7) DEFAULT '#000000',
-          text_overlay BOOLEAN DEFAULT false,
-          deleted_at TIMESTAMP,
-          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )
-      `
-      results.tablesCreated.push("playlists")
-    } catch (error) {
-      results.errors.push({ table: "playlists", error: error.message })
-    }
-
-    // Add missing columns to existing playlists table
-    const missingColumns = [
-      { name: "scale_image", type: "VARCHAR(20) DEFAULT 'fit'" },
-      { name: "scale_video", type: "VARCHAR(20) DEFAULT 'fit'" },
-      { name: "scale_document", type: "VARCHAR(20) DEFAULT 'fit'" },
-      { name: "shuffle", type: "BOOLEAN DEFAULT false" },
-      { name: "default_transition", type: "VARCHAR(50) DEFAULT 'fade'" },
-      { name: "transition_speed", type: "VARCHAR(20) DEFAULT 'normal'" },
-      { name: "auto_advance", type: "BOOLEAN DEFAULT true" },
-      { name: "background_color", type: "VARCHAR(7) DEFAULT '#000000'" },
-      { name: "text_overlay", type: "BOOLEAN DEFAULT false" },
-    ]
-
-    for (const column of missingColumns) {
-      try {
-        await sql.unsafe(`
-          ALTER TABLE playlists 
-          ADD COLUMN IF NOT EXISTS ${column.name} ${column.type}
-        `)
-        results.columnsAdded.push(`playlists.${column.name}`)
-      } catch (error) {
-        results.errors.push({ column: `playlists.${column.name}`, error: error.message })
-      }
+      results.operations.push(`Failed to create table users: ${error.message}`)
     }
 
     // Create media_files table if it doesn't exist
@@ -130,8 +146,10 @@ export async function POST(request: NextRequest) {
         )
       `
       results.tablesCreated.push("media_files")
+      results.operations.push("Created table: media_files")
     } catch (error) {
       results.errors.push({ table: "media_files", error: error.message })
+      results.operations.push(`Failed to create table media_files: ${error.message}`)
     }
 
     // Create playlist_items table if it doesn't exist
@@ -149,8 +167,10 @@ export async function POST(request: NextRequest) {
         )
       `
       results.tablesCreated.push("playlist_items")
+      results.operations.push("Created table: playlist_items")
     } catch (error) {
       results.errors.push({ table: "playlist_items", error: error.message })
+      results.operations.push(`Failed to create table playlist_items: ${error.message}`)
     }
 
     // Create devices table if it doesn't exist
@@ -171,8 +191,10 @@ export async function POST(request: NextRequest) {
         )
       `
       results.tablesCreated.push("devices")
+      results.operations.push("Created table: devices")
     } catch (error) {
       results.errors.push({ table: "devices", error: error.message })
+      results.operations.push(`Failed to create table devices: ${error.message}`)
     }
 
     // Create device_pairing_codes table if it doesn't exist
@@ -190,8 +212,10 @@ export async function POST(request: NextRequest) {
         )
       `
       results.tablesCreated.push("device_pairing_codes")
+      results.operations.push("Created table: device_pairing_codes")
     } catch (error) {
       results.errors.push({ table: "device_pairing_codes", error: error.message })
+      results.operations.push(`Failed to create table device_pairing_codes: ${error.message}`)
     }
 
     // Create indexes for better performance
@@ -216,8 +240,10 @@ export async function POST(request: NextRequest) {
       try {
         await sql.unsafe(indexQuery)
         results.indexesCreated.push(indexQuery.split(" ON ")[1])
+        results.operations.push(`Created index: ${indexQuery.split(" ON ")[1]}`)
       } catch (error) {
         results.errors.push({ index: indexQuery, error: error.message })
+        results.operations.push(`Failed to create index ${indexQuery.split(" ON ")[1]}: ${error.message}`)
       }
     }
 
@@ -247,24 +273,22 @@ export async function POST(request: NextRequest) {
           const tableName = triggerQuery.match(/ON (\w+)/)?.[1]
           if (tableName) {
             results.triggersCreated.push(`${tableName}_updated_at`)
+            results.operations.push(`Created trigger: ${tableName}_updated_at`)
           }
         } catch (error) {
           results.errors.push({ trigger: triggerQuery, error: error.message })
+          results.operations.push(`Failed to create trigger ${triggerQuery}: ${error.message}`)
         }
       }
     } catch (error) {
       results.errors.push({ function: "update_updated_at_column", error: error.message })
+      results.operations.push(`Failed to create function update_updated_at_column: ${error.message}`)
     }
 
     console.log("🔧 [DB INIT] Database initialization completed")
     console.log("🔧 [DB INIT] Results:", results)
 
-    return NextResponse.json({
-      success: true,
-      message: "Database initialization completed",
-      results,
-      timestamp: new Date().toISOString(),
-    })
+    return NextResponse.json(results)
   } catch (error) {
     console.error("🔧 [DB INIT] Database initialization failed:", error)
 
