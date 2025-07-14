@@ -1,5 +1,8 @@
 import jwt from "jsonwebtoken"
 import type { NextRequest } from "next/server"
+import { cookies } from 'next/headers'
+import { jwtVerify } from 'jose'
+import { type UserInfo } from './auth'
 
 export interface AuthHeaders {
   Authorization: string
@@ -22,7 +25,7 @@ export interface TokenInfo {
  * Get authentication headers for API requests
  * Validates token before returning headers
  */
-export function getAuthHeaders(): AuthHeaders | null {
+export async function getAuthHeaders(): Promise<AuthHeaders | null> {
   try {
     if (typeof window === "undefined") {
       console.log("🔐 [AUTH] Server-side context, no token available")
@@ -36,9 +39,9 @@ export function getAuthHeaders(): AuthHeaders | null {
     }
 
     // Validate token format and expiration
-    const tokenInfo = getTokenInfo(token)
-    if (!tokenInfo.valid) {
-      console.log("🔐 [AUTH] Invalid token detected:", tokenInfo.error)
+    const userInfo = await verifyToken(token)
+    if (!userInfo) {
+      console.log("🔐 [AUTH] Invalid token detected")
       clearAuthToken()
       return null
     }
@@ -57,15 +60,15 @@ export function getAuthHeaders(): AuthHeaders | null {
 /**
  * Check if the current token is valid
  */
-export function isTokenValid(): boolean {
+export async function isTokenValid(): Promise<boolean> {
   try {
     if (typeof window === "undefined") return false
 
     const token = localStorage.getItem("token")
     if (!token) return false
 
-    const tokenInfo = getTokenInfo(token)
-    return tokenInfo.valid
+    const userInfo = await verifyToken(token)
+    return !!userInfo
   } catch (error) {
     console.error("🔐 [AUTH] Error checking token validity:", error)
     return false
@@ -175,7 +178,7 @@ export function redirectToLogin(): void {
 /**
  * Extract token from request headers (server-side)
  */
-export function extractTokenFromRequest(request: NextRequest): string | null {
+export function extractTokenFromRequestServer(request: NextRequest): string | null {
   try {
     const authHeader = request.headers.get("authorization")
     if (!authHeader || !authHeader.startsWith("Bearer ")) {
@@ -184,6 +187,44 @@ export function extractTokenFromRequest(request: NextRequest): string | null {
     return authHeader.substring(7) // Remove 'Bearer ' prefix
   } catch (error) {
     console.error("🔐 [AUTH] Error extracting token from request:", error)
+    return null
+  }
+}
+
+export const extractTokenFromRequestClient = () => {
+  const cookieStore = cookies()
+  const token = cookieStore.get('token')?.value
+  return token
+}
+
+export async function verifyToken(token: string | undefined): Promise<UserInfo | null> {
+  if (!token) {
+    console.log('No token provided')
+    return null
+  }
+
+  try {
+    const { payload } = await jwtVerify(
+      token,
+      new TextEncoder().encode(process.env.JWT_SECRET)
+    )
+
+    // Type guard to ensure payload has the necessary properties
+    if (typeof payload?.id === 'number' && typeof payload?.email === 'string') {
+      return {
+        id: payload.id,
+        email: payload.email,
+        firstName: (payload.firstName as string) || '',
+        lastName: (payload.lastName as string) || '',
+        companyName: (payload.companyName as string) || '',
+        isAdmin: !!payload.isAdmin,
+      }
+    } else {
+      console.error('Invalid payload:', payload)
+      return null
+    }
+  } catch (error) {
+    console.error('Token verification failed:', error)
     return null
   }
 }

@@ -2,21 +2,8 @@
 
 import { useState, useEffect } from "react"
 import Image from "next/image"
-import {
-  Upload,
-  Search,
-  Filter,
-  MoreHorizontal,
-  Download,
-  Trash2,
-  Eye,
-  Video,
-  FileText,
-  Loader2,
-  ExternalLink,
-  AlertTriangle,
-} from "lucide-react"
-
+import { Upload, Search, Filter, MoreHorizontal, Download, Trash2, Eye, Video, FileText, Loader2, ExternalLink, AlertTriangle } from 'lucide-react'
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -28,17 +15,7 @@ import { UploadMediaDialog } from "@/components/upload-media-dialog"
 import { UsageDashboard } from "@/components/usage-dashboard"
 import { MediaPreviewModal } from "@/components/media-preview-modal"
 import { MediaThumbnail } from "@/components/media-thumbnail"
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog"
-import { GoogleSlidesDialog } from "@/components/google-slides-dialog"
+import { GoogleSlidesDialog } from "@/components/google-slides-dialog" // Import GoogleSlidesDialog
 import { getAuthHeaders, isTokenValid, redirectToLogin } from "@/lib/auth-utils"
 
 interface MediaFile {
