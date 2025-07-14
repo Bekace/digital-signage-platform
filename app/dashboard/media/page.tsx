@@ -14,6 +14,7 @@ import {
   FileText,
   Loader2,
   ExternalLink,
+  AlertTriangle,
 } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
@@ -21,6 +22,7 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Badge } from "@/components/ui/badge"
+import { Alert, AlertDescription } from "@/components/ui/alert"
 import { DashboardLayout } from "@/components/dashboard-layout"
 import { UploadMediaDialog } from "@/components/upload-media-dialog"
 import { UsageDashboard } from "@/components/usage-dashboard"
@@ -37,6 +39,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
 import { GoogleSlidesDialog } from "@/components/google-slides-dialog"
+import { getAuthHeaders, isTokenValid, redirectToLogin } from "@/lib/auth-utils"
 
 interface MediaFile {
   id: number
@@ -67,22 +70,55 @@ export default function MediaPage() {
   const [deleting, setDeleting] = useState(false)
   const [refreshTrigger, setRefreshTrigger] = useState(0)
   const [showGoogleSlidesDialog, setShowGoogleSlidesDialog] = useState(false)
+  const [authError, setAuthError] = useState<string | null>(null)
 
   const loadMediaFiles = async () => {
     try {
       setLoading(true)
-      const response = await fetch("/api/media")
-      const data = await response.json()
+      setError(null)
+      setAuthError(null)
 
-      if (response.ok) {
-        setMediaFiles(data.files || [])
+      // Check if token is valid before making request
+      if (!isTokenValid()) {
+        console.log("📁 [MEDIA PAGE] Invalid token detected, redirecting to login")
+        setAuthError("Your session has expired. Please log in again.")
+        setTimeout(() => redirectToLogin(), 2000)
+        return
+      }
+
+      const authHeaders = getAuthHeaders()
+      if (!authHeaders) {
+        console.log("📁 [MEDIA PAGE] No auth headers available")
+        setAuthError("Authentication required. Redirecting to login...")
+        setTimeout(() => redirectToLogin(), 2000)
+        return
+      }
+
+      console.log("📁 [MEDIA PAGE] Making API request with auth headers")
+      const response = await fetch("/api/media", {
+        method: "GET",
+        headers: authHeaders,
+      })
+
+      const data = await response.json()
+      console.log("📁 [MEDIA PAGE] API response:", response.status, data)
+
+      if (response.ok && data.success) {
+        setMediaFiles(data.files || data.media || [])
         setError(null)
+        console.log("📁 [MEDIA PAGE] Loaded", data.files?.length || 0, "media files")
       } else {
-        setError(data.error || "Failed to load media files")
+        if (response.status === 401) {
+          setAuthError("Authentication failed. Please log in again.")
+          setTimeout(() => redirectToLogin(), 2000)
+        } else {
+          setError(data.error || `Failed to load media files (${response.status})`)
+          console.error("📁 [MEDIA PAGE] API error:", data)
+        }
       }
     } catch (err) {
-      setError("Failed to load media files")
-      console.error("Error loading media files:", err)
+      console.error("📁 [MEDIA PAGE] Network error:", err)
+      setError("Network error. Please check your connection and try again.")
     } finally {
       setLoading(false)
     }
@@ -123,24 +159,38 @@ export default function MediaPage() {
 
     try {
       setDeleting(true)
+
+      const authHeaders = getAuthHeaders()
+      if (!authHeaders) {
+        setAuthError("Authentication required. Please log in again.")
+        setTimeout(() => redirectToLogin(), 2000)
+        return
+      }
+
       const response = await fetch(`/api/media/${deleteFile.id}`, {
         method: "DELETE",
+        headers: authHeaders,
       })
 
       const data = await response.json()
 
-      if (response.ok) {
+      if (response.ok && data.success) {
         setMediaFiles((prev) => prev.filter((f) => f.id !== deleteFile.id))
         setShowDeleteDialog(false)
         setDeleteFile(null)
         triggerRefresh() // This should refresh usage data
-        console.log(data.message)
+        console.log("📁 [MEDIA PAGE] File deleted:", data.message)
       } else {
-        setError(data.error || "Failed to delete file")
+        if (response.status === 401) {
+          setAuthError("Authentication failed. Please log in again.")
+          setTimeout(() => redirectToLogin(), 2000)
+        } else {
+          setError(data.error || "Failed to delete file")
+        }
       }
     } catch (err) {
       setError("Failed to delete file")
-      console.error("Error deleting file:", err)
+      console.error("📁 [MEDIA PAGE] Error deleting file:", err)
     } finally {
       setDeleting(false)
     }
@@ -271,6 +321,14 @@ export default function MediaPage() {
           </div>
         </div>
 
+        {/* Authentication Error Alert */}
+        {authError && (
+          <Alert variant="destructive">
+            <AlertTriangle className="h-4 w-4" />
+            <AlertDescription>{authError}</AlertDescription>
+          </Alert>
+        )}
+
         {/* Search and Filter */}
         <div className="flex space-x-4">
           <div className="relative flex-1">
@@ -300,17 +358,20 @@ export default function MediaPage() {
         )}
 
         {/* Error State */}
-        {error && (
+        {error && !authError && (
           <div className="text-center py-12">
-            <p className="text-red-600 mb-4">{error}</p>
-            <Button onClick={loadMediaFiles} variant="outline">
+            <Alert variant="destructive" className="max-w-md mx-auto">
+              <AlertTriangle className="h-4 w-4" />
+              <AlertDescription>{error}</AlertDescription>
+            </Alert>
+            <Button onClick={loadMediaFiles} variant="outline" className="mt-4 bg-transparent">
               Try Again
             </Button>
           </div>
         )}
 
         {/* Empty State */}
-        {!loading && !error && filteredFiles.length === 0 && (
+        {!loading && !error && !authError && filteredFiles.length === 0 && (
           <div className="text-center py-12">
             <Upload className="h-12 w-12 mx-auto text-gray-400 mb-4" />
             <h3 className="text-lg font-medium text-gray-900 mb-2">No media files yet</h3>
@@ -323,7 +384,7 @@ export default function MediaPage() {
         )}
 
         {/* Media Grid */}
-        {!loading && !error && filteredFiles.length > 0 && (
+        {!loading && !error && !authError && filteredFiles.length > 0 && (
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
             {filteredFiles.map((file) => (
               <Card key={file.id} className="group hover:shadow-md transition-shadow">

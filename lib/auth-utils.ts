@@ -1,141 +1,189 @@
+import jwt from "jsonwebtoken"
+import type { NextRequest } from "next/server"
+
 export interface AuthHeaders {
-  Authorization?: string
-  "Content-Type"?: string
+  Authorization: string
+  "Content-Type": string
 }
 
-export function getAuthHeaders(): AuthHeaders {
-  const token = localStorage.getItem("token")
-
-  if (!token) {
-    console.warn("🔐 [AUTH UTILS] No token found in localStorage")
-    return {}
-  }
-
-  // Validate token format (JWT should have 3 parts)
-  const tokenParts = token.split(".")
-  if (tokenParts.length !== 3) {
-    console.error("🔐 [AUTH UTILS] Invalid token format - expected 3 parts, got", tokenParts.length)
-    console.error("🔐 [AUTH UTILS] Token preview:", token.substring(0, 50) + "...")
-
-    // Clear invalid token
-    localStorage.removeItem("token")
-
-    // Redirect to login
-    if (typeof window !== "undefined") {
-      window.location.href = "/login"
-    }
-
-    return {}
-  }
-
-  // Validate token expiration
-  try {
-    const payload = JSON.parse(atob(tokenParts[1]))
-    const isExpired = Date.now() > payload.exp * 1000
-
-    if (isExpired) {
-      console.error("🔐 [AUTH UTILS] Token is expired")
-      localStorage.removeItem("token")
-
-      if (typeof window !== "undefined") {
-        window.location.href = "/login"
-      }
-
-      return {}
-    }
-
-    console.log("🔐 [AUTH UTILS] Valid token found for user:", payload.userId)
-  } catch (error) {
-    console.error("🔐 [AUTH UTILS] Error parsing token payload:", error)
-    localStorage.removeItem("token")
-
-    if (typeof window !== "undefined") {
-      window.location.href = "/login"
-    }
-
-    return {}
-  }
-
-  return {
-    Authorization: `Bearer ${token}`,
-    "Content-Type": "application/json",
-  }
-}
-
-export function clearAuthToken(): void {
-  localStorage.removeItem("token")
-  console.log("🔐 [AUTH UTILS] Token cleared from localStorage")
-}
-
-export function isTokenValid(): boolean {
-  const token = localStorage.getItem("token")
-
-  if (!token) {
-    return false
-  }
-
-  // Check format
-  const tokenParts = token.split(".")
-  if (tokenParts.length !== 3) {
-    return false
-  }
-
-  // Check expiration
-  try {
-    const payload = JSON.parse(atob(tokenParts[1]))
-    const isExpired = Date.now() > payload.exp * 1000
-    return !isExpired
-  } catch (error) {
-    return false
-  }
-}
-
-export function getTokenInfo(): {
-  exists: boolean
+export interface TokenInfo {
   valid: boolean
-  parts: number
+  exists: boolean
   length: number
+  parts: number
   userId?: number
   email?: string
-  expiresAt?: string
-  isExpired?: boolean
-} {
-  const token = localStorage.getItem("token")
+  expires?: number
+  timeUntilExpiry?: string
+  error?: string
+}
 
-  if (!token) {
+/**
+ * Get authentication headers for API requests
+ * Validates token before returning headers
+ */
+export function getAuthHeaders(): AuthHeaders | null {
+  try {
+    if (typeof window === "undefined") {
+      console.log("🔐 [AUTH] Server-side context, no token available")
+      return null
+    }
+
+    const token = localStorage.getItem("token")
+    if (!token) {
+      console.log("🔐 [AUTH] No token found in localStorage")
+      return null
+    }
+
+    // Validate token format and expiration
+    const tokenInfo = getTokenInfo(token)
+    if (!tokenInfo.valid) {
+      console.log("🔐 [AUTH] Invalid token detected:", tokenInfo.error)
+      clearAuthToken()
+      return null
+    }
+
     return {
-      exists: false,
-      valid: false,
-      parts: 0,
-      length: 0,
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
     }
+  } catch (error) {
+    console.error("🔐 [AUTH] Error getting auth headers:", error)
+    clearAuthToken()
+    return null
   }
+}
 
-  const tokenParts = token.split(".")
-  const info = {
-    exists: true,
-    valid: false,
-    parts: tokenParts.length,
-    length: token.length,
+/**
+ * Check if the current token is valid
+ */
+export function isTokenValid(): boolean {
+  try {
+    if (typeof window === "undefined") return false
+
+    const token = localStorage.getItem("token")
+    if (!token) return false
+
+    const tokenInfo = getTokenInfo(token)
+    return tokenInfo.valid
+  } catch (error) {
+    console.error("🔐 [AUTH] Error checking token validity:", error)
+    return false
   }
+}
 
-  if (tokenParts.length === 3) {
-    try {
-      const payload = JSON.parse(atob(tokenParts[1]))
-      const isExpired = Date.now() > payload.exp * 1000
+/**
+ * Clear invalid authentication token
+ */
+export function clearAuthToken(): void {
+  try {
+    if (typeof window !== "undefined") {
+      localStorage.removeItem("token")
+      console.log("🔐 [AUTH] Token cleared from localStorage")
+    }
+  } catch (error) {
+    console.error("🔐 [AUTH] Error clearing token:", error)
+  }
+}
 
+/**
+ * Get detailed information about a token
+ */
+export function getTokenInfo(token?: string): TokenInfo {
+  try {
+    const actualToken = token || (typeof window !== "undefined" ? localStorage.getItem("token") : null)
+
+    if (!actualToken) {
       return {
-        ...info,
-        valid: !isExpired,
-        userId: payload.userId,
-        email: payload.email,
-        expiresAt: new Date(payload.exp * 1000).toISOString(),
-        isExpired,
+        valid: false,
+        exists: false,
+        length: 0,
+        parts: 0,
+        error: "No token provided",
       }
-    } catch (error) {
-      console.error("Error parsing token:", error)
+    }
+
+    const parts = actualToken.split(".")
+    const info: TokenInfo = {
+      valid: false,
+      exists: true,
+      length: actualToken.length,
+      parts: parts.length,
+    }
+
+    // Check if token has correct JWT format (3 parts)
+    if (parts.length !== 3) {
+      info.error = `Token format is invalid (${parts.length} parts instead of 3)`
+      return info
+    }
+
+    // Try to decode the token
+    try {
+      const decoded = jwt.decode(actualToken) as any
+      if (decoded && typeof decoded === "object") {
+        info.userId = decoded.userId
+        info.email = decoded.email
+        info.expires = decoded.exp
+
+        // Check if token is expired
+        const now = Math.floor(Date.now() / 1000)
+        if (decoded.exp && decoded.exp < now) {
+          info.error = "Token is expired"
+          return info
+        }
+
+        // Calculate time until expiry
+        if (decoded.exp) {
+          const timeLeft = decoded.exp - now
+          if (timeLeft > 0) {
+            const hours = Math.floor(timeLeft / 3600)
+            const minutes = Math.floor((timeLeft % 3600) / 60)
+            info.timeUntilExpiry = `${hours}h ${minutes}m`
+          }
+        }
+
+        info.valid = true
+      } else {
+        info.error = "Token payload is invalid"
+      }
+    } catch (decodeError) {
+      info.error = `Token decode failed: ${decodeError instanceof Error ? decodeError.message : "Unknown error"}`
+    }
+
+    return info
+  } catch (error) {
+    return {
+      valid: false,
+      exists: false,
+      length: 0,
+      parts: 0,
+      error: `Analysis failed: ${error instanceof Error ? error.message : "Unknown error"}`,
     }
   }
+}
 
-  return info
+/**
+ * Redirect to login page (client-side only)
+ */
+export function redirectToLogin(): void {
+  if (typeof window !== "undefined") {
+    clearAuthToken()
+    window.location.href = "/login"
+  }
+}
+
+/**
+ * Extract token from request headers (server-side)
+ */
+export function extractTokenFromRequest(request: NextRequest): string | null {
+  try {
+    const authHeader = request.headers.get("authorization")
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+      return null
+    }
+    return authHeader.substring(7) // Remove 'Bearer ' prefix
+  } catch (error) {
+    console.error("🔐 [AUTH] Error extracting token from request:", error)
+    return null
+  }
 }
