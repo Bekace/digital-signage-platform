@@ -39,7 +39,6 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
 import { GoogleSlidesDialog } from "@/components/google-slides-dialog"
-import { getAuthHeaders, isTokenValid, redirectToLogin, getTokenInfo } from "@/lib/auth-utils"
 
 interface MediaFile {
   id: number
@@ -70,45 +69,16 @@ export default function MediaPage() {
   const [deleting, setDeleting] = useState(false)
   const [refreshTrigger, setRefreshTrigger] = useState(0)
   const [showGoogleSlidesDialog, setShowGoogleSlidesDialog] = useState(false)
-  const [authError, setAuthError] = useState<string | null>(null)
 
   const loadMediaFiles = async () => {
     try {
       setLoading(true)
       setError(null)
-      setAuthError(null)
 
-      console.log("📁 [MEDIA PAGE] Starting to load media files...")
+      console.log("📁 [MEDIA PAGE] Fetching media files...")
 
-      // Debug token information
-      const tokenInfo = getTokenInfo()
-      console.log("📁 [MEDIA PAGE] Token info:", tokenInfo)
-
-      // Check if token is valid before making request
-      const tokenValid = isTokenValid()
-      console.log("📁 [MEDIA PAGE] Token valid:", tokenValid)
-
-      if (!tokenValid) {
-        console.log("📁 [MEDIA PAGE] Invalid token detected, redirecting to login")
-        setAuthError("Your session has expired. Please log in again.")
-        setTimeout(() => redirectToLogin(), 2000)
-        return
-      }
-
-      const authHeaders = getAuthHeaders()
-      console.log("📁 [MEDIA PAGE] Auth headers:", authHeaders ? "Available" : "Not available")
-
-      if (!authHeaders) {
-        console.log("📁 [MEDIA PAGE] No auth headers available")
-        setAuthError("Authentication required. Redirecting to login...")
-        setTimeout(() => redirectToLogin(), 2000)
-        return
-      }
-
-      console.log("📁 [MEDIA PAGE] Making API request with auth headers")
       const response = await fetch("/api/media", {
-        method: "GET",
-        headers: authHeaders,
+        credentials: "include",
       })
 
       const data = await response.json()
@@ -120,9 +90,8 @@ export default function MediaPage() {
         console.log("📁 [MEDIA PAGE] Loaded", data.files?.length || 0, "media files")
       } else {
         if (response.status === 401) {
-          console.log("📁 [MEDIA PAGE] 401 Unauthorized response")
-          setAuthError("Authentication failed. Please log in again.")
-          setTimeout(() => redirectToLogin(), 2000)
+          console.log("📁 [MEDIA PAGE] 401 Unauthorized - redirecting to login")
+          window.location.href = "/login"
         } else {
           setError(data.error || `Failed to load media files (${response.status})`)
           console.error("📁 [MEDIA PAGE] API error:", data)
@@ -172,16 +141,9 @@ export default function MediaPage() {
     try {
       setDeleting(true)
 
-      const authHeaders = getAuthHeaders()
-      if (!authHeaders) {
-        setAuthError("Authentication required. Please log in again.")
-        setTimeout(() => redirectToLogin(), 2000)
-        return
-      }
-
       const response = await fetch(`/api/media/${deleteFile.id}`, {
         method: "DELETE",
-        headers: authHeaders,
+        credentials: "include",
       })
 
       const data = await response.json()
@@ -194,8 +156,7 @@ export default function MediaPage() {
         console.log("📁 [MEDIA PAGE] File deleted:", data.message)
       } else {
         if (response.status === 401) {
-          setAuthError("Authentication failed. Please log in again.")
-          setTimeout(() => redirectToLogin(), 2000)
+          window.location.href = "/login"
         } else {
           setError(data.error || "Failed to delete file")
         }
@@ -333,14 +294,6 @@ export default function MediaPage() {
           </div>
         </div>
 
-        {/* Authentication Error Alert */}
-        {authError && (
-          <Alert variant="destructive">
-            <AlertTriangle className="h-4 w-4" />
-            <AlertDescription>{authError}</AlertDescription>
-          </Alert>
-        )}
-
         {/* Search and Filter */}
         <div className="flex space-x-4">
           <div className="relative flex-1">
@@ -370,7 +323,7 @@ export default function MediaPage() {
         )}
 
         {/* Error State */}
-        {error && !authError && (
+        {error && (
           <div className="text-center py-12">
             <Alert variant="destructive" className="max-w-md mx-auto">
               <AlertTriangle className="h-4 w-4" />
@@ -383,7 +336,7 @@ export default function MediaPage() {
         )}
 
         {/* Empty State */}
-        {!loading && !error && !authError && filteredFiles.length === 0 && (
+        {!loading && !error && filteredFiles.length === 0 && (
           <div className="text-center py-12">
             <Upload className="h-12 w-12 mx-auto text-gray-400 mb-4" />
             <h3 className="text-lg font-medium text-gray-900 mb-2">No media files yet</h3>
@@ -396,7 +349,7 @@ export default function MediaPage() {
         )}
 
         {/* Media Grid */}
-        {!loading && !error && !authError && filteredFiles.length > 0 && (
+        {!loading && !error && filteredFiles.length > 0 && (
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
             {filteredFiles.map((file) => (
               <Card key={file.id} className="group hover:shadow-md transition-shadow">
