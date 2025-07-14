@@ -8,184 +8,259 @@ const sql = neon(process.env.DATABASE_URL!)
 
 export async function GET(request: NextRequest) {
   try {
-    console.log("🔍 [DEBUG AUTH] Starting comprehensive auth debug")
+    console.log("🔍 [DEBUG AUTH] Starting comprehensive auth debugging...")
 
-    const debug: any = {
+    const debugInfo: any = {
       timestamp: new Date().toISOString(),
       request: {
         url: request.url,
         method: request.method,
-        headers: Object.fromEntries(request.headers.entries()),
+        headers: {},
+        cookies: {},
       },
-      auth: {},
-      database: {},
+      authentication: {
+        headerToken: null,
+        cookieToken: null,
+        tokenValid: false,
+        userFound: false,
+        userId: null,
+        userEmail: null,
+      },
+      database: {
+        connected: false,
+        tablesExist: {},
+        userCount: 0,
+        mediaCount: 0,
+        playlistCount: 0,
+      },
       errors: [],
     }
 
-    // 1. Check Authorization header
+    // 1. Analyze request headers
     const authHeader = request.headers.get("authorization")
-    debug.auth.authHeader = {
-      present: !!authHeader,
-      format: authHeader?.startsWith("Bearer ") ? "correct" : "incorrect",
-      value: authHeader ? authHeader.substring(0, 20) + "..." : null,
+    const userAgent = request.headers.get("user-agent")
+    const referer = request.headers.get("referer")
+
+    debugInfo.request.headers = {
+      authorization: authHeader ? `${authHeader.substring(0, 20)}...` : null,
+      userAgent: userAgent?.substring(0, 100),
+      referer,
+      contentType: request.headers.get("content-type"),
     }
 
-    // 2. Extract token
-    const token = extractTokenFromRequest(request)
-    debug.auth.tokenExtraction = {
-      success: !!token,
-      length: token?.length || 0,
-      preview: token ? token.substring(0, 50) + "..." : null,
+    // 2. Analyze cookies
+    const cookieHeader = request.headers.get("cookie")
+    if (cookieHeader) {
+      const cookies = cookieHeader.split(";").reduce((acc: any, cookie) => {
+        const [name, value] = cookie.trim().split("=")
+        acc[name] = value
+        return acc
+      }, {})
+      debugInfo.request.cookies = cookies
     }
 
-    // 3. Verify token if present
-    if (token) {
-      try {
-        const decoded = jwt.verify(token, process.env.JWT_SECRET!) as any
-        debug.auth.tokenVerification = {
-          valid: true,
-          userId: decoded.userId,
-          email: decoded.email,
-          expires: decoded.exp,
-          isExpired: decoded.exp < Math.floor(Date.now() / 1000),
+    // 3. Extract and analyze tokens
+    try {
+      const headerToken = extractTokenFromRequest(request)
+      debugInfo.authentication.headerToken = headerToken ? `${headerToken.substring(0, 20)}...` : null
+
+      const cookieToken = request.cookies.get("auth-token")?.value
+      debugInfo.authentication.cookieToken = cookieToken ? `${cookieToken.substring(0, 20)}...` : null
+
+      // Validate token
+      const tokenToUse = headerToken || cookieToken
+      if (tokenToUse) {
+        try {
+          const decoded = jwt.verify(tokenToUse, process.env.JWT_SECRET!) as any
+          debugInfo.authentication.tokenValid = true
+          debugInfo.authentication.userId = decoded.userId
+          debugInfo.authentication.userEmail = decoded.email
+          debugInfo.authentication.tokenExpires = decoded.exp
+          debugInfo.authentication.tokenIssuedAt = decoded.iat
+        } catch (tokenError) {
+          debugInfo.authentication.tokenError =
+            tokenError instanceof Error ? tokenError.message : "Token validation failed"
+          debugInfo.errors.push(`Token validation: ${debugInfo.authentication.tokenError}`)
         }
-      } catch (tokenError) {
-        debug.auth.tokenVerification = {
-          valid: false,
-          error: tokenError instanceof Error ? tokenError.message : "Unknown error",
-        }
-        debug.errors.push(`Token verification failed: ${tokenError}`)
+      } else {
+        debugInfo.errors.push("No authentication token found in headers or cookies")
       }
+    } catch (error) {
+      debugInfo.errors.push(`Token extraction error: ${error instanceof Error ? error.message : "Unknown error"}`)
     }
 
     // 4. Test getCurrentUser function
     try {
       const user = await getCurrentUser(request)
-      debug.auth.getCurrentUser = {
-        success: !!user,
-        user: user
-          ? {
-              id: user.id,
-              email: user.email,
-              firstName: user.first_name,
-              lastName: user.last_name,
-              isAdmin: user.is_admin,
-            }
-          : null,
+      if (user) {
+        debugInfo.authentication.userFound = true
+        debugInfo.authentication.currentUser = {
+          id: user.id,
+          email: user.email,
+          firstName: user.first_name,
+          lastName: user.last_name,
+          company: user.company,
+          plan: user.plan,
+          isAdmin: user.is_admin,
+        }
+      } else {
+        debugInfo.errors.push("getCurrentUser returned null")
       }
-    } catch (userError) {
-      debug.auth.getCurrentUser = {
+    } catch (error) {
+      debugInfo.errors.push(`getCurrentUser error: ${error instanceof Error ? error.message : "Unknown error"}`)
+    }
+
+    // 5. Test database connectivity and table structure
+    try {
+      debugInfo.database.connected = true
+
+      // Check if tables exist and get counts
+      const tables = ["users", "media_files", "playlists", "playlist_items", "devices"]
+
+      for (const table of tables) {
+        try {
+          const result = await sql`
+            SELECT COUNT(*) as count 
+            FROM information_schema.tables 
+            WHERE table_name = ${table}
+          `
+          debugInfo.database.tablesExist[table] = Number(result[0].count) > 0
+        } catch (error) {
+          debugInfo.database.tablesExist[table] = false
+          debugInfo.errors.push(`Table check for ${table}: ${error instanceof Error ? error.message : "Unknown error"}`)
+        }
+      }
+
+      // Get record counts
+      try {
+        const userCount = await sql`SELECT COUNT(*) as count FROM users`
+        debugInfo.database.userCount = Number(userCount[0].count)
+      } catch (error) {
+        debugInfo.errors.push(`User count error: ${error instanceof Error ? error.message : "Unknown error"}`)
+      }
+
+      try {
+        const mediaCount = await sql`SELECT COUNT(*) as count FROM media_files WHERE deleted_at IS NULL`
+        debugInfo.database.mediaCount = Number(mediaCount[0].count)
+      } catch (error) {
+        debugInfo.errors.push(`Media count error: ${error instanceof Error ? error.message : "Unknown error"}`)
+      }
+
+      try {
+        const playlistCount = await sql`SELECT COUNT(*) as count FROM playlists WHERE deleted_at IS NULL`
+        debugInfo.database.playlistCount = Number(playlistCount[0].count)
+      } catch (error) {
+        debugInfo.errors.push(`Playlist count error: ${error instanceof Error ? error.message : "Unknown error"}`)
+      }
+    } catch (error) {
+      debugInfo.database.connected = false
+      debugInfo.errors.push(`Database connection error: ${error instanceof Error ? error.message : "Unknown error"}`)
+    }
+
+    // 6. Test specific API endpoints that are failing
+    const endpointTests = []
+
+    // Test media API logic
+    try {
+      if (debugInfo.authentication.userFound && debugInfo.authentication.userId) {
+        const mediaFiles = await sql`
+          SELECT COUNT(*) as count
+          FROM media_files 
+          WHERE user_id = ${debugInfo.authentication.userId}
+          AND deleted_at IS NULL
+        `
+        endpointTests.push({
+          endpoint: "media_files_query",
+          success: true,
+          userMediaCount: Number(mediaFiles[0].count),
+        })
+      }
+    } catch (error) {
+      endpointTests.push({
+        endpoint: "media_files_query",
         success: false,
-        error: userError instanceof Error ? userError.message : "Unknown error",
-      }
-      debug.errors.push(`getCurrentUser failed: ${userError}`)
+        error: error instanceof Error ? error.message : "Unknown error",
+      })
     }
 
-    // 5. Test database connectivity
+    // Test playlists API logic
     try {
-      const dbTest = await sql`SELECT 1 as test`
-      debug.database.connectivity = {
-        success: true,
-        result: dbTest[0],
+      if (debugInfo.authentication.userFound && debugInfo.authentication.userId) {
+        const playlists = await sql`
+          SELECT COUNT(*) as count
+          FROM playlists 
+          WHERE user_id = ${debugInfo.authentication.userId}
+          AND deleted_at IS NULL
+        `
+        endpointTests.push({
+          endpoint: "playlists_query",
+          success: true,
+          userPlaylistCount: Number(playlists[0].count),
+        })
       }
-    } catch (dbError) {
-      debug.database.connectivity = {
+    } catch (error) {
+      endpointTests.push({
+        endpoint: "playlists_query",
         success: false,
-        error: dbError instanceof Error ? dbError.message : "Unknown error",
-      }
-      debug.errors.push(`Database connectivity failed: ${dbError}`)
+        error: error instanceof Error ? error.message : "Unknown error",
+      })
     }
 
-    // 6. Check users table structure
-    try {
-      const tableInfo = await sql`
-        SELECT column_name, data_type, is_nullable 
-        FROM information_schema.columns 
-        WHERE table_name = 'users' 
-        ORDER BY ordinal_position
-      `
-      debug.database.usersTable = {
-        exists: tableInfo.length > 0,
-        columns: tableInfo,
-      }
-    } catch (tableError) {
-      debug.database.usersTable = {
-        exists: false,
-        error: tableError instanceof Error ? tableError.message : "Unknown error",
-      }
-      debug.errors.push(`Users table check failed: ${tableError}`)
-    }
+    debugInfo.endpointTests = endpointTests
 
-    // 7. Check media_files table structure
-    try {
-      const mediaTableInfo = await sql`
-        SELECT column_name, data_type, is_nullable 
-        FROM information_schema.columns 
-        WHERE table_name = 'media_files' 
-        ORDER BY ordinal_position
-      `
-      debug.database.mediaFilesTable = {
-        exists: mediaTableInfo.length > 0,
-        columns: mediaTableInfo,
-      }
-    } catch (mediaTableError) {
-      debug.database.mediaFilesTable = {
-        exists: false,
-        error: mediaTableError instanceof Error ? mediaTableError.message : "Unknown error",
-      }
-      debug.errors.push(`Media files table check failed: ${mediaTableError}`)
-    }
-
-    // 8. Check playlists table structure
-    try {
-      const playlistsTableInfo = await sql`
-        SELECT column_name, data_type, is_nullable 
-        FROM information_schema.columns 
-        WHERE table_name = 'playlists' 
-        ORDER BY ordinal_position
-      `
-      debug.database.playlistsTable = {
-        exists: playlistsTableInfo.length > 0,
-        columns: playlistsTableInfo,
-      }
-    } catch (playlistsTableError) {
-      debug.database.playlistsTable = {
-        exists: false,
-        error: playlistsTableError instanceof Error ? playlistsTableError.message : "Unknown error",
-      }
-      debug.errors.push(`Playlists table check failed: ${playlistsTableError}`)
-    }
-
-    // 9. Environment variables check
-    debug.environment = {
-      jwtSecret: !!process.env.JWT_SECRET,
-      databaseUrl: !!process.env.DATABASE_URL,
+    // 7. Environment checks
+    debugInfo.environment = {
+      jwtSecretExists: !!process.env.JWT_SECRET,
+      databaseUrlExists: !!process.env.DATABASE_URL,
       nodeEnv: process.env.NODE_ENV,
     }
 
-    console.log("🔍 [DEBUG AUTH] Debug complete:", debug.errors.length, "errors found")
+    // 8. Summary and recommendations
+    debugInfo.summary = {
+      authenticationWorking: debugInfo.authentication.tokenValid && debugInfo.authentication.userFound,
+      databaseWorking: debugInfo.database.connected && debugInfo.database.tablesExist.users,
+      criticalErrors: debugInfo.errors.filter(
+        (error: string) => error.includes("Token") || error.includes("Database") || error.includes("getCurrentUser"),
+      ),
+      recommendations: [],
+    }
+
+    if (!debugInfo.authentication.tokenValid) {
+      debugInfo.summary.recommendations.push("User needs to log in - no valid authentication token")
+    }
+
+    if (!debugInfo.database.connected) {
+      debugInfo.summary.recommendations.push("Database connection issues - check DATABASE_URL environment variable")
+    }
+
+    if (!debugInfo.environment.jwtSecretExists) {
+      debugInfo.summary.recommendations.push("JWT_SECRET environment variable is missing")
+    }
+
+    if (debugInfo.errors.length > 0) {
+      debugInfo.summary.recommendations.push(
+        `${debugInfo.errors.length} errors detected - see errors array for details`,
+      )
+    }
+
+    console.log("🔍 [DEBUG AUTH] Debug info collected:", {
+      authWorking: debugInfo.summary.authenticationWorking,
+      dbWorking: debugInfo.summary.databaseWorking,
+      errorCount: debugInfo.errors.length,
+    })
 
     return NextResponse.json({
       success: true,
-      debug,
-      summary: {
-        authWorking: !!debug.auth.getCurrentUser?.success,
-        databaseWorking: !!debug.database.connectivity?.success,
-        tablesExist: {
-          users: !!debug.database.usersTable?.exists,
-          mediaFiles: !!debug.database.mediaFilesTable?.exists,
-          playlists: !!debug.database.playlistsTable?.exists,
-        },
-        errorCount: debug.errors.length,
-      },
+      debug: debugInfo,
     })
   } catch (error) {
-    console.error("🔍 [DEBUG AUTH] Fatal error:", error)
+    console.error("🔍 [DEBUG AUTH] Critical error:", error)
     return NextResponse.json(
       {
         success: false,
-        error: "Debug session failed",
+        error: "Debug endpoint failed",
         details: error instanceof Error ? error.message : "Unknown error",
+        timestamp: new Date().toISOString(),
       },
       { status: 500 },
     )
