@@ -1,119 +1,83 @@
-import { type NextRequest, NextResponse } from "next/server"
+import { NextResponse } from "next/server"
 import { neon } from "@neondatabase/serverless"
 
 const sql = neon(process.env.DATABASE_URL!)
 
-export async function GET(request: NextRequest) {
+export async function GET() {
   try {
-    console.log("🔍 [DEBUG TABLE] Checking database table structure...")
+    console.log("🔍 [DEBUG TABLE] Checking table structure for playlists...")
 
-    const results = {
-      tables: {},
-      sampleData: {},
-      errors: [],
-      timestamp: new Date().toISOString(),
-    }
+    // Get all columns for playlists table
+    const columns = await sql`
+      SELECT column_name, data_type, is_nullable, column_default
+      FROM information_schema.columns 
+      WHERE table_name = 'playlists'
+      AND table_schema = 'public'
+      ORDER BY ordinal_position
+    `
 
-    // Check if tables exist and get their columns
-    const tablesToCheck = ["users", "playlists", "media_files", "playlist_items", "devices"]
+    console.log("🔍 [DEBUG TABLE] Raw columns result:", columns)
+    console.log("🔍 [DEBUG TABLE] Columns length:", columns.length)
+    console.log(
+      "🔍 [DEBUG TABLE] Column names:",
+      columns.map((col) => col.column_name),
+    )
 
-    for (const tableName of tablesToCheck) {
-      try {
-        // Check if table exists
-        const tableExists = await sql`
-          SELECT EXISTS (
-            SELECT FROM information_schema.tables 
-            WHERE table_schema = 'public' 
-            AND table_name = ${tableName}
-          )
-        `
+    // Check specifically for the missing columns
+    const columnNames = columns.map((col) => col.column_name)
+    const expectedColumns = [
+      "scale_image",
+      "scale_video",
+      "scale_document",
+      "shuffle",
+      "default_transition",
+      "transition_speed",
+      "auto_advance",
+      "background_color",
+      "text_overlay",
+    ]
 
-        if (tableExists[0].exists) {
-          // Get column information
-          const columns = await sql`
-            SELECT column_name, data_type, is_nullable, column_default
-            FROM information_schema.columns 
-            WHERE table_name = ${tableName}
-            AND table_schema = 'public'
-            ORDER BY ordinal_position
-          `
+    const missingColumns = expectedColumns.filter((col) => !columnNames.includes(col))
+    const presentColumns = expectedColumns.filter((col) => columnNames.includes(col))
 
-          results.tables[tableName] = {
-            exists: true,
-            columns: columns.map((col) => col.column_name),
-            columnDetails: columns,
-          }
+    console.log("🔍 [DEBUG TABLE] Expected columns present:", presentColumns)
+    console.log("🔍 [DEBUG TABLE] Missing columns:", missingColumns)
 
-          // Get sample data count
-          try {
-            const count = await sql.unsafe(`SELECT COUNT(*) as count FROM ${tableName}`)
-            results.sampleData[tableName] = {
-              count: Number.parseInt(count[0].count),
-            }
-
-            // Get a few sample records if they exist
-            if (Number.parseInt(count[0].count) > 0) {
-              const samples = await sql.unsafe(`SELECT * FROM ${tableName} LIMIT 3`)
-              results.sampleData[tableName].samples = samples
-            }
-          } catch (sampleError) {
-            results.sampleData[tableName] = {
-              count: 0,
-              error: sampleError.message,
-            }
-          }
-        } else {
-          results.tables[tableName] = {
-            exists: false,
-            columns: [],
-            columnDetails: [],
-          }
-        }
-      } catch (error) {
-        results.errors.push({
-          table: tableName,
-          error: error.message,
-        })
-        results.tables[tableName] = {
-          exists: false,
-          columns: [],
-          columnDetails: [],
-          error: error.message,
-        }
-      }
-    }
-
-    // Additional database info
+    // Get sample data count
+    const sampleData = { count: 0 }
     try {
-      const dbInfo = await sql`
-        SELECT 
-          current_database() as database_name,
-          current_user as current_user,
-          version() as version
-      `
-      results.databaseInfo = dbInfo[0]
-    } catch (error) {
-      results.errors.push({
-        section: "database_info",
-        error: error.message,
-      })
-    }
+      const countResult = await sql`SELECT COUNT(*) as count FROM playlists`
+      sampleData.count = Number.parseInt(countResult[0].count)
 
-    console.log("🔍 [DEBUG TABLE] Table structure check completed")
+      if (sampleData.count > 0) {
+        const samples = await sql`SELECT * FROM playlists LIMIT 2`
+        sampleData.samples = samples
+        console.log("🔍 [DEBUG TABLE] Sample playlist data:", samples[0])
+      }
+    } catch (sampleError) {
+      console.error("🔍 [DEBUG TABLE] Error getting sample data:", sampleError)
+      sampleData.error = sampleError.message
+    }
 
     return NextResponse.json({
       success: true,
-      ...results,
+      table: "playlists",
+      columns: columns,
+      columnNames: columnNames,
+      totalColumns: columns.length,
+      expectedColumns: expectedColumns,
+      presentColumns: presentColumns,
+      missingColumns: missingColumns,
+      sampleData: sampleData,
+      timestamp: new Date().toISOString(),
     })
   } catch (error) {
-    console.error("🔍 [DEBUG TABLE] Error checking table structure:", error)
-
+    console.error("🔍 [DEBUG TABLE] Error:", error)
     return NextResponse.json(
       {
         success: false,
-        error: "Failed to check table structure",
+        error: "Failed to get table structure",
         details: error instanceof Error ? error.message : "Unknown error",
-        timestamp: new Date().toISOString(),
       },
       { status: 500 },
     )
