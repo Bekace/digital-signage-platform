@@ -56,7 +56,6 @@
     "embla-carousel-react": "latest",
     "immer": "latest",
     "input-otp": "latest",
-    "jose": "latest",
     "jsonwebtoken": "latest",
     "lucide-react": "^0.454.0",
     "next": "14.2.16",
