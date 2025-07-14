@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { CheckCircle, XCircle, AlertTriangle, Database, Key, Server, RefreshCw, Bug } from "lucide-react"
+import { CheckCircle, XCircle, AlertTriangle, Database, Key, Server, RefreshCw, Bug, Settings } from "lucide-react"
 
 interface AuthDebugInfo {
   cookieToken: string | null
@@ -24,6 +24,7 @@ interface DatabaseDebugInfo {
   mediaTableExists: boolean
   mediaColumns: string[]
   sampleData: any
+  tables: any
 }
 
 interface APIDebugInfo {
@@ -128,12 +129,13 @@ export default function DebugAuthIssuesPage() {
       const missingColumns = requiredPlaylistColumns.filter((col) => !playlistsColumns.includes(col))
 
       setDbDebug({
-        playlistsTableExists: !!data.tables?.playlists,
+        playlistsTableExists: !!data.tables?.playlists?.exists,
         playlistsColumns,
         missingColumns,
-        mediaTableExists: !!data.tables?.media_files,
+        mediaTableExists: !!data.tables?.media_files?.exists,
         mediaColumns,
         sampleData: data.sampleData || {},
+        tables: data.tables || {},
       })
     } catch (error) {
       console.error("Database diagnostics error:", error)
@@ -190,6 +192,27 @@ export default function DebugAuthIssuesPage() {
       })
     } catch (error) {
       console.error("API diagnostics error:", error)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const initializeDatabase = async () => {
+    setLoading(true)
+    try {
+      const response = await fetch("/api/debug-init-database", {
+        method: "POST",
+      })
+      const result = await response.json()
+
+      if (result.success) {
+        alert("Database initialized successfully!")
+        runDatabaseDiagnostics()
+      } else {
+        alert("Database initialization failed: " + result.error)
+      }
+    } catch (error) {
+      alert("Database initialization failed: " + error.message)
     } finally {
       setLoading(false)
     }
@@ -334,6 +357,16 @@ export default function DebugAuthIssuesPage() {
                     </div>
                   </div>
 
+                  {!authDebug.cookieExists && authDebug.userProfile?.user && (
+                    <Alert>
+                      <AlertTriangle className="h-4 w-4" />
+                      <AlertDescription>
+                        User profile loads but no auth cookie exists. This suggests the authentication system is working
+                        but cookies aren't being set properly.
+                      </AlertDescription>
+                    </Alert>
+                  )}
+
                   {authDebug.tokenDecoded && (
                     <div className="p-4 bg-gray-50 rounded">
                       <h4 className="font-medium mb-2">Token Details:</h4>
@@ -396,7 +429,14 @@ export default function DebugAuthIssuesPage() {
                     </div>
                   </div>
 
-                  {dbDebug.missingColumns.length > 0 && (
+                  {(!dbDebug.playlistsTableExists || !dbDebug.mediaTableExists) && (
+                    <Alert variant="destructive">
+                      <AlertTriangle className="h-4 w-4" />
+                      <AlertDescription>Core tables are missing. Database needs to be initialized.</AlertDescription>
+                    </Alert>
+                  )}
+
+                  {dbDebug.missingColumns.length > 0 && dbDebug.playlistsTableExists && (
                     <Alert variant="destructive">
                       <AlertTriangle className="h-4 w-4" />
                       <AlertDescription>Missing playlist columns: {dbDebug.missingColumns.join(", ")}</AlertDescription>
@@ -407,33 +447,61 @@ export default function DebugAuthIssuesPage() {
                     <div className="p-4 bg-gray-50 rounded">
                       <h4 className="font-medium mb-2">Playlists Columns ({dbDebug.playlistsColumns.length}):</h4>
                       <div className="text-sm space-y-1 max-h-40 overflow-auto">
-                        {dbDebug.playlistsColumns.map((col) => (
-                          <div key={col} className="flex items-center gap-2">
-                            <span className="w-2 h-2 bg-green-500 rounded-full"></span>
-                            {col}
-                          </div>
-                        ))}
+                        {dbDebug.playlistsColumns.length > 0 ? (
+                          dbDebug.playlistsColumns.map((col) => (
+                            <div key={col} className="flex items-center gap-2">
+                              <span className="w-2 h-2 bg-green-500 rounded-full"></span>
+                              {col}
+                            </div>
+                          ))
+                        ) : (
+                          <div className="text-gray-500">No columns found</div>
+                        )}
                       </div>
                     </div>
 
                     <div className="p-4 bg-gray-50 rounded">
                       <h4 className="font-medium mb-2">Media Columns ({dbDebug.mediaColumns.length}):</h4>
                       <div className="text-sm space-y-1 max-h-40 overflow-auto">
-                        {dbDebug.mediaColumns.map((col) => (
-                          <div key={col} className="flex items-center gap-2">
-                            <span className="w-2 h-2 bg-blue-500 rounded-full"></span>
-                            {col}
+                        {dbDebug.mediaColumns.length > 0 ? (
+                          dbDebug.mediaColumns.map((col) => (
+                            <div key={col} className="flex items-center gap-2">
+                              <span className="w-2 h-2 bg-blue-500 rounded-full"></span>
+                              {col}
+                            </div>
+                          ))
+                        ) : (
+                          <div className="text-gray-500">No columns found</div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  {dbDebug.tables && Object.keys(dbDebug.tables).length > 0 && (
+                    <div className="p-4 bg-gray-50 rounded">
+                      <h4 className="font-medium mb-2">All Tables Status:</h4>
+                      <div className="grid grid-cols-2 md:grid-cols-3 gap-2 text-sm">
+                        {Object.entries(dbDebug.tables).map(([tableName, tableInfo]: [string, any]) => (
+                          <div key={tableName} className="flex items-center gap-2">
+                            {getStatusIcon(tableInfo.exists)}
+                            <span className={tableInfo.exists ? "text-green-700" : "text-red-700"}>{tableName}</span>
                           </div>
                         ))}
                       </div>
                     </div>
-                  </div>
+                  )}
 
                   <div className="flex gap-2">
                     <Button onClick={runDatabaseDiagnostics} disabled={loading}>
                       Re-run Database Diagnostics
                     </Button>
-                    {dbDebug.missingColumns.length > 0 && (
+                    {(!dbDebug.playlistsTableExists || !dbDebug.mediaTableExists) && (
+                      <Button onClick={initializeDatabase} variant="default" disabled={loading}>
+                        <Settings className="h-4 w-4 mr-2" />
+                        Initialize Database
+                      </Button>
+                    )}
+                    {dbDebug.missingColumns.length > 0 && dbDebug.playlistsTableExists && (
                       <Button onClick={fixPlaylistsTable} variant="outline" disabled={loading}>
                         Fix Playlists Table
                       </Button>
