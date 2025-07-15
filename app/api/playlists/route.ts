@@ -31,7 +31,7 @@ export async function GET(request: NextRequest) {
 
     console.log("🎵 [PLAYLISTS API] Authenticated user:", user.id, user.email)
 
-    // Get playlists for the user
+    // Get playlists for the user - only select columns that definitely exist
     const playlists = await sql`
       SELECT 
         id, 
@@ -43,15 +43,6 @@ export async function GET(request: NextRequest) {
         start_time, 
         end_time, 
         selected_days, 
-        scale_image, 
-        scale_video, 
-        scale_document, 
-        shuffle, 
-        default_transition, 
-        transition_speed, 
-        auto_advance, 
-        background_color, 
-        text_overlay, 
         created_at, 
         updated_at,
         user_id
@@ -75,12 +66,18 @@ export async function GET(request: NextRequest) {
           return {
             ...playlist,
             item_count: Number.parseInt(itemCount[0].count) || 0,
+            device_count: 0, // Default values for missing data
+            total_duration: 0,
+            assigned_devices: [],
           }
         } catch (error) {
           console.error("Error getting item count for playlist", playlist.id, ":", error)
           return {
             ...playlist,
             item_count: 0,
+            device_count: 0,
+            total_duration: 0,
+            assigned_devices: [],
           }
         }
       }),
@@ -131,15 +128,6 @@ export async function POST(request: NextRequest) {
         status, 
         loop_enabled, 
         schedule_enabled, 
-        scale_image, 
-        scale_video, 
-        scale_document, 
-        shuffle, 
-        default_transition, 
-        transition_speed, 
-        auto_advance, 
-        background_color, 
-        text_overlay,
         created_at, 
         updated_at
       ) VALUES (
@@ -149,15 +137,6 @@ export async function POST(request: NextRequest) {
         'draft', 
         true, 
         false, 
-        'fit', 
-        'fit', 
-        'fit', 
-        false, 
-        'fade', 
-        'normal', 
-        true, 
-        '#000000', 
-        false,
         NOW(), 
         NOW()
       ) RETURNING *
