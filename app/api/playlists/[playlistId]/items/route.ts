@@ -1,26 +1,28 @@
-import { NextResponse } from "next/server"
+import { type NextRequest, NextResponse } from "next/server"
+import { neon } from "@neondatabase/serverless"
 import { getCurrentUser } from "@/lib/auth"
-import { getDb } from "@/lib/db"
+
+const sql = neon(process.env.DATABASE_URL!)
 
 export const dynamic = "force-dynamic"
 
-export async function GET(request: Request, { params }: { params: { playlistId: string } }) {
-  console.log("🎵 [PLAYLIST ITEMS API] Starting GET request for playlist:", params.playlistId)
+export async function GET(request: NextRequest, { params }: { params: { playlistId: string } }) {
+  console.log("📋 [PLAYLIST ITEMS API] Starting GET request for playlist items:", params.playlistId)
 
   try {
     const user = await getCurrentUser(request)
     if (!user) {
-      console.log("❌ [PLAYLIST ITEMS API] No user authenticated")
+      console.log("📋 [PLAYLIST ITEMS API] No authenticated user found")
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
+
+    console.log("📋 [PLAYLIST ITEMS API] Authenticated user:", user.id)
 
     const playlistId = Number.parseInt(params.playlistId)
     if (isNaN(playlistId)) {
       console.log("❌ [PLAYLIST ITEMS API] Invalid playlist ID:", params.playlistId)
       return NextResponse.json({ error: "Invalid playlist ID" }, { status: 400 })
     }
-
-    const sql = getDb()
 
     // Verify playlist ownership
     const playlist = await sql`
@@ -32,70 +34,94 @@ export async function GET(request: Request, { params }: { params: { playlistId: 
       return NextResponse.json({ error: "Playlist not found" }, { status: 404 })
     }
 
-    // Get playlist items with media information
+    console.log(`✅ [PLAYLIST ITEMS API] Found playlist ${playlistId}`)
+
+    // Get playlist items with media information - using correct column names
     const items = await sql`
       SELECT 
         pi.id,
         pi.playlist_id,
-        pi.media_id,
+        pi.media_file_id as media_id,
         pi.position,
         pi.duration,
         pi.transition_type,
         pi.created_at,
-        m.id as media_id,
-        m.filename,
-        m.original_name,
-        m.file_type,
-        m.file_size,
-        m.url,
-        m.thumbnail_url,
-        m.mime_type,
-        m.dimensions,
-        m.duration as media_duration,
-        m.media_source,
-        m.external_url,
-        m.embed_settings,
-        m.created_at as media_created_at
+        mf.id as media_file_id,
+        mf.filename,
+        mf.original_name,
+        mf.file_type,
+        mf.file_size,
+        mf.url,
+        mf.thumbnail_url,
+        mf.mime_type,
+        mf.dimensions,
+        mf.duration as media_duration,
+        mf.media_source,
+        mf.external_url,
+        mf.embed_settings,
+        mf.created_at as media_created_at
       FROM playlist_items pi
-      LEFT JOIN media_files m ON pi.media_id = m.id
+      LEFT JOIN media_files mf ON pi.media_file_id = mf.id
       WHERE pi.playlist_id = ${playlistId}
-      ORDER BY pi.position ASC
+      ORDER BY pi.position ASC, pi.created_at ASC
     `
 
-    // Format the response to match expected structure
+    console.log(`✅ [PLAYLIST ITEMS API] Found ${items.length} items for playlist ${playlistId}`)
+
+    // Format items for frontend
     const formattedItems = items.map((item) => ({
-      id: item.id,
-      playlist_id: item.playlist_id,
-      media_id: item.media_id,
-      position: item.position,
-      duration: item.duration,
-      transition_type: item.transition_type || "fade",
+      id: Number(item.id),
+      playlist_id: Number(item.playlist_id),
+      media_id: Number(item.media_id),
+      position: Number(item.position),
+      duration: Number(item.duration) || 30,
+      transition_type: String(item.transition_type || "fade"),
       created_at: item.created_at,
-      media: item.media_id
+      media: item.media_file_id
         ? {
-            id: item.media_id,
-            filename: item.filename,
-            original_name: item.original_name,
-            file_type: item.file_type,
-            file_size: item.file_size,
-            url: item.url,
-            thumbnail_url: item.thumbnail_url,
-            mime_type: item.mime_type,
-            dimensions: item.dimensions,
-            duration: item.media_duration,
-            media_source: item.media_source,
-            external_url: item.external_url,
-            embed_settings: item.embed_settings,
+            id: Number(item.media_file_id),
+            filename: String(item.filename || ""),
+            original_name: String(item.original_name || ""),
+            original_filename: String(item.original_name || item.filename || ""),
+            file_type: String(item.file_type || ""),
+            file_size: Number(item.file_size) || 0,
+            url: String(item.url || ""),
+            thumbnail_url: item.thumbnail_url ? String(item.thumbnail_url) : undefined,
+            mime_type: item.mime_type ? String(item.mime_type) : undefined,
+            dimensions: item.dimensions ? String(item.dimensions) : undefined,
+            duration: item.media_duration ? Number(item.media_duration) : undefined,
+            media_source: item.media_source ? String(item.media_source) : undefined,
+            external_url: item.external_url ? String(item.external_url) : undefined,
+            embed_settings: item.embed_settings ? String(item.embed_settings) : undefined,
+            created_at: item.media_created_at,
+          }
+        : null,
+      // Also add media_file for compatibility
+      media_file: item.media_file_id
+        ? {
+            id: Number(item.media_file_id),
+            filename: String(item.filename || ""),
+            original_name: String(item.original_name || ""),
+            original_filename: String(item.original_name || item.filename || ""),
+            file_type: String(item.file_type || ""),
+            file_size: Number(item.file_size) || 0,
+            url: String(item.url || ""),
+            thumbnail_url: item.thumbnail_url ? String(item.thumbnail_url) : undefined,
+            mime_type: item.mime_type ? String(item.mime_type) : undefined,
+            dimensions: item.dimensions ? String(item.dimensions) : undefined,
+            duration: item.media_duration ? Number(item.media_duration) : undefined,
+            media_source: item.media_source ? String(item.media_source) : undefined,
+            external_url: item.external_url ? String(item.external_url) : undefined,
+            embed_settings: item.embed_settings ? String(item.embed_settings) : undefined,
             created_at: item.media_created_at,
           }
         : null,
     }))
 
-    console.log(`✅ [PLAYLIST ITEMS API] Found ${formattedItems.length} items`)
-
     return NextResponse.json({
       success: true,
       items: formattedItems,
+      total: formattedItems.length,
     })
   } catch (error) {
     console.error("❌ [PLAYLIST ITEMS API] Error:", error)
@@ -110,32 +136,28 @@ export async function GET(request: Request, { params }: { params: { playlistId: 
   }
 }
 
-export async function POST(request: Request, { params }: { params: { playlistId: string } }) {
-  console.log("➕ [PLAYLIST ITEMS API] Starting POST request for playlist:", params.playlistId)
+export async function POST(request: NextRequest, { params }: { params: { playlistId: string } }) {
+  console.log("➕ [PLAYLIST ITEMS API] Starting POST request for playlist items:", params.playlistId)
 
   try {
     const user = await getCurrentUser(request)
     if (!user) {
-      console.log("❌ [PLAYLIST ITEMS API] No user authenticated")
+      console.log("➕ [PLAYLIST ITEMS API] No authenticated user found for POST")
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
     const playlistId = Number.parseInt(params.playlistId)
     if (isNaN(playlistId)) {
-      console.log("❌ [PLAYLIST ITEMS API] Invalid playlist ID:", params.playlistId)
+      console.log("➕ [PLAYLIST ITEMS API] Invalid playlist ID:", params.playlistId)
       return NextResponse.json({ error: "Invalid playlist ID" }, { status: 400 })
     }
 
     const body = await request.json()
-    console.log("📝 [PLAYLIST ITEMS API] Request body:", body)
-
-    const { media_id, duration = 10 } = body
+    const { media_id, duration = 30, transition_type = "fade" } = body
 
     if (!media_id) {
       return NextResponse.json({ error: "Media ID is required" }, { status: 400 })
     }
-
-    const sql = getDb()
 
     // Verify playlist ownership
     const playlist = await sql`
@@ -143,19 +165,23 @@ export async function POST(request: Request, { params }: { params: { playlistId:
     `
 
     if (playlist.length === 0) {
-      console.log("❌ [PLAYLIST ITEMS API] Playlist not found or not owned by user")
+      console.log("➕ [PLAYLIST ITEMS API] Playlist not found or not owned by user")
       return NextResponse.json({ error: "Playlist not found" }, { status: 404 })
     }
 
-    // Verify media ownership
+    console.log(`➕ [PLAYLIST ITEMS API] Playlist verified: ${playlistId}`)
+
+    // Verify media ownership - using correct table name media_files
     const media = await sql`
       SELECT id FROM media_files WHERE id = ${media_id} AND user_id = ${user.id}
     `
 
     if (media.length === 0) {
-      console.log("❌ [PLAYLIST ITEMS API] Media not found or not owned by user")
+      console.log("➕ [PLAYLIST ITEMS API] Media not found or not owned by user")
       return NextResponse.json({ error: "Media not found" }, { status: 404 })
     }
+
+    console.log(`➕ [PLAYLIST ITEMS API] Media verified: ${media_id}`)
 
     // Get next position
     const positionResult = await sql`
@@ -164,13 +190,13 @@ export async function POST(request: Request, { params }: { params: { playlistId:
       WHERE playlist_id = ${playlistId}
     `
 
-    const nextPosition = positionResult[0].next_position
+    const nextPosition = Number(positionResult[0].next_position)
 
-    // Create playlist item
-    const newItem = await sql`
+    // Add item to playlist - using correct column name media_file_id
+    const result = await sql`
       INSERT INTO playlist_items (
         playlist_id,
-        media_id,
+        media_file_id,
         position,
         duration,
         transition_type,
@@ -181,27 +207,30 @@ export async function POST(request: Request, { params }: { params: { playlistId:
         ${media_id},
         ${nextPosition},
         ${duration},
-        'fade',
-        CURRENT_TIMESTAMP
+        ${transition_type},
+        NOW()
       )
-      RETURNING *
+      RETURNING id, playlist_id, media_file_id as media_id, position, duration, transition_type, created_at
     `
 
-    // Update playlist updated_at
+    console.log(`➕ [PLAYLIST ITEMS API] Added item to playlist ${playlistId}`)
+
+    const newItem = result[0]
+
+    // Update playlist timestamp
     await sql`
       UPDATE playlists 
-      SET updated_at = CURRENT_TIMESTAMP 
+      SET updated_at = NOW() 
       WHERE id = ${playlistId}
     `
 
-    console.log(`✅ [PLAYLIST ITEMS API] Created item: ${newItem[0].id}`)
-
     return NextResponse.json({
       success: true,
-      item: newItem[0],
+      item: newItem,
+      message: "Item added to playlist",
     })
   } catch (error) {
-    console.error("❌ [PLAYLIST ITEMS API] Error:", error)
+    console.error("➕ [PLAYLIST ITEMS API] Error adding item:", error)
     return NextResponse.json(
       {
         success: false,
