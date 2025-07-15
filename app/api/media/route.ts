@@ -1,6 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { neon } from "@neondatabase/serverless"
 import { getCurrentUser } from "@/lib/auth"
+import { extractTokenFromRequest } from "@/lib/auth-utils"
 
 const sql = neon(process.env.DATABASE_URL!)
 
@@ -8,14 +9,32 @@ export async function GET(request: NextRequest) {
   try {
     console.log("📁 [MEDIA API] GET request received")
 
-    // Get current user using the same method as other API routes
+    // Extract and validate token
+    const token = extractTokenFromRequest(request)
+    const authHeader = request.headers.get("authorization")
+
+    console.log("📁 [MEDIA API] Auth header present:", !!authHeader)
+    console.log("📁 [MEDIA API] Token extracted:", !!token)
+
+    if (!token) {
+      console.log("📁 [MEDIA API] No valid token found")
+      return NextResponse.json(
+        {
+          success: false,
+          error: "No authentication token provided",
+        },
+        { status: 401 },
+      )
+    }
+
+    // Get current user
     const user = await getCurrentUser(request)
     if (!user) {
       console.log("📁 [MEDIA API] No authenticated user found")
       return NextResponse.json(
         {
           success: false,
-          error: "Unauthorized",
+          error: "Invalid or expired authentication token",
         },
         { status: 401 },
       )
