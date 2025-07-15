@@ -31,7 +31,6 @@ export async function GET(request: NextRequest) {
           id,
           filename,
           original_name,
-          original_filename,
           file_type,
           file_size,
           url,
@@ -67,7 +66,7 @@ export async function GET(request: NextRequest) {
     // Ensure all files have required fields with fallbacks
     const processedFiles = mediaFiles.map((file) => ({
       ...file,
-      original_name: file.original_name || file.original_filename || file.filename || "Untitled",
+      original_name: file.original_name || file.filename || "Untitled",
       thumbnail_url: file.thumbnail_url || "/thumbnails/generic.png",
       file_size: file.file_size || 0,
       created_at: file.created_at || new Date().toISOString(),
