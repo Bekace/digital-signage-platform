@@ -31,7 +31,7 @@ export async function GET(request: NextRequest) {
 
     console.log("🎵 [PLAYLISTS API] Authenticated user:", user.id, user.email)
 
-    // Get playlists for the user - only select columns that definitely exist
+    // Get playlists for the user - removed deleted_at filter since column doesn't exist
     const playlists = await sql`
       SELECT 
         id, 
@@ -47,8 +47,7 @@ export async function GET(request: NextRequest) {
         updated_at,
         user_id
       FROM playlists 
-      WHERE user_id = ${user.id} 
-      AND deleted_at IS NULL
+      WHERE user_id = ${user.id}
       ORDER BY updated_at DESC
     `
 
