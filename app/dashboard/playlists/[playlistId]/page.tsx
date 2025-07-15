@@ -28,7 +28,6 @@ import { MediaThumbnail } from "@/components/media-thumbnail"
 import { UploadMediaDialog } from "@/components/upload-media-dialog"
 import { PlaylistOptionsDialog } from "@/components/playlist-options-dialog"
 import { PlaylistItemDurationDialog } from "@/components/playlist-item-duration-dialog"
-import { getAuthHeaders, isTokenValid, clearAuthToken } from "@/lib/auth-utils"
 import { useSortable } from "@dnd-kit/sortable"
 import { CSS } from "@dnd-kit/utilities"
 
@@ -168,29 +167,18 @@ export default function PlaylistEditorPage() {
       setLoading(true)
       setError(null)
 
-      // Check token validity first
-      if (!isTokenValid()) {
-        console.error("🎵 [PLAYLIST EDITOR] Invalid token detected")
-        clearAuthToken()
-        router.push("/login")
-        return
-      }
-
-      const headers = getAuthHeaders()
-      if (!headers.Authorization) {
-        console.error("🎵 [PLAYLIST EDITOR] No authorization headers")
-        router.push("/login")
-        return
-      }
-
       console.log("🎵 [PLAYLIST EDITOR] Fetching playlist data for ID:", playlistId)
 
       // Fetch playlist details
       const playlistResponse = await fetch(`/api/playlists/${playlistId}`, {
-        headers,
+        credentials: "include",
       })
 
       if (!playlistResponse.ok) {
+        if (playlistResponse.status === 401) {
+          router.push("/login")
+          return
+        }
         const errorData = await playlistResponse.json()
         throw new Error(errorData.error || `HTTP ${playlistResponse.status}`)
       }
@@ -206,10 +194,14 @@ export default function PlaylistEditorPage() {
 
       // Fetch playlist items
       const itemsResponse = await fetch(`/api/playlists/${playlistId}/items`, {
-        headers,
+        credentials: "include",
       })
 
       if (!itemsResponse.ok) {
+        if (itemsResponse.status === 401) {
+          router.push("/login")
+          return
+        }
         const errorData = await itemsResponse.json()
         throw new Error(errorData.error || `HTTP ${itemsResponse.status}`)
       }
@@ -258,21 +250,6 @@ export default function PlaylistEditorPage() {
     setReordering(true)
 
     try {
-      // Check token validity before API call
-      if (!isTokenValid()) {
-        console.error("🔄 [DRAG] Invalid token during reorder")
-        clearAuthToken()
-        router.push("/login")
-        return
-      }
-
-      const headers = getAuthHeaders()
-      if (!headers.Authorization) {
-        console.error("🔄 [DRAG] No authorization headers for reorder")
-        router.push("/login")
-        return
-      }
-
       const reorderPayload = {
         items: reorderedItems.map((item) => ({
           id: item.id,
@@ -284,23 +261,24 @@ export default function PlaylistEditorPage() {
 
       const response = await fetch(`/api/playlists/${playlistId}/items/reorder`, {
         method: "PUT",
-        headers,
+        credentials: "include",
+        headers: {
+          "Content-Type": "application/json",
+        },
         body: JSON.stringify(reorderPayload),
       })
 
       if (!response.ok) {
+        if (response.status === 401) {
+          router.push("/login")
+          return
+        }
+
         const errorData = await response.json()
         console.error("🔄 [DRAG] Reorder failed:", errorData)
 
         // Revert the optimistic update
         setItems(items)
-
-        if (response.status === 401) {
-          clearAuthToken()
-          router.push("/login")
-          return
-        }
-
         throw new Error(errorData.error || `HTTP ${response.status}`)
       }
 
@@ -316,7 +294,6 @@ export default function PlaylistEditorPage() {
 
       // Revert the optimistic update
       setItems(items)
-
       setError(error instanceof Error ? error.message : "Failed to reorder items")
     } finally {
       setReordering(false)
@@ -332,25 +309,21 @@ export default function PlaylistEditorPage() {
     if (!selectedItem) return
 
     try {
-      const headers = getAuthHeaders()
-      if (!headers.Authorization) {
-        router.push("/login")
-        return
-      }
-
       const response = await fetch(`/api/playlists/${playlistId}/items/${selectedItem.id}`, {
         method: "PUT",
-        headers,
+        credentials: "include",
+        headers: {
+          "Content-Type": "application/json",
+        },
         body: JSON.stringify({ duration: newDuration }),
       })
 
       if (!response.ok) {
-        const errorData = await response.json()
         if (response.status === 401) {
-          clearAuthToken()
           router.push("/login")
           return
         }
+        const errorData = await response.json()
         throw new Error(errorData.error || "Failed to update duration")
       }
 
