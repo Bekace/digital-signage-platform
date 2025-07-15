@@ -88,37 +88,40 @@ export function PlaylistPreviewModal({ open, onOpenChange, playlist, items }: Pl
     }
   }, [])
 
-  // Function to convert Google Slides URL to embeddable format
+  // Function to convert Google Slides URL to embeddable format - using same logic as media preview
   const getEmbedUrl = useCallback((url: string) => {
     if (!url) return url
 
     console.log("🎬 [PLAYLIST PREVIEW] Converting URL:", url)
 
-    let embedUrl = url
-
-    // Convert edit URLs to embed URLs
-    if (url.includes("/edit")) {
-      embedUrl = url.replace("/edit#slide=", "/embed?start=true&loop=true&delayms=5000&slide=")
-      embedUrl = embedUrl.replace("/edit", "/embed?start=true&loop=true&delayms=5000")
-    }
-    // Convert present URLs to embed URLs
-    else if (url.includes("/present")) {
-      embedUrl = url.replace("/present", "/embed?start=true&loop=true&delayms=5000")
-    }
-    // If it's already an embed URL, ensure it has auto-play parameters
-    else if (url.includes("/embed")) {
-      if (!url.includes("start=true")) {
-        const separator = url.includes("?") ? "&" : "?"
-        embedUrl = `${url}${separator}start=true&loop=true&delayms=5000`
+    try {
+      // Handle different Google Slides URL formats - same as media preview
+      if (url.includes("/presentation/d/")) {
+        // Extract the presentation ID
+        const match = url.match(/\/presentation\/d\/([a-zA-Z0-9-_]+)/)
+        if (match) {
+          const presentationId = match[1]
+          // Return embed URL with autoplay
+          const embedUrl = `https://docs.google.com/presentation/d/${presentationId}/embed?start=true&loop=true&delayms=5000`
+          console.log("🎬 [PLAYLIST PREVIEW] Converted to embed URL:", embedUrl)
+          return embedUrl
+        }
       }
-    }
-    // Handle pub URLs (published presentations)
-    else if (url.includes("/pub")) {
-      embedUrl = url.replace("/pub", "/embed?start=true&loop=true&delayms=5000")
-    }
 
-    console.log("🎬 [PLAYLIST PREVIEW] Converted to embed URL:", embedUrl)
-    return embedUrl
+      // If it's already an embed URL, return as is
+      if (url.includes("/embed")) {
+        console.log("🎬 [PLAYLIST PREVIEW] Already embed URL:", url)
+        return url
+      }
+
+      // Fallback: try to convert any Google Slides URL
+      const fallbackUrl = url.replace("/edit", "/embed?start=true&loop=true&delayms=5000")
+      console.log("🎬 [PLAYLIST PREVIEW] Fallback conversion:", fallbackUrl)
+      return fallbackUrl
+    } catch (error) {
+      console.error("Error converting URL to embed format:", error)
+      return url
+    }
   }, [])
 
   const isSlidesFile = useCallback((file: MediaFile | null) => {
@@ -154,9 +157,9 @@ export function PlaylistPreviewModal({ open, onOpenChange, playlist, items }: Pl
       const itemDuration = (currentItem.duration || 30) * 1000 // Convert to milliseconds
       const updateInterval = 100 // Update every 100ms for smooth progress
 
-      // For videos, we handle advancement differently
-      if (isVideoFile(mediaFile)) {
-        // Video advancement is handled by onEnded event, not timer
+      // For videos and audio, we handle advancement differently
+      if (isVideoFile(mediaFile) || isAudioFile(mediaFile)) {
+        // Video/Audio advancement is handled by onEnded event, not timer
         return
       }
 
@@ -196,7 +199,7 @@ export function PlaylistPreviewModal({ open, onOpenChange, playlist, items }: Pl
         clearInterval(interval)
       }
     }
-  }, [isPlaying, currentIndex, currentItem, mediaFile, items.length, playlist.loop_enabled, isVideoFile])
+  }, [isPlaying, currentIndex, currentItem, mediaFile, items.length, playlist.loop_enabled, isVideoFile, isAudioFile])
 
   // Reset errors when item changes
   useEffect(() => {
@@ -205,6 +208,19 @@ export function PlaylistPreviewModal({ open, onOpenChange, playlist, items }: Pl
     setImageError(false)
     setProgress(0)
   }, [currentIndex])
+
+  // Auto-start videos when playing starts
+  useEffect(() => {
+    if (isPlaying && mediaFile && (isVideoFile(mediaFile) || isAudioFile(mediaFile))) {
+      const mediaElement = document.querySelector("video, audio") as HTMLVideoElement | HTMLAudioElement
+      if (mediaElement) {
+        mediaElement.play().catch((error) => {
+          console.warn("🎬 [PLAYLIST PREVIEW] Autoplay failed:", error)
+          // Autoplay failed, but that's okay - user can manually start
+        })
+      }
+    }
+  }, [isPlaying, mediaFile, isVideoFile, isAudioFile])
 
   const handlePlay = useCallback(() => {
     setIsPlaying(true)
@@ -239,10 +255,10 @@ export function PlaylistPreviewModal({ open, onOpenChange, playlist, items }: Pl
   }, [isFullscreen])
 
   const handleVideoEnded = useCallback(() => {
-    console.log("🎬 [PLAYLIST PREVIEW] Video ended, advancing to next item")
+    console.log("🎬 [PLAYLIST PREVIEW] Video/Audio ended, advancing to next item")
     setProgress(100)
 
-    // Auto-advance after video ends
+    // Auto-advance after video/audio ends
     setTimeout(() => {
       if (currentIndex < items.length - 1) {
         setCurrentIndex(currentIndex + 1)
@@ -339,7 +355,9 @@ export function PlaylistPreviewModal({ open, onOpenChange, playlist, items }: Pl
                     <iframe
                       src={getEmbedUrl(mediaFile.external_url || mediaFile.url)}
                       className="w-full h-full border-0"
+                      frameBorder="0"
                       allowFullScreen
+                      title={mediaFile.original_name || mediaFile.filename}
                       onLoad={() => {
                         console.log("🎬 [PLAYLIST PREVIEW] Google Slides iframe loaded successfully")
                         setIframeError(false)
@@ -347,7 +365,7 @@ export function PlaylistPreviewModal({ open, onOpenChange, playlist, items }: Pl
                       onError={handleIframeError}
                     />
                     {/* Overlay button for opening in Google Slides */}
-                    <div className="absolute top-4 right-4">
+                    <div className="absolute bottom-4 right-4">
                       <Button
                         size="sm"
                         variant="secondary"
@@ -363,12 +381,15 @@ export function PlaylistPreviewModal({ open, onOpenChange, playlist, items }: Pl
                   </>
                 ) : (
                   // Fallback for iframe errors
-                  <div className="w-full h-full flex flex-col items-center justify-center bg-gray-100 text-gray-600">
-                    <FileText className="h-16 w-16 mb-4 text-blue-500" />
-                    <h3 className="text-lg font-medium mb-2">Google Slides Presentation</h3>
-                    <p className="text-sm text-center mb-4 max-w-md">
+                  <div className="w-full h-full flex flex-col items-center justify-center bg-blue-50 border border-blue-200 text-gray-600">
+                    <svg className="h-16 w-16 text-blue-600 mx-auto mb-4" fill="currentColor" viewBox="0 0 24 24">
+                      <path d="M14,2H6A2,2 0 0,0 4,4V20A2,2 0 0,0 6,22H18A2,2 0 0,0 20,20V8L14,2M18,20H6V4H13V9H18V20Z" />
+                    </svg>
+                    <h3 className="text-lg font-medium text-gray-900 mb-2">Google Slides Presentation</h3>
+                    <p className="text-gray-600 mb-4 text-center max-w-md">
                       {mediaFile.original_name || mediaFile.original_filename || mediaFile.filename}
                     </p>
+                    <p className="text-gray-600 mb-4">Unable to embed presentation. Click to view in Google Slides.</p>
                     <Button
                       onClick={() => {
                         window.open(mediaFile.external_url || mediaFile.url, "_blank")
@@ -391,10 +412,11 @@ export function PlaylistPreviewModal({ open, onOpenChange, playlist, items }: Pl
                   onLoad={() => console.log("🎬 [PLAYLIST PREVIEW] Image loaded successfully")}
                 />
               ) : (
-                <div className="w-full h-full flex items-center justify-center bg-gray-100">
+                <div className="w-full h-full flex items-center justify-center bg-red-50 border border-red-200">
                   <div className="text-center text-gray-600">
-                    <FileText className="h-16 w-16 mx-auto mb-4" />
-                    <h3 className="text-lg font-medium">Image Load Error</h3>
+                    <FileText className="h-16 w-16 mx-auto mb-4 text-red-400" />
+                    <h3 className="text-lg font-medium text-red-900 mb-2">Image Load Error</h3>
+                    <p className="text-red-700 mb-4">Unable to load image preview</p>
                     <p className="text-sm mt-2">{mediaFile.original_name || mediaFile.filename}</p>
                   </div>
                 </div>
@@ -404,9 +426,9 @@ export function PlaylistPreviewModal({ open, onOpenChange, playlist, items }: Pl
                 <video
                   src={mediaFile.url}
                   className="w-full h-full object-contain"
-                  controls={!isPlaying}
-                  autoPlay={isPlaying}
+                  controls
                   muted
+                  autoPlay={isPlaying}
                   onEnded={handleVideoEnded}
                   onError={handleVideoError}
                   onLoadedData={() => console.log("🎬 [PLAYLIST PREVIEW] Video loaded successfully")}
@@ -415,10 +437,11 @@ export function PlaylistPreviewModal({ open, onOpenChange, playlist, items }: Pl
                   Your browser does not support video playback.
                 </video>
               ) : (
-                <div className="w-full h-full flex items-center justify-center bg-gray-100">
+                <div className="w-full h-full flex items-center justify-center bg-red-50 border border-red-200">
                   <div className="text-center text-gray-600">
-                    <FileText className="h-16 w-16 mx-auto mb-4" />
-                    <h3 className="text-lg font-medium">Video Load Error</h3>
+                    <FileText className="h-16 w-16 mx-auto mb-4 text-red-400" />
+                    <h3 className="text-lg font-medium text-red-900 mb-2">Video Load Error</h3>
+                    <p className="text-red-700 mb-4">Unable to load video preview</p>
                     <p className="text-sm mt-2">{mediaFile.original_name || mediaFile.filename}</p>
                   </div>
                 </div>
