@@ -16,16 +16,37 @@ interface MediaFile {
 }
 
 interface MediaThumbnailProps {
-  file: MediaFile
+  file?: MediaFile
+  media?: MediaFile
   size?: "sm" | "md" | "lg"
   className?: string
   showIcon?: boolean
   onClick?: () => void
 }
 
-export function MediaThumbnail({ file, size = "md", className, showIcon = true, onClick }: MediaThumbnailProps) {
+export function MediaThumbnail({ file, media, size = "md", className, showIcon = true, onClick }: MediaThumbnailProps) {
   const [imageLoading, setImageLoading] = useState(true)
   const [imageError, setImageError] = useState(false)
+
+  // Use either file or media prop, with fallback to prevent undefined errors
+  const mediaFile = file || media
+
+  // If no media file is provided, show a fallback
+  if (!mediaFile) {
+    return (
+      <div
+        className={cn(
+          "flex items-center justify-center rounded-lg bg-gray-100",
+          size === "sm" ? "w-12 h-12" : size === "md" ? "w-16 h-16" : "w-full h-full",
+          className,
+          onClick ? "cursor-pointer" : "",
+        )}
+        onClick={onClick}
+      >
+        {showIcon && <File className={size === "sm" ? "h-4 w-4" : size === "md" ? "h-6 w-6" : "h-8 w-8"} />}
+      </div>
+    )
+  }
 
   const sizeClasses = {
     sm: "w-12 h-12",
@@ -39,14 +60,14 @@ export function MediaThumbnail({ file, size = "md", className, showIcon = true, 
     lg: "h-8 w-8",
   }
 
-  const isImage = file.mime_type?.startsWith("image/") || file.file_type?.startsWith("image/")
-  const isVideo = file.mime_type?.startsWith("video/") || file.file_type?.startsWith("video/")
-  const isPDF = file.mime_type === "application/pdf" || file.file_type === "application/pdf"
-  const isAudio = file.mime_type?.startsWith("audio/") || file.file_type?.startsWith("audio/")
+  const isImage = mediaFile.mime_type?.startsWith("image/") || mediaFile.file_type?.startsWith("image/")
+  const isVideo = mediaFile.mime_type?.startsWith("video/") || mediaFile.file_type?.startsWith("video/")
+  const isPDF = mediaFile.mime_type === "application/pdf" || mediaFile.file_type === "application/pdf"
+  const isAudio = mediaFile.mime_type?.startsWith("audio/") || mediaFile.file_type?.startsWith("audio/")
   const isPresentation =
-    file.file_type === "presentation" ||
-    file.mime_type?.includes("presentation") ||
-    file.mime_type?.includes("powerpoint")
+    mediaFile.file_type === "presentation" ||
+    mediaFile.mime_type?.includes("presentation") ||
+    mediaFile.mime_type?.includes("powerpoint")
 
   const getIcon = () => {
     if (isVideo) return <Video className={iconSizes[size]} />
@@ -67,7 +88,7 @@ export function MediaThumbnail({ file, size = "md", className, showIcon = true, 
   }
 
   // If it's an image and has a thumbnail or direct URL, try to show it
-  if (isImage && (file.thumbnail_url || file.url) && !imageError) {
+  if (isImage && (mediaFile.thumbnail_url || mediaFile.url) && !imageError) {
     return (
       <div
         className={cn(
@@ -84,8 +105,8 @@ export function MediaThumbnail({ file, size = "md", className, showIcon = true, 
           </div>
         )}
         <img
-          src={file.thumbnail_url || file.url}
-          alt={file.original_filename || file.original_name || file.filename || "Media file"}
+          src={mediaFile.thumbnail_url || mediaFile.url}
+          alt={mediaFile.original_filename || mediaFile.original_name || mediaFile.filename || "Media file"}
           className={cn("w-full h-full object-cover transition-opacity", imageLoading ? "opacity-0" : "opacity-100")}
           onLoad={() => setImageLoading(false)}
           onError={() => {
