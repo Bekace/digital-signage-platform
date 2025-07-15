@@ -93,7 +93,8 @@ function SortablePlaylistItem({
     opacity: isDragging ? 0.5 : 1,
   }
 
-  const media = item.media || item.media_file
+  // Safely access media with fallback
+  const media = item.media || item.media_file || null
 
   return (
     <div ref={setNodeRef} style={style} className={`bg-white border rounded-lg p-4 ${isDragging ? "shadow-lg" : ""}`}>
@@ -102,13 +103,21 @@ function SortablePlaylistItem({
           <GripVertical className="h-5 w-5 text-gray-400" />
         </div>
 
-        <div className="flex-shrink-0">{media && <MediaThumbnail media={media} size="sm" />}</div>
+        <div className="flex-shrink-0">
+          {media ? (
+            <MediaThumbnail media={media} size="sm" />
+          ) : (
+            <div className="w-12 h-12 bg-gray-100 rounded-lg flex items-center justify-center">
+              <FileText className="h-6 w-6 text-gray-400" />
+            </div>
+          )}
+        </div>
 
         <div className="flex-1 min-w-0">
           <div className="flex items-center justify-between">
             <div>
               <h4 className="font-medium text-sm truncate">
-                {media?.original_name || media?.filename || "Unknown Media"}
+                {media?.original_name || media?.original_filename || media?.filename || "Unknown Media"}
               </h4>
               <div className="flex items-center space-x-2 text-xs text-gray-500 mt-1">
                 <span>Position {item.position}</span>
