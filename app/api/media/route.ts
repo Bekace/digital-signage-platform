@@ -1,7 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { neon } from "@neondatabase/serverless"
 import { getCurrentUser } from "@/lib/auth"
-import { extractTokenFromRequest } from "@/lib/auth-utils"
 
 const sql = neon(process.env.DATABASE_URL!)
 
@@ -9,44 +8,14 @@ export async function GET(request: NextRequest) {
   try {
     console.log("📁 [MEDIA API] GET request received")
 
-    // Extract and validate token
-    const token = extractTokenFromRequest(request)
-    const authHeader = request.headers.get("authorization")
-
-    console.log("📁 [MEDIA API] Auth header present:", !!authHeader)
-    console.log("📁 [MEDIA API] Token extracted:", !!token)
-    console.log("📁 [MEDIA API] Token length:", token?.length || 0)
-
-    if (!token) {
-      console.log("📁 [MEDIA API] No valid token found")
-      return NextResponse.json(
-        {
-          success: false,
-          error: "No authentication token provided",
-          debug: {
-            authHeader: !!authHeader,
-            authHeaderFormat: authHeader?.startsWith("Bearer ") ? "correct" : "incorrect",
-            tokenExtracted: false,
-          },
-        },
-        { status: 401 },
-      )
-    }
-
-    // Get current user
+    // Get current user using the same method as other API routes
     const user = await getCurrentUser(request)
     if (!user) {
       console.log("📁 [MEDIA API] No authenticated user found")
       return NextResponse.json(
         {
           success: false,
-          error: "Invalid or expired authentication token",
-          debug: {
-            authHeader: !!authHeader,
-            tokenPresent: !!token,
-            tokenLength: token.length,
-            userFound: false,
-          },
+          error: "Unauthorized",
         },
         { status: 401 },
       )
@@ -88,10 +57,6 @@ export async function GET(request: NextRequest) {
           success: false,
           error: "Database query failed",
           details: dbError instanceof Error ? dbError.message : "Unknown database error",
-          debug: {
-            userId: user.id,
-            userEmail: user.email,
-          },
         },
         { status: 500 },
       )
@@ -113,12 +78,6 @@ export async function GET(request: NextRequest) {
       media: processedFiles,
       files: processedFiles, // Include both for compatibility
       total: processedFiles.length,
-      debug: {
-        userId: user.id,
-        userEmail: user.email,
-        filesFound: processedFiles.length,
-        timestamp: new Date().toISOString(),
-      },
     })
   } catch (error) {
     console.error("📁 [MEDIA API] Unexpected error:", error)
@@ -127,10 +86,6 @@ export async function GET(request: NextRequest) {
         success: false,
         error: "Internal server error",
         details: error instanceof Error ? error.message : "Unknown error",
-        debug: {
-          errorType: error instanceof Error ? error.constructor.name : typeof error,
-          timestamp: new Date().toISOString(),
-        },
       },
       { status: 500 },
     )
