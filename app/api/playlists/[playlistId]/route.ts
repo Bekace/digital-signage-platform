@@ -8,7 +8,7 @@ export async function GET(request: Request, { params }: { params: { playlistId: 
   console.log("🎵 [PLAYLIST API] Starting GET request for playlist:", params.playlistId)
 
   try {
-    const user = await getCurrentUser()
+    const user = await getCurrentUser(request)
     if (!user) {
       console.log("❌ [PLAYLIST API] No user authenticated")
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
@@ -86,7 +86,7 @@ export async function PUT(request: Request, { params }: { params: { playlistId: 
   console.log("✏️ [PLAYLIST API] Starting PUT request for playlist:", params.playlistId)
 
   try {
-    const user = await getCurrentUser()
+    const user = await getCurrentUser(request)
     if (!user) {
       console.log("❌ [PLAYLIST API] No user authenticated")
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
@@ -165,7 +165,7 @@ export async function DELETE(request: Request, { params }: { params: { playlistI
   console.log("🗑️ [PLAYLIST API] Starting DELETE request for playlist:", params.playlistId)
 
   try {
-    const user = await getCurrentUser()
+    const user = await getCurrentUser(request)
     if (!user) {
       console.log("❌ [PLAYLIST API] No user authenticated")
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
