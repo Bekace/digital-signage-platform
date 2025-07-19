@@ -321,7 +321,7 @@ export default function HomePage() {
           <div className="grid lg:grid-cols-2 gap-12 items-center">
             <div className="relative">
               <img
-                src="/placeholder.svg?height=400&width=600"
+                src="https://cdn.prod.website-files.com/6270f157923cfedd922e9299/67bf7352968940a8f367cd2b_ai.jpg?height=400&width=600"
                 alt="AI Media Player"
                 className="w-full h-auto rounded-lg"
               />
