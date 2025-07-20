@@ -94,8 +94,7 @@ export default function SignUpPage() {
       <div className="max-w-md w-full space-y-8">
         <div className="text-center">
           <Link href="/" className="flex items-center justify-center mb-6">
-            <Monitor className="h-8 w-8 mr-2" />
-            <span className="text-2xl font-bold">SignageCloud</span>
+            <Image src="/images/xkreen-logo.png" alt="xkreen" width={120} height={32} className="h-8 w-auto" />
           </Link>
           <h2 className="text-3xl font-bold">Create your account</h2>
           <p className="mt-2 text-gray-600">Start your digital signage journey today</p>

@@ -62,7 +62,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
       <div className="hidden md:flex md:w-64 md:flex-col">
         <div className="flex flex-col flex-grow pt-5 overflow-y-auto bg-white border-r">
           <div className="flex items-center flex-shrink-0 px-4">
-            <h1 className="text-xl font-semibold">Digital Signage</h1>
+            <Image src="/images/xkreen-logo.png" alt="xkreen" width={120} height={32} className="h-8 w-auto" />
           </div>
           <div className="mt-5 flex-grow flex flex-col">
             <nav className="flex-1 px-2 pb-4 space-y-1">
