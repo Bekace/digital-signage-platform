@@ -6,9 +6,9 @@ import "./globals.css"
 const inter = Inter({ subsets: ["latin"] })
 
 export const metadata: Metadata = {
-  title: "SignageCloud - Digital Signage Platform",
-  description: "Manage your digital displays, upload content, and create playlists from one powerful platform.",
-    generator: 'v0.dev'
+  title: "Xkreen - Smart Digital Signage Platform",
+  description: "AI-Powered Audience Analytics and Smart Digital Signage",
+    generator: 'Britelite'
 }
 
 export default function RootLayout({
