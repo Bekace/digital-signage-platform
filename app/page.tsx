@@ -15,7 +15,6 @@ import {
   Stethoscope,
   Car,
   GraduationCap,
-  Shield,
   ChevronDown,
   Zap,
   Coffee,
@@ -146,11 +145,12 @@ export default function HomePage() {
               </Button>
             </div>
             <div className="relative">
-              <div className="bg-gradient-to-br from-purple-100 to-blue-100 rounded-lg p-8 h-64 flex items-center justify-center">
-                <div className="text-center">
-                  <Shield className="h-16 w-16 text-purple-600 mx-auto mb-4" />
-                  <p className="text-gray-700 font-medium">Data anonymity first, always.</p>
-                </div>
+              <div className="rounded-lg overflow-hidden h-64">
+                <img
+                  src="https://hebbkx1anhila5yf.public.blob.vercel-storage.com/67ad0591c8a8fa1fe77c3eb7_IMG_Security.jpg-j4j70anygT4Ax2qFa2av0YrhcxvRMm.jpeg"
+                  alt="Data security and privacy"
+                  className="w-full h-full object-cover"
+                />
               </div>
             </div>
           </div>
