@@ -363,6 +363,7 @@ export default function UsersAdminPage() {
       debugLogger.apiCall("DELETE", `/api/admin/users/${userId}`)
       const response = await fetch(`/api/admin/users/${userId}`, {
         method: "DELETE",
+        credentials: "include",
       })
 
       const data = await response.json()

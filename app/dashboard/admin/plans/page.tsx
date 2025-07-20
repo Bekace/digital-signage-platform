@@ -294,6 +294,8 @@ export default function PlansAdminPage() {
         description: "Failed to delete plan",
         variant: "destructive",
       })
+    } finally {
+      setLoading(null)
     }
   }
 

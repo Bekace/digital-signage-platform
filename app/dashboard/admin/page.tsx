@@ -183,7 +183,7 @@ export default function AdminPage() {
                 <Button size="sm" variant="outline" onClick={loadUsers}>
                   Try Again
                 </Button>
-                <Button size="sm" variant="outline" onClick={runDebugCheck} className="ml-2">
+                <Button size="sm" variant="outline" onClick={runDebugCheck} className="ml-2 bg-transparent">
                   Run Debug
                 </Button>
               </div>

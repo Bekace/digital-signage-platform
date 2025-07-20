@@ -339,6 +339,8 @@ export default function FeaturesAdminPage() {
         description: "Failed to delete feature",
         variant: "destructive",
       })
+    } finally {
+      setLoading(false)
     }
   }
 
