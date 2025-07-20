@@ -123,6 +123,9 @@ export default function HomePage() {
                 Anonymous Hash #334
               </div>
 
+              {/* Person Detection Box */}
+              <div className="absolute top-20 left-20 w-32 h-40 border-4 border-purple-500 rounded-lg"></div>
+
               {/* Analytics Panel */}
               <div className="absolute top-20 right-6 bg-black/90 text-white p-4 rounded-lg text-sm space-y-2 min-w-[200px]">
                 <div className="flex justify-between">
@@ -164,7 +167,8 @@ export default function HomePage() {
               </h2>
               <p className="text-gray-600 mb-6">
                 Our platform is designed with privacy-first principles, ensuring complete anonymity while delivering
-                powerful insights.
+                powerful insights. We comply with global data protection regulations and maintain the highest standards
+                of ethical AI practices.
               </p>
               <Button variant="outline" className="border-purple-600 text-purple-600 hover:bg-purple-50 bg-transparent">
                 Learn more
@@ -259,7 +263,7 @@ export default function HomePage() {
           <h2 className="text-3xl lg:text-4xl font-bold mb-6">All-in-one solution</h2>
           <p className="text-lg text-purple-100 mb-12 max-w-3xl mx-auto">
             From audience analytics to content management, our platform provides everything you need to create engaging
-            digital experiences.
+            digital experiences and drive business growth.
           </p>
 
           <div className="grid md:grid-cols-2 gap-8">
@@ -268,7 +272,7 @@ export default function HomePage() {
                 <BarChart3 className="h-12 w-12 text-purple-300 mb-4" />
                 <h3 className="text-xl font-semibold mb-4">Analytics Dashboard</h3>
                 <p className="text-purple-100 mb-6">
-                  Real-time insights and comprehensive reporting for data-driven decisions.
+                  Real-time insights and comprehensive reporting for data-driven decisions that boost your ROI.
                 </p>
                 <Button variant="outline" className="border-white/30 text-white hover:bg-white/10 bg-transparent">
                   Explore
@@ -281,7 +285,7 @@ export default function HomePage() {
                 <Monitor className="h-12 w-12 text-purple-300 mb-4" />
                 <h3 className="text-xl font-semibold mb-4">Content Management</h3>
                 <p className="text-purple-100 mb-6">
-                  Easy-to-use tools for creating and managing digital signage content.
+                  Easy-to-use tools for creating, scheduling, and managing digital signage content across all locations.
                 </p>
                 <Button variant="outline" className="border-white/30 text-white hover:bg-white/10 bg-transparent">
                   Explore
@@ -300,8 +304,22 @@ export default function HomePage() {
               <h2 className="text-3xl lg:text-4xl font-bold text-gray-900 mb-6">Make decisions based on data</h2>
               <p className="text-gray-600 mb-6">
                 Get real-time insights about your audience behavior, demographics, and engagement patterns to optimize
-                your business strategy.
+                your business strategy. Our AI-powered analytics provide actionable intelligence that drives results.
               </p>
+              <ul className="space-y-3 mb-6">
+                <li className="flex items-center space-x-3">
+                  <div className="w-2 h-2 bg-purple-600 rounded-full"></div>
+                  <span className="text-gray-700">Real-time audience demographics</span>
+                </li>
+                <li className="flex items-center space-x-3">
+                  <div className="w-2 h-2 bg-purple-600 rounded-full"></div>
+                  <span className="text-gray-700">Engagement and dwell time analytics</span>
+                </li>
+                <li className="flex items-center space-x-3">
+                  <div className="w-2 h-2 bg-purple-600 rounded-full"></div>
+                  <span className="text-gray-700">Heat maps and traffic patterns</span>
+                </li>
+              </ul>
               <Button className="bg-purple-600 hover:bg-purple-700 text-white">View Dashboard</Button>
             </div>
             <div className="relative">
@@ -321,7 +339,7 @@ export default function HomePage() {
           <div className="grid lg:grid-cols-2 gap-12 items-center">
             <div className="relative">
               <img
-                src="https://cdn.prod.website-files.com/6270f157923cfedd922e9299/67bf7352968940a8f367cd2b_ai.jpg?height=400&width=600"
+                src="/placeholder.svg?height=400&width=600"
                 alt="AI Media Player"
                 className="w-full h-auto rounded-lg"
               />
@@ -329,12 +347,27 @@ export default function HomePage() {
             <div>
               <h2 className="text-3xl lg:text-4xl font-bold text-gray-900 mb-6">AI Media Player for Easy Start</h2>
               <p className="text-gray-600 mb-6">
-                Plug-and-play solution that gets you started with AI-powered digital signage in minutes, not months.
+                Plug-and-play solution that gets you started with AI-powered digital signage in minutes, not months. Our
+                hardware comes pre-configured with everything you need.
               </p>
               <div className="flex items-center space-x-4 mb-6">
                 <Badge className="bg-green-100 text-green-800">Easy Setup</Badge>
                 <Badge className="bg-blue-100 text-blue-800">Cloud-based</Badge>
                 <Badge className="bg-purple-100 text-purple-800">AI-powered</Badge>
+              </div>
+              <div className="space-y-3 mb-6">
+                <div className="flex items-center space-x-3">
+                  <div className="w-2 h-2 bg-purple-600 rounded-full"></div>
+                  <span className="text-gray-700">5-minute setup process</span>
+                </div>
+                <div className="flex items-center space-x-3">
+                  <div className="w-2 h-2 bg-purple-600 rounded-full"></div>
+                  <span className="text-gray-700">Built-in AI processing</span>
+                </div>
+                <div className="flex items-center space-x-3">
+                  <div className="w-2 h-2 bg-purple-600 rounded-full"></div>
+                  <span className="text-gray-700">Remote management capabilities</span>
+                </div>
               </div>
               <Button className="bg-purple-600 hover:bg-purple-700 text-white">Learn More</Button>
             </div>
@@ -346,11 +379,40 @@ export default function HomePage() {
       <section className="px-6 lg:px-8 py-16 bg-white">
         <div className="max-w-6xl mx-auto text-center">
           <h2 className="text-3xl lg:text-4xl font-bold text-gray-900 mb-6">DISPL works in 1000+ locations globally</h2>
+          <p className="text-gray-600 mb-8 max-w-2xl mx-auto">
+            Trusted by businesses worldwide, our platform operates across multiple countries and continents.
+          </p>
           <div className="flex justify-center items-center space-x-8 mb-8">
-            <div className="w-12 h-8 bg-red-500 rounded"></div>
-            <div className="w-12 h-8 bg-blue-500 rounded-full"></div>
-            <div className="w-12 h-8 bg-green-500 rounded"></div>
-            <div className="w-12 h-8 bg-red-600 rounded"></div>
+            <div className="w-12 h-8 bg-gradient-to-r from-red-500 to-red-600 rounded flex items-center justify-center">
+              <span className="text-white text-xs font-bold">IT</span>
+            </div>
+            <div className="w-12 h-8 bg-gradient-to-r from-blue-500 to-blue-600 rounded-full flex items-center justify-center">
+              <span className="text-white text-xs font-bold">EU</span>
+            </div>
+            <div className="w-12 h-8 bg-gradient-to-r from-green-500 to-green-600 rounded flex items-center justify-center">
+              <span className="text-white text-xs font-bold">BR</span>
+            </div>
+            <div className="w-12 h-8 bg-gradient-to-r from-red-600 to-red-700 rounded flex items-center justify-center">
+              <span className="text-white text-xs font-bold">SG</span>
+            </div>
+          </div>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-8 max-w-2xl mx-auto">
+            <div className="text-center">
+              <div className="text-2xl font-bold text-purple-600">1000+</div>
+              <div className="text-sm text-gray-600">Active Locations</div>
+            </div>
+            <div className="text-center">
+              <div className="text-2xl font-bold text-purple-600">50+</div>
+              <div className="text-sm text-gray-600">Countries</div>
+            </div>
+            <div className="text-center">
+              <div className="text-2xl font-bold text-purple-600">10M+</div>
+              <div className="text-sm text-gray-600">Analyzed Visitors</div>
+            </div>
+            <div className="text-center">
+              <div className="text-2xl font-bold text-purple-600">99.9%</div>
+              <div className="text-sm text-gray-600">Uptime</div>
+            </div>
           </div>
         </div>
       </section>
@@ -362,9 +424,23 @@ export default function HomePage() {
             <div>
               <h2 className="text-3xl lg:text-4xl font-bold text-gray-900 mb-6">Become certified DISPL</h2>
               <p className="text-gray-600 mb-6">
-                Join our partner network and get certified to offer DISPL solutions to your clients. Access training,
-                resources, and ongoing support.
+                Join our partner network and get certified to offer DISPL solutions to your clients. Access
+                comprehensive training, resources, and ongoing support to grow your business.
               </p>
+              <div className="space-y-3 mb-6">
+                <div className="flex items-center space-x-3">
+                  <div className="w-2 h-2 bg-purple-600 rounded-full"></div>
+                  <span className="text-gray-700">Comprehensive training program</span>
+                </div>
+                <div className="flex items-center space-x-3">
+                  <div className="w-2 h-2 bg-purple-600 rounded-full"></div>
+                  <span className="text-gray-700">Sales and marketing support</span>
+                </div>
+                <div className="flex items-center space-x-3">
+                  <div className="w-2 h-2 bg-purple-600 rounded-full"></div>
+                  <span className="text-gray-700">Technical certification</span>
+                </div>
+              </div>
               <Button className="bg-purple-600 hover:bg-purple-700 text-white">Get Certified</Button>
             </div>
             <div className="relative">
@@ -384,18 +460,42 @@ export default function HomePage() {
           <h2 className="text-3xl lg:text-4xl font-bold text-gray-900 text-center mb-12">Our partners reviews</h2>
 
           <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
-            {[1, 2, 3, 4].map((i) => (
+            {[
+              {
+                name: "Sarah Johnson",
+                company: "RetailTech Solutions",
+                review:
+                  "DISPL has transformed how we understand our customers. The insights are incredible and the setup was seamless.",
+              },
+              {
+                name: "Michael Chen",
+                company: "Digital Displays Inc",
+                review:
+                  "The AI-powered analytics have helped our clients increase sales by 25%. Outstanding platform and support.",
+              },
+              {
+                name: "Emma Rodriguez",
+                company: "Smart Signage Co",
+                review:
+                  "Implementation was quick and our team was up and running in no time. The ROI has been fantastic.",
+              },
+              {
+                name: "David Kim",
+                company: "Future Media Group",
+                review: "Best-in-class audience analytics. Our clients love the detailed insights and real-time data.",
+              },
+            ].map((testimonial, i) => (
               <Card key={i} className="p-6">
                 <CardContent className="p-0">
                   <div className="flex items-center space-x-3 mb-4">
                     <img
-                      src={`/placeholder.svg?height=40&width=40&query=person avatar ${i}`}
+                      src={`/placeholder.svg?height=40&width=40&query=professional person avatar ${i + 1}`}
                       alt="Partner"
                       className="w-10 h-10 rounded-full"
                     />
                     <div>
-                      <div className="font-semibold text-sm">Partner Name</div>
-                      <div className="text-xs text-gray-500">Company</div>
+                      <div className="font-semibold text-sm">{testimonial.name}</div>
+                      <div className="text-xs text-gray-500">{testimonial.company}</div>
                     </div>
                   </div>
                   <div className="flex mb-3">
@@ -403,10 +503,7 @@ export default function HomePage() {
                       <Star key={star} className="h-4 w-4 fill-yellow-400 text-yellow-400" />
                     ))}
                   </div>
-                  <p className="text-sm text-gray-600">
-                    "DISPL has transformed how we understand our customers. The insights are incredible and the setup
-                    was seamless."
-                  </p>
+                  <p className="text-sm text-gray-600">"{testimonial.review}"</p>
                 </CardContent>
               </Card>
             ))}
@@ -422,8 +519,22 @@ export default function HomePage() {
               <h2 className="text-3xl lg:text-4xl font-bold mb-6">DISPL Academy helps you start selling faster</h2>
               <p className="text-purple-100 mb-6">
                 Comprehensive training programs, resources, and certification courses to help you master DISPL
-                technology and grow your business.
+                technology and grow your business. Get access to expert-led sessions and hands-on workshops.
               </p>
+              <div className="space-y-3 mb-6">
+                <div className="flex items-center space-x-3">
+                  <div className="w-2 h-2 bg-purple-300 rounded-full"></div>
+                  <span className="text-purple-100">Interactive online courses</span>
+                </div>
+                <div className="flex items-center space-x-3">
+                  <div className="w-2 h-2 bg-purple-300 rounded-full"></div>
+                  <span className="text-purple-100">Live expert sessions</span>
+                </div>
+                <div className="flex items-center space-x-3">
+                  <div className="w-2 h-2 bg-purple-300 rounded-full"></div>
+                  <span className="text-purple-100">Hands-on workshops</span>
+                </div>
+              </div>
               <Button variant="outline" className="border-white/30 text-white hover:bg-white/10 bg-transparent">
                 Start Learning
               </Button>
@@ -447,7 +558,7 @@ export default function HomePage() {
               {[1, 2, 3].map((i) => (
                 <img
                   key={i}
-                  src={`/placeholder.svg?height=40&width=40&query=person avatar ${i}`}
+                  src={`/placeholder.svg?height=40&width=40&query=team member avatar ${i}`}
                   alt="Team member"
                   className="w-10 h-10 rounded-full border-2 border-white"
                 />
