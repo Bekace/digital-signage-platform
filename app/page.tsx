@@ -311,11 +311,12 @@ export default function HomePage() {
         <div className="max-w-6xl mx-auto">
           <div className="grid lg:grid-cols-2 gap-12 items-center">
             <div className="relative">
-              <div className="bg-gradient-to-br from-purple-100 to-blue-100 rounded-lg p-8 h-80 flex items-center justify-center">
-                <div className="text-center">
-                  <Monitor className="h-20 w-20 text-purple-600 mx-auto mb-4" />
-                  <p className="text-gray-700 font-medium">AI Media Player Hardware</p>
-                </div>
+              <div className="rounded-lg overflow-hidden aspect-square">
+                <img
+                  src="https://hebbkx1anhila5yf.public.blob.vercel-storage.com/67bf7352968940a8f367cd2b_ai.jpg-y8DKvr6qulv38o8EadPz6mQujYwIbb.jpeg"
+                  alt="AI Media Player Hardware"
+                  className="w-full h-full object-cover"
+                />
               </div>
             </div>
             <div>
@@ -352,7 +353,9 @@ export default function HomePage() {
       {/* Global Presence */}
       <section className="px-6 lg:px-8 py-16 bg-white">
         <div className="max-w-6xl mx-auto text-center">
-          <h2 className="text-3xl lg:text-4xl font-bold text-gray-900 mb-6">Xcreen works in 1000+ locations globally</h2>
+          <h2 className="text-3xl lg:text-4xl font-bold text-gray-900 mb-6">
+            Xcreen works in 1000+ locations globally
+          </h2>
           <p className="text-gray-600 mb-8 max-w-2xl mx-auto">
             Trusted by businesses worldwide, our platform operates across multiple countries and continents.
           </p>
