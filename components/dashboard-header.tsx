@@ -14,6 +14,7 @@ import {
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
+import Image from "next/image"
 
 interface UserProfile {
   id: number
@@ -76,7 +77,9 @@ export function DashboardHeader() {
     return (
       <header className="bg-white border-b border-gray-200 px-4 py-3">
         <div className="flex items-center justify-between">
-          <div className="flex-1" />
+          <div className="flex items-center">
+            <Image src="/images/xkreen-logo.png" alt="xkreen" width={100} height={27} className="h-7 w-auto" />
+          </div>
           <div className="flex items-center space-x-4">
             <div className="w-8 h-8 bg-gray-200 rounded-full animate-pulse" />
           </div>
@@ -88,8 +91,9 @@ export function DashboardHeader() {
   return (
     <header className="bg-white border-b border-gray-200 px-4 py-3 md:px-4 pr-16 md:pr-4">
       <div className="flex items-center justify-between md:justify-between">
-        <div className="flex-1">
-          <h2 className="text-lg font-semibold text-gray-900">{user?.companyName || "Digital Signage Platform"}</h2>
+        <div className="flex items-center space-x-4">
+          <Image src="/images/xkreen-logo.png" alt="xkreen" width={100} height={27} className="h-7 w-auto" />
+          {user?.companyName && <div className="hidden sm:block text-sm text-gray-500">{user.companyName}</div>}
         </div>
 
         <div className="flex items-center space-x-4">
