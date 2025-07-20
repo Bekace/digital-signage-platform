@@ -110,14 +110,16 @@ export default function HomePage() {
             </div>
           </div>
 
-          {/* Hero Image */}
+          {/* Hero Video */}
           <div className="relative max-w-5xl mx-auto">
             <div className="relative rounded-2xl overflow-hidden shadow-2xl bg-gray-900">
-              <img
-                src="https://hebbkx1anhila5yf.public.blob.vercel-storage.com/Desktop%20-%201.jpg-imeCRVixXsRdTBRB1qY459U4BZLqVU.jpeg"
-                alt="AI-powered audience analytics in retail store"
-                className="w-full h-auto"
-              />
+              <video className="w-full h-auto" autoPlay muted loop playsInline controls>
+                <source
+                  src="https://hebbkx1anhila5yf.public.blob.vercel-storage.com/DISPL-compress-TRKe0Ig6NSVvrVPYE1kVkvWhGyjbjF.mp4"
+                  type="video/mp4"
+                />
+                Your browser does not support the video tag.
+              </video>
             </div>
           </div>
         </div>
