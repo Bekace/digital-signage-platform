@@ -703,4 +703,39 @@ export default function SettingsPage() {
                   <Input
                     id="companyAddress"
                     value={companyData.companyAddress}
-                    onChange={(e) => setCompanyData((prev) => ({ ...prev, companyAddress: e.target
+                    onChange={(e) => setCompanyData((prev) => ({ ...prev, companyAddress: e.target.value }))}
+                    placeholder="Enter company address"
+                    maxLength={200}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="companyPhone">Phone Number</Label>
+                  <Input
+                    id="companyPhone"
+                    value={companyData.companyPhone}
+                    onChange={(e) => setCompanyData((prev) => ({ ...prev, companyPhone: e.target.value }))}
+                    placeholder="Enter phone number"
+                    maxLength={20}
+                  />
+                </div>
+                <Button onClick={saveCompanyInfo} disabled={companySaving}>
+                  {companySaving ? (
+                    <>
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                      Saving...
+                    </>
+                  ) : (
+                    <>
+                      <Save className="h-4 w-4 mr-2" />
+                      Save Company Info
+                    </>
+                  )}
+                </Button>
+              </CardContent>
+            </Card>
+          </TabsContent>
+        </Tabs>
+      </div>
+    </DashboardLayout>
+  )
+}
