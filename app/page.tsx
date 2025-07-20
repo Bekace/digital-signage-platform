@@ -28,7 +28,7 @@ export default function HomePage() {
         <Link className="flex items-center" href="/">
           <div className="flex items-center space-x-2">
             <div className="w-6 h-6 bg-gradient-to-br from-purple-500 to-blue-600 rounded transform rotate-12"></div>
-            <span className="text-xl font-semibold text-gray-900">DISPL</span>
+            <span className="text-xl font-semibold text-gray-900">Xkreen</span>
           </div>
         </Link>
 
@@ -378,7 +378,7 @@ export default function HomePage() {
       {/* Global Presence */}
       <section className="px-6 lg:px-8 py-16 bg-white">
         <div className="max-w-6xl mx-auto text-center">
-          <h2 className="text-3xl lg:text-4xl font-bold text-gray-900 mb-6">DISPL works in 1000+ locations globally</h2>
+          <h2 className="text-3xl lg:text-4xl font-bold text-gray-900 mb-6">Xkreen works in 1000+ locations globally</h2>
           <p className="text-gray-600 mb-8 max-w-2xl mx-auto">
             Trusted by businesses worldwide, our platform operates across multiple countries and continents.
           </p>
@@ -422,9 +422,9 @@ export default function HomePage() {
         <div className="max-w-6xl mx-auto">
           <div className="grid lg:grid-cols-2 gap-12 items-center">
             <div>
-              <h2 className="text-3xl lg:text-4xl font-bold text-gray-900 mb-6">Become certified DISPL</h2>
+              <h2 className="text-3xl lg:text-4xl font-bold text-gray-900 mb-6">Become certified Xkreen</h2>
               <p className="text-gray-600 mb-6">
-                Join our partner network and get certified to offer DISPL solutions to your clients. Access
+                Join our partner network and get certified to offer Xkreen solutions to your clients. Access
                 comprehensive training, resources, and ongoing support to grow your business.
               </p>
               <div className="space-y-3 mb-6">
@@ -446,7 +446,7 @@ export default function HomePage() {
             <div className="relative">
               <img
                 src="/placeholder.svg?height=400&width=600"
-                alt="DISPL Certification"
+                alt="Xkeen  Certification"
                 className="w-full h-auto rounded-lg"
               />
             </div>
@@ -465,7 +465,7 @@ export default function HomePage() {
                 name: "Sarah Johnson",
                 company: "RetailTech Solutions",
                 review:
-                  "DISPL has transformed how we understand our customers. The insights are incredible and the setup was seamless.",
+                  "Xkreen has transformed how we understand our customers. The insights are incredible and the setup was seamless.",
               },
               {
                 name: "Michael Chen",
@@ -511,14 +511,14 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* DISPL Academy */}
+      {/* Xkreen Academy */}
       <section className="px-6 lg:px-8 py-16 bg-gradient-to-br from-purple-900 to-blue-900 text-white">
         <div className="max-w-6xl mx-auto">
           <div className="grid lg:grid-cols-2 gap-12 items-center">
             <div>
-              <h2 className="text-3xl lg:text-4xl font-bold mb-6">DISPL Academy helps you start selling faster</h2>
+              <h2 className="text-3xl lg:text-4xl font-bold mb-6">Xkreen Academy helps you start selling faster</h2>
               <p className="text-purple-100 mb-6">
-                Comprehensive training programs, resources, and certification courses to help you master DISPL
+                Comprehensive training programs, resources, and certification courses to help you master Xkreen
                 technology and grow your business. Get access to expert-led sessions and hands-on workshops.
               </p>
               <div className="space-y-3 mb-6">
@@ -542,7 +542,7 @@ export default function HomePage() {
             <div className="relative">
               <img
                 src="/placeholder.svg?height=400&width=600"
-                alt="DISPL Academy"
+                alt="Xkreen Academy"
                 className="w-full h-auto rounded-lg"
               />
             </div>
@@ -584,7 +584,7 @@ export default function HomePage() {
             <div className="lg:col-span-1">
               <div className="flex items-center space-x-2 mb-6">
                 <div className="w-6 h-6 bg-gradient-to-br from-purple-500 to-blue-600 rounded transform rotate-12"></div>
-                <span className="text-xl font-semibold">DISPL</span>
+                <span className="text-xl font-semibold">Xkreen</span>
               </div>
               <p className="text-gray-400 text-sm">AI-powered audience analytics and smart digital signage platform.</p>
             </div>
@@ -695,7 +695,7 @@ export default function HomePage() {
           </div>
 
           <div className="border-t border-gray-800 mt-12 pt-8 flex flex-col md:flex-row justify-between items-center">
-            <p className="text-sm text-gray-400">© 2024 DISPL. All rights reserved.</p>
+            <p className="text-sm text-gray-400">© 2025 Xkreen. All rights reserved.</p>
             <div className="flex items-center space-x-6 mt-4 md:mt-0">
               <Link href="#" className="text-gray-400 hover:text-white">
                 <Globe className="h-5 w-5" />
