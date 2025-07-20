@@ -113,7 +113,7 @@ export default function HomePage() {
           <div className="relative max-w-5xl mx-auto">
             <div className="relative rounded-2xl overflow-hidden shadow-2xl bg-gray-900">
               <img
-                src="/placeholder.svg?height=600&width=1000"
+                src="/placeholder.svg?height=600&width=1000&text=Retail Store with AI Analytics"
                 alt="AI-powered audience analytics in retail store"
                 className="w-full h-auto"
               />
@@ -176,7 +176,7 @@ export default function HomePage() {
             </div>
             <div className="relative">
               <img
-                src="/placeholder.svg?height=400&width=500"
+                src="/placeholder.svg?height=400&width=500&text=AI Ethics and Security"
                 alt="AI ethics and security"
                 className="w-full h-auto rounded-lg"
               />
@@ -324,7 +324,7 @@ export default function HomePage() {
             </div>
             <div className="relative">
               <img
-                src="/placeholder.svg?height=400&width=600"
+                src="/placeholder.svg?height=400&width=600&text=Analytics Dashboard"
                 alt="Analytics dashboard"
                 className="w-full h-auto rounded-lg shadow-lg"
               />
@@ -339,7 +339,7 @@ export default function HomePage() {
           <div className="grid lg:grid-cols-2 gap-12 items-center">
             <div className="relative">
               <img
-                src="/placeholder.svg?height=400&width=600"
+                src="/placeholder.svg?height=400&width=600&text=AI Media Player Hardware"
                 alt="AI Media Player"
                 className="w-full h-auto rounded-lg"
               />
@@ -378,7 +378,9 @@ export default function HomePage() {
       {/* Global Presence */}
       <section className="px-6 lg:px-8 py-16 bg-white">
         <div className="max-w-6xl mx-auto text-center">
-          <h2 className="text-3xl lg:text-4xl font-bold text-gray-900 mb-6">Xkreen works in 1000+ locations globally</h2>
+          <h2 className="text-3xl lg:text-4xl font-bold text-gray-900 mb-6">
+            Xkreen works in 1000+ locations globally
+          </h2>
           <p className="text-gray-600 mb-8 max-w-2xl mx-auto">
             Trusted by businesses worldwide, our platform operates across multiple countries and continents.
           </p>
@@ -445,8 +447,8 @@ export default function HomePage() {
             </div>
             <div className="relative">
               <img
-                src="/placeholder.svg?height=400&width=600"
-                alt="Xkeen  Certification"
+                src="/placeholder.svg?height=400&width=600&text=Xkreen Certification Program"
+                alt="Xkreen Certification"
                 className="w-full h-auto rounded-lg"
               />
             </div>
@@ -489,7 +491,7 @@ export default function HomePage() {
                 <CardContent className="p-0">
                   <div className="flex items-center space-x-3 mb-4">
                     <img
-                      src={`/placeholder.svg?height=40&width=40&query=professional person avatar ${i + 1}`}
+                      src={`/placeholder.svg?height=40&width=40&text=Person ${i + 1}`}
                       alt="Partner"
                       className="w-10 h-10 rounded-full"
                     />
@@ -541,7 +543,7 @@ export default function HomePage() {
             </div>
             <div className="relative">
               <img
-                src="/placeholder.svg?height=400&width=600"
+                src="/placeholder.svg?height=400&width=600&text=Xkreen Academy Learning Platform"
                 alt="Xkreen Academy"
                 className="w-full h-auto rounded-lg"
               />
@@ -558,7 +560,7 @@ export default function HomePage() {
               {[1, 2, 3].map((i) => (
                 <img
                   key={i}
-                  src={`/placeholder.svg?height=40&width=40&query=team member avatar ${i}`}
+                  src={`/placeholder.svg?height=40&width=40&text=Team ${i}`}
                   alt="Team member"
                   className="w-10 h-10 rounded-full border-2 border-white"
                 />
