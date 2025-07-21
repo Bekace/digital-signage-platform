@@ -149,6 +149,14 @@ const debugTools: DebugTool[] = [
     icon: <Monitor className="h-4 w-4" />,
   },
   {
+    name: "Device Registration Debug",
+    description: "Debug device registration and database schema issues",
+    url: "/debug-device-registration",
+    type: "page",
+    category: "Device System",
+    icon: <Monitor className="h-4 w-4" />,
+  },
+  {
     name: "Database Setup",
     description: "Initialize and setup database tables",
     url: "/setup-database",
