@@ -7,7 +7,7 @@ export async function GET() {
   try {
     console.log("🔍 [DEBUG PAIRING CODES] Starting pairing codes analysis...")
 
-    // Get all pairing codes with their relationships
+    // Get all pairing codes
     const pairingCodes = await sql`
       SELECT 
         id,
@@ -20,7 +20,7 @@ export async function GET() {
         used_at,
         completed_at,
         created_at
-      FROM device_pairing_codes 
+      FROM device_pairing_codes
       ORDER BY created_at DESC
     `
 
@@ -36,40 +36,30 @@ export async function GET() {
       ORDER BY dpc.created_at DESC
     `
 
-    // Get available (unused and not expired) pairing codes
+    // Get available codes (not expired, not used)
     const availableCodes = await sql`
       SELECT *
-      FROM device_pairing_codes 
-      WHERE device_id IS NULL 
-      AND expires_at > NOW()
+      FROM device_pairing_codes
+      WHERE expires_at > NOW()
+      AND device_id IS NULL
       ORDER BY created_at DESC
     `
 
-    // Count statistics
-    const stats = await sql`
-      SELECT 
-        COUNT(*) as total,
-        COUNT(CASE WHEN expires_at > NOW() AND device_id IS NULL THEN 1 END) as active,
-        COUNT(CASE WHEN device_id IS NOT NULL THEN 1 END) as used,
-        COUNT(CASE WHEN expires_at <= NOW() THEN 1 END) as expired,
-        COUNT(CASE WHEN user_id IS NOT NULL THEN 1 END) as with_users,
-        COUNT(CASE WHEN expires_at > NOW() AND device_id IS NULL AND user_id IS NOT NULL THEN 1 END) as available
-      FROM device_pairing_codes
-    `
-
-    const analysis = {
-      totalCodes: pairingCodes.length,
-      activeCodes: stats[0]?.active || "0",
-      usedCodes: stats[0]?.used || "0",
-      expiredCodes: stats[0]?.expired || "0",
-      hasUserAssociation: pairingCodes.some((code) => code.user_id !== null),
-      availableForPairing: Number.parseInt(stats[0]?.available || "0"),
-    }
+    // Analysis
+    const totalCodes = pairingCodes.length
+    const activeCodes = await sql`SELECT COUNT(*) as count FROM device_pairing_codes WHERE expires_at > NOW()`
+    const usedCodes = await sql`SELECT COUNT(*) as count FROM device_pairing_codes WHERE device_id IS NOT NULL`
+    const expiredCodes = await sql`SELECT COUNT(*) as count FROM device_pairing_codes WHERE expires_at <= NOW()`
+    const hasUserAssociation = pairingCodes.some((code) => code.user_id !== null)
+    const availableForPairing = availableCodes.length
 
     console.log("🔍 [DEBUG PAIRING CODES] Analysis complete:", {
-      total: pairingCodes.length,
-      available: analysis.availableForPairing,
-      hasUsers: analysis.hasUserAssociation,
+      totalCodes,
+      activeCodes: activeCodes[0].count,
+      usedCodes: usedCodes[0].count,
+      expiredCodes: expiredCodes[0].count,
+      hasUserAssociation,
+      availableForPairing,
     })
 
     return NextResponse.json({
@@ -78,8 +68,22 @@ export async function GET() {
         pairingCodes,
         pairingWithDevices,
         availableCodes,
-        analysis,
-        stats: stats[0],
+        analysis: {
+          totalCodes,
+          activeCodes: activeCodes[0].count,
+          usedCodes: usedCodes[0].count,
+          expiredCodes: expiredCodes[0].count,
+          hasUserAssociation,
+          availableForPairing,
+        },
+        stats: {
+          total: totalCodes,
+          active: activeCodes[0].count,
+          used: usedCodes[0].count,
+          expired: expiredCodes[0].count,
+          withUsers: pairingCodes.filter((code) => code.user_id !== null).length.toString(),
+          available: availableForPairing,
+        },
       },
     })
   } catch (error) {

@@ -68,7 +68,7 @@ export async function POST(request: NextRequest) {
     if (pairing.device_id) {
       console.log("📱 [DEVICE REGISTER] Device already registered for this code")
 
-      // Update existing device with latest info - don't manually set updated_at
+      // Update existing device with latest info
       const updatedDevice = await sql`
         UPDATE devices 
         SET 
@@ -85,7 +85,7 @@ export async function POST(request: NextRequest) {
       })
     }
 
-    // Create new device - let updated_at use its default value
+    // Create new device - COMPLETELY REMOVE updated_at from INSERT
     const deviceResult = await sql`
       INSERT INTO devices (
         name,
@@ -94,19 +94,15 @@ export async function POST(request: NextRequest) {
         platform,
         capabilities,
         screen_resolution,
-        user_id,
-        created_at,
-        last_seen
+        user_id
       ) VALUES (
         ${name},
-        ${deviceType || type || pairing.device_type},
+        ${deviceType || type || pairing.device_type || "web_browser"},
         'online',
         ${platform || "unknown"},
         ${JSON.stringify(capabilities || [])},
         ${screenResolution || "unknown"},
-        ${pairing.user_id},
-        NOW(),
-        NOW()
+        ${pairing.user_id}
       )
       RETURNING id, name, device_type, status, created_at
     `

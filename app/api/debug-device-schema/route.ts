@@ -7,7 +7,7 @@ export async function GET() {
   try {
     console.log("🔍 [DEBUG DEVICE SCHEMA] Starting schema analysis...")
 
-    // Get devices table columns
+    // Get column information
     const columns = await sql`
       SELECT 
         column_name,
@@ -18,11 +18,12 @@ export async function GET() {
         numeric_precision,
         numeric_scale
       FROM information_schema.columns 
-      WHERE table_name = 'devices'
+      WHERE table_name = 'devices' 
+      AND table_schema = 'public'
       ORDER BY ordinal_position
     `
 
-    // Get table constraints
+    // Get constraints
     const constraints = await sql`
       SELECT 
         tc.constraint_name,
@@ -30,80 +31,78 @@ export async function GET() {
         kcu.column_name,
         ccu.table_name AS foreign_table_name,
         ccu.column_name AS foreign_column_name
-      FROM information_schema.table_constraints tc
-      LEFT JOIN information_schema.key_column_usage kcu 
+      FROM information_schema.table_constraints AS tc
+      JOIN information_schema.key_column_usage AS kcu
         ON tc.constraint_name = kcu.constraint_name
-      LEFT JOIN information_schema.constraint_column_usage ccu 
-        ON tc.constraint_name = ccu.constraint_name
+        AND tc.table_schema = kcu.table_schema
+      LEFT JOIN information_schema.constraint_column_usage AS ccu
+        ON ccu.constraint_name = tc.constraint_name
+        AND ccu.table_schema = tc.table_schema
       WHERE tc.table_name = 'devices'
-      ORDER BY tc.constraint_type, tc.constraint_name
+      AND tc.table_schema = 'public'
     `
 
-    // Check for triggers
+    // Get triggers
     const triggers = await sql`
       SELECT 
         trigger_name,
         event_manipulation,
         action_timing,
         action_statement
-      FROM information_schema.triggers 
+      FROM information_schema.triggers
       WHERE event_object_table = 'devices'
-      ORDER BY trigger_name
+      AND event_object_schema = 'public'
     `
 
-    // Get table indexes
+    // Get indexes
     const indexes = await sql`
       SELECT 
         indexname,
         indexdef
-      FROM pg_indexes 
+      FROM pg_indexes
       WHERE tablename = 'devices'
-      ORDER BY indexname
+      AND schemaname = 'public'
     `
 
-    // Analyze updated_at column specifically
-    const updatedAtColumn = columns.find((col) => col.column_name === "updated_at")
-
-    // Check if there are any rules on the table
+    // Get rules
     const rules = await sql`
       SELECT 
         rulename,
         definition
-      FROM pg_rules 
+      FROM pg_rules
       WHERE tablename = 'devices'
+      AND schemaname = 'public'
     `
 
-    // Get table owner and permissions
+    // Get table info
     const tableInfo = await sql`
       SELECT 
-        t.table_name,
-        t.table_type,
-        t.table_schema,
-        c.relowner::regrole as table_owner
-      FROM information_schema.tables t
-      JOIN pg_class c ON c.relname = t.table_name
-      WHERE t.table_name = 'devices'
-      AND t.table_schema = 'public'
+        table_name,
+        table_type,
+        table_schema,
+        table_owner
+      FROM information_schema.tables
+      WHERE table_name = 'devices'
+      AND table_schema = 'public'
     `
 
-    const analysis = {
-      hasUpdatedAtColumn: !!updatedAtColumn,
-      totalColumns: columns.length,
-      hasConstraints: constraints.length > 0,
-      hasTriggers: triggers.length > 0,
-      hasIndexes: indexes.length > 0,
-      hasRules: rules.length > 0,
-      updatedAtDetails: updatedAtColumn,
-      constraintTypes: [...new Set(constraints.map((c) => c.constraint_type))],
-      triggerCount: triggers.length,
-      indexCount: indexes.length,
-    }
+    // Analysis
+    const updatedAtColumn = columns.find((col) => col.column_name === "updated_at")
+    const hasUpdatedAtColumn = !!updatedAtColumn
+    const totalColumns = columns.length
+    const hasConstraints = constraints.length > 0
+    const hasTriggers = triggers.length > 0
+    const hasIndexes = indexes.length > 0
+    const hasRules = rules.length > 0
+
+    const constraintTypes = [...new Set(constraints.map((c) => c.constraint_type))]
 
     console.log("🔍 [DEBUG DEVICE SCHEMA] Analysis complete:", {
-      columns: columns.length,
-      constraints: constraints.length,
-      triggers: triggers.length,
-      hasUpdatedAt: analysis.hasUpdatedAtColumn,
+      hasUpdatedAtColumn,
+      totalColumns,
+      hasConstraints,
+      hasTriggers,
+      triggerCount: triggers.length,
     })
 
     return NextResponse.json({
@@ -115,7 +114,18 @@ export async function GET() {
         indexes,
         rules,
         tableInfo,
-        analysis,
+        analysis: {
+          hasUpdatedAtColumn,
+          totalColumns,
+          hasConstraints,
+          hasTriggers,
+          hasIndexes,
+          hasRules,
+          updatedAtDetails: updatedAtColumn,
+          constraintTypes,
+          triggerCount: triggers.length,
+          indexCount: indexes.length,
+        },
       },
     })
   } catch (error) {
