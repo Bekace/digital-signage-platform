@@ -3,134 +3,153 @@ import { neon } from "@neondatabase/serverless"
 
 const sql = neon(process.env.DATABASE_URL!)
 
-export async function POST(request: Request) {
+export async function POST() {
   try {
-    const { testMode } = await request.json()
+    console.log("🔍 [DEBUG TEST INSERT] Starting device insert tests...")
 
-    console.log("🔍 [DEBUG TEST INSERT] Starting device insert test...")
-
-    // Test data similar to what device registration would use
-    const testDeviceData = {
-      name: `Test Device ${Date.now()}`,
-      device_type: "web_browser",
-      platform: "Win32",
-      capabilities: JSON.stringify(["video", "image", "audio", "web"]),
-      screen_resolution: "1920x1080",
-      user_id: 1, // Assuming user 1 exists
-      status: "online",
+    const results = {
+      test1: null as any,
+      test2: null as any,
+      test3: null as any,
+      test4: null as any,
     }
 
-    let insertResult = null
-    let insertError = null
-
-    // Test 1: Try insert with updated_at
+    // Test 1: Try the exact same INSERT as the failing registration
     try {
-      console.log("🔍 [DEBUG TEST INSERT] Test 1: Insert with updated_at")
-      const result1 = await sql`
+      console.log("🔍 [DEBUG TEST INSERT] Test 1: Exact registration INSERT")
+      const test1Result = await sql`
         INSERT INTO devices (
-          name, device_type, platform, capabilities, screen_resolution, 
-          user_id, status, created_at, updated_at
+          name,
+          device_type,
+          status,
+          platform,
+          capabilities,
+          screen_resolution,
+          created_at,
+          last_seen,
+          updated_at
         ) VALUES (
-          ${testDeviceData.name + " (with updated_at)"}, 
-          ${testDeviceData.device_type}, 
-          ${testDeviceData.platform}, 
-          ${testDeviceData.capabilities}, 
-          ${testDeviceData.screen_resolution}, 
-          ${testDeviceData.user_id}, 
-          ${testDeviceData.status}, 
-          NOW(), 
+          'Debug Test Device 1',
+          'web_browser',
+          'online',
+          'debug',
+          '["test"]',
+          '1920x1080',
+          NOW(),
+          NOW(),
           NOW()
-        ) RETURNING *
+        )
+        RETURNING id, name, device_type, status, created_at, updated_at
       `
-      insertResult = { test1: { success: true, data: result1[0] } }
-    } catch (error) {
-      insertError = { test1: { success: false, error: error instanceof Error ? error.message : "Unknown error" } }
-      console.log("🔍 [DEBUG TEST INSERT] Test 1 failed:", error)
-    }
+      results.test1 = { success: true, data: test1Result[0] }
 
-    // Test 2: Try insert without updated_at
-    try {
-      console.log("🔍 [DEBUG TEST INSERT] Test 2: Insert without updated_at")
-      const result2 = await sql`
-        INSERT INTO devices (
-          name, device_type, platform, capabilities, screen_resolution, 
-          user_id, status, created_at
-        ) VALUES (
-          ${testDeviceData.name + " (without updated_at)"}, 
-          ${testDeviceData.device_type}, 
-          ${testDeviceData.platform}, 
-          ${testDeviceData.capabilities}, 
-          ${testDeviceData.screen_resolution}, 
-          ${testDeviceData.user_id}, 
-          ${testDeviceData.status}, 
-          NOW()
-        ) RETURNING *
-      `
-      if (!insertResult) insertResult = {}
-      insertResult.test2 = { success: true, data: result2[0] }
+      // Clean up test device
+      await sql`DELETE FROM devices WHERE name = 'Debug Test Device 1'`
     } catch (error) {
-      if (!insertError) insertError = {}
-      insertError.test2 = { success: false, error: error instanceof Error ? error.message : "Unknown error" }
-      console.log("🔍 [DEBUG TEST INSERT] Test 2 failed:", error)
-    }
-
-    // Test 3: Try insert with explicit NULL for updated_at
-    try {
-      console.log("🔍 [DEBUG TEST INSERT] Test 3: Insert with NULL updated_at")
-      const result3 = await sql`
-        INSERT INTO devices (
-          name, device_type, platform, capabilities, screen_resolution, 
-          user_id, status, created_at, updated_at
-        ) VALUES (
-          ${testDeviceData.name + " (null updated_at)"}, 
-          ${testDeviceData.device_type}, 
-          ${testDeviceData.platform}, 
-          ${testDeviceData.capabilities}, 
-          ${testDeviceData.screen_resolution}, 
-          ${testDeviceData.user_id}, 
-          ${testDeviceData.status}, 
-          NOW(), 
-          NULL
-        ) RETURNING *
-      `
-      if (!insertResult) insertResult = {}
-      insertResult.test3 = { success: true, data: result3[0] }
-    } catch (error) {
-      if (!insertError) insertError = {}
-      insertError.test3 = { success: false, error: error instanceof Error ? error.message : "Unknown error" }
-      console.log("🔍 [DEBUG TEST INSERT] Test 3 failed:", error)
-    }
-
-    // Clean up test records if in test mode
-    if (testMode) {
-      try {
-        await sql`DELETE FROM devices WHERE name LIKE 'Test Device%'`
-        console.log("🔍 [DEBUG TEST INSERT] Cleaned up test records")
-      } catch (cleanupError) {
-        console.log("🔍 [DEBUG TEST INSERT] Cleanup failed:", cleanupError)
+      results.test1 = {
+        success: false,
+        error: error instanceof Error ? error.message : "Unknown error",
       }
     }
 
-    // Get current device count
-    const deviceCount = await sql`SELECT COUNT(*) as count FROM devices`
+    // Test 2: INSERT without updated_at (let it default)
+    try {
+      console.log("🔍 [DEBUG TEST INSERT] Test 2: INSERT without updated_at")
+      const test2Result = await sql`
+        INSERT INTO devices (
+          name,
+          device_type,
+          status,
+          platform,
+          capabilities,
+          screen_resolution,
+          created_at,
+          last_seen
+        ) VALUES (
+          'Debug Test Device 2',
+          'web_browser',
+          'online',
+          'debug',
+          '["test"]',
+          '1920x1080',
+          NOW(),
+          NOW()
+        )
+        RETURNING id, name, device_type, status, created_at, updated_at
+      `
+      results.test2 = { success: true, data: test2Result[0] }
+
+      // Clean up test device
+      await sql`DELETE FROM devices WHERE name = 'Debug Test Device 2'`
+    } catch (error) {
+      results.test2 = {
+        success: false,
+        error: error instanceof Error ? error.message : "Unknown error",
+      }
+    }
+
+    // Test 3: Minimal INSERT with only required fields
+    try {
+      console.log("🔍 [DEBUG TEST INSERT] Test 3: Minimal INSERT")
+      const test3Result = await sql`
+        INSERT INTO devices (name, device_type) 
+        VALUES ('Debug Test Device 3', 'web_browser')
+        RETURNING id, name, device_type, status, created_at, updated_at
+      `
+      results.test3 = { success: true, data: test3Result[0] }
+
+      // Clean up test device
+      await sql`DELETE FROM devices WHERE name = 'Debug Test Device 3'`
+    } catch (error) {
+      results.test3 = {
+        success: false,
+        error: error instanceof Error ? error.message : "Unknown error",
+      }
+    }
+
+    // Test 4: Check if we can UPDATE the updated_at field
+    try {
+      console.log("🔍 [DEBUG TEST INSERT] Test 4: UPDATE test")
+      // First create a device without updated_at
+      const insertResult = await sql`
+        INSERT INTO devices (name, device_type) 
+        VALUES ('Debug Test Device 4', 'web_browser')
+        RETURNING id
+      `
+
+      const deviceId = insertResult[0].id
+
+      // Then try to update it
+      const updateResult = await sql`
+        UPDATE devices 
+        SET updated_at = NOW(), status = 'online'
+        WHERE id = ${deviceId}
+        RETURNING id, name, updated_at, status
+      `
+
+      results.test4 = { success: true, data: updateResult[0] }
+
+      // Clean up test device
+      await sql`DELETE FROM devices WHERE id = ${deviceId}`
+    } catch (error) {
+      results.test4 = {
+        success: false,
+        error: error instanceof Error ? error.message : "Unknown error",
+      }
+    }
+
+    console.log("🔍 [DEBUG TEST INSERT] All tests completed")
 
     return NextResponse.json({
       success: true,
       data: {
-        insertResults: insertResult,
-        insertErrors: insertError,
-        testData: testDeviceData,
-        currentDeviceCount: deviceCount[0]?.count || 0,
+        tests: results,
         analysis: {
-          test1Success: insertResult?.test1?.success || false,
-          test2Success: insertResult?.test2?.success || false,
-          test3Success: insertResult?.test3?.success || false,
-          recommendation:
-            insertError?.test1 && insertResult?.test2
-              ? "Remove updated_at from INSERT statement"
-              : insertResult?.test1
-                ? "updated_at column works fine"
-                : "All insert methods failed - deeper issue exists",
+          exactInsertWorks: results.test1?.success || false,
+          insertWithoutUpdatedAtWorks: results.test2?.success || false,
+          minimalInsertWorks: results.test3?.success || false,
+          updateWorks: results.test4?.success || false,
+          recommendation: getRecommendation(results),
         },
       },
     })
@@ -139,10 +158,30 @@ export async function POST(request: Request) {
     return NextResponse.json(
       {
         success: false,
-        error: "Failed to test device insert",
+        error: "Failed to run insert tests",
         details: error instanceof Error ? error.message : "Unknown error",
       },
       { status: 500 },
     )
   }
+}
+
+function getRecommendation(results: any): string {
+  if (results.test1?.success) {
+    return "The exact INSERT works fine. The issue might be elsewhere in the registration flow."
+  }
+
+  if (results.test2?.success && !results.test1?.success) {
+    return "Remove updated_at from INSERT and let it use the default value."
+  }
+
+  if (results.test3?.success && !results.test2?.success) {
+    return "Use minimal INSERT with only required fields and let defaults handle the rest."
+  }
+
+  if (results.test4?.success) {
+    return "INSERT works but UPDATE might be the issue. Check the registration flow logic."
+  }
+
+  return "All tests failed. There might be a deeper database or permission issue."
 }

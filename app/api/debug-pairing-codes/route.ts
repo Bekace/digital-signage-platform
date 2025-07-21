@@ -7,29 +7,25 @@ export async function GET() {
   try {
     console.log("🔍 [DEBUG PAIRING CODES] Starting pairing codes analysis...")
 
-    // Get all pairing codes with details
+    // Get all pairing codes with their relationships
     const pairingCodes = await sql`
       SELECT 
-        dpc.id,
-        dpc.code,
-        dpc.screen_name,
-        dpc.device_id,
-        dpc.user_id,
-        dpc.used_at,
-        dpc.completed_at,
-        dpc.created_at,
-        u.email as user_email,
-        d.name as device_name,
-        d.status as device_status
-      FROM device_pairing_codes dpc
-      LEFT JOIN users u ON dpc.user_id = u.id
-      LEFT JOIN devices d ON dpc.device_id = d.id
-      ORDER BY dpc.created_at DESC
-      LIMIT 50
+        id,
+        code,
+        user_id,
+        device_id,
+        screen_name,
+        device_type,
+        expires_at,
+        used_at,
+        completed_at,
+        created_at
+      FROM device_pairing_codes 
+      ORDER BY created_at DESC
     `
 
     // Get pairing codes schema
-    const schema = await sql`
+    const pairingSchema = await sql`
       SELECT 
         column_name,
         data_type,
@@ -40,51 +36,35 @@ export async function GET() {
       ORDER BY ordinal_position
     `
 
-    // Get recent pairing activity
-    const recentActivity = await sql`
+    // Check for active pairing codes
+    const activeCodes = await sql`
       SELECT 
-        COUNT(*) as total_codes,
-        COUNT(CASE WHEN used_at IS NOT NULL THEN 1 END) as used_codes,
-        COUNT(CASE WHEN completed_at IS NOT NULL THEN 1 END) as completed_codes,
-        COUNT(CASE WHEN device_id IS NOT NULL THEN 1 END) as codes_with_devices
-      FROM device_pairing_codes
-    `
-
-    // Check for orphaned codes (codes without valid users or devices)
-    const orphanedCodes = await sql`
-      SELECT 
-        dpc.id,
-        dpc.code,
-        dpc.user_id,
-        dpc.device_id,
+        code,
+        expires_at,
         CASE 
-          WHEN u.id IS NULL THEN 'Missing User'
-          WHEN d.id IS NULL AND dpc.device_id IS NOT NULL THEN 'Missing Device'
-          ELSE 'Valid'
-        END as status
-      FROM device_pairing_codes dpc
-      LEFT JOIN users u ON dpc.user_id = u.id
-      LEFT JOIN devices d ON dpc.device_id = d.id
-      WHERE u.id IS NULL OR (dpc.device_id IS NOT NULL AND d.id IS NULL)
+          WHEN expires_at > NOW() THEN 'active'
+          ELSE 'expired'
+        END as status,
+        device_id IS NOT NULL as is_used
+      FROM device_pairing_codes
+      ORDER BY expires_at DESC
     `
 
     console.log("🔍 [DEBUG PAIRING CODES] Found codes:", pairingCodes.length)
-    console.log("🔍 [DEBUG PAIRING CODES] Activity summary:", recentActivity[0])
+    console.log("🔍 [DEBUG PAIRING CODES] Active codes:", activeCodes.filter((c) => c.status === "active").length)
 
     return NextResponse.json({
       success: true,
       data: {
         pairingCodes,
-        schema,
-        summary: recentActivity[0],
-        orphanedCodes,
+        pairingSchema,
+        activeCodes,
         analysis: {
           totalCodes: pairingCodes.length,
-          hasOrphanedCodes: orphanedCodes.length > 0,
-          completionRate:
-            recentActivity[0]?.total_codes > 0
-              ? ((recentActivity[0].completed_codes / recentActivity[0].total_codes) * 100).toFixed(1) + "%"
-              : "0%",
+          activeCodes: activeCodes.filter((c) => c.status === "active").length,
+          usedCodes: pairingCodes.filter((c) => c.device_id !== null).length,
+          expiredCodes: activeCodes.filter((c) => c.status === "expired").length,
+          hasUserAssociation: pairingCodes.some((c) => c.user_id !== null),
         },
       },
     })

@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { DashboardLayout } from "@/components/dashboard-layout"
-import { Database, Monitor, AlertCircle, CheckCircle, RefreshCw } from "lucide-react"
+import { Database, Monitor, AlertCircle, CheckCircle, RefreshCw, Code, Users, Activity } from "lucide-react"
 
 interface SchemaColumn {
   column_name: string
@@ -30,6 +30,7 @@ export default function DeviceRegistrationDebug() {
   const [devicesResult, setDevicesResult] = useState<DebugResult | null>(null)
   const [pairingResult, setPairingResult] = useState<DebugResult | null>(null)
   const [testInsertResult, setTestInsertResult] = useState<DebugResult | null>(null)
+  const [allTablesResult, setAllTablesResult] = useState<DebugResult | null>(null)
 
   const checkDatabaseSchema = async () => {
     setLoading(true)
@@ -103,11 +104,28 @@ export default function DeviceRegistrationDebug() {
     setLoading(false)
   }
 
+  const checkAllDeviceTables = async () => {
+    setLoading(true)
+    try {
+      const response = await fetch("/api/debug-all-device-tables")
+      const result = await response.json()
+      setAllTablesResult(result)
+    } catch (error) {
+      setAllTablesResult({
+        success: false,
+        error: "Failed to fetch all device tables",
+        details: error instanceof Error ? error.message : "Unknown error",
+      })
+    }
+    setLoading(false)
+  }
+
   const runAllTests = async () => {
     await checkDatabaseSchema()
     await checkExistingDevices()
     await checkPairingCodes()
     await testDeviceInsert()
+    await checkAllDeviceTables()
   }
 
   const renderResult = (result: DebugResult | null, title: string) => {
@@ -182,6 +200,79 @@ export default function DeviceRegistrationDebug() {
     )
   }
 
+  const renderDataAnalysis = () => {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>Data Analysis from Attachments</CardTitle>
+          <CardDescription>Analysis of the provided device-related table data</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid gap-4 md:grid-cols-3">
+            <div className="p-4 border rounded-lg">
+              <h4 className="font-medium flex items-center space-x-2">
+                <Monitor className="h-4 w-4" />
+                <span>Devices Table</span>
+              </h4>
+              <div className="mt-2 space-y-1 text-sm">
+                <p>• 2 existing devices (IDs: 4, 5)</p>
+                <p>• Both have updated_at column populated</p>
+                <p>• Structure includes all expected columns</p>
+                <p>• Both devices are offline status</p>
+              </div>
+            </div>
+
+            <div className="p-4 border rounded-lg">
+              <h4 className="font-medium flex items-center space-x-2">
+                <Code className="h-4 w-4" />
+                <span>Pairing Codes</span>
+              </h4>
+              <div className="mt-2 space-y-1 text-sm">
+                <p>• 3 test codes available</p>
+                <p>• All codes unused (device_id: null)</p>
+                <p>• All codes have user_id: null</p>
+                <p>• Codes expire after 1 hour</p>
+              </div>
+            </div>
+
+            <div className="p-4 border rounded-lg">
+              <h4 className="font-medium flex items-center space-x-2">
+                <Activity className="h-4 w-4" />
+                <span>Heartbeats</span>
+              </h4>
+              <div className="mt-2 space-y-1 text-sm">
+                <p>• Empty table (no heartbeats)</p>
+                <p>• No active device monitoring</p>
+                <p>• Table exists but unused</p>
+              </div>
+            </div>
+          </div>
+
+          <Separator />
+
+          <div>
+            <h4 className="font-medium mb-2">Key Observations</h4>
+            <ul className="text-sm space-y-1 list-disc list-inside text-muted-foreground">
+              <li>Existing devices have updated_at populated correctly</li>
+              <li>Pairing codes exist but none are linked to users</li>
+              <li>The error occurs during new device creation, not with existing data</li>
+              <li>The issue might be in the INSERT statement or database constraints</li>
+              <li>No device heartbeats suggest devices aren't actively connecting</li>
+            </ul>
+          </div>
+
+          <Alert>
+            <AlertCircle className="h-4 w-4" />
+            <AlertDescription>
+              <strong>Hypothesis:</strong> The error "record new has no field updated_at" suggests a PostgreSQL trigger
+              or constraint issue during INSERT operations, not a missing column issue.
+            </AlertDescription>
+          </Alert>
+        </CardContent>
+      </Card>
+    )
+  }
+
   return (
     <DashboardLayout>
       <div className="space-y-6">
@@ -203,7 +294,7 @@ export default function DeviceRegistrationDebug() {
             <CardDescription>Run diagnostic tests to identify the device registration issue</CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-4">
+            <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-5">
               <Button
                 onClick={checkDatabaseSchema}
                 disabled={loading}
@@ -240,6 +331,15 @@ export default function DeviceRegistrationDebug() {
                 <AlertCircle className="h-4 w-4" />
                 <span>Test Insert</span>
               </Button>
+              <Button
+                onClick={checkAllDeviceTables}
+                disabled={loading}
+                variant="outline"
+                className="flex items-center space-x-2 bg-transparent"
+              >
+                <Users className="h-4 w-4" />
+                <span>All Tables</span>
+              </Button>
             </div>
             <Separator className="my-4" />
             <Button onClick={runAllTests} disabled={loading} className="w-full">
@@ -247,6 +347,8 @@ export default function DeviceRegistrationDebug() {
             </Button>
           </CardContent>
         </Card>
+
+        {renderDataAnalysis()}
 
         {schemaResult && (
           <Card>
@@ -260,6 +362,76 @@ export default function DeviceRegistrationDebug() {
                 <div className="mt-4">
                   <h4 className="font-medium mb-2">Devices Table Columns:</h4>
                   {renderSchemaTable(schemaResult.data.columns)}
+
+                  {schemaResult.data.analysis && (
+                    <div className="mt-4 p-4 bg-blue-50 rounded-lg">
+                      <h5 className="font-medium mb-2">Schema Analysis:</h5>
+                      <ul className="text-sm space-y-1">
+                        <li>
+                          • Has updated_at column: {schemaResult.data.analysis.hasUpdatedAtColumn ? "✅ Yes" : "❌ No"}
+                        </li>
+                        <li>• Total columns: {schemaResult.data.analysis.totalColumns}</li>
+                        <li>• Has constraints: {schemaResult.data.analysis.hasConstraints ? "✅ Yes" : "❌ No"}</li>
+                        <li>• Has triggers: {schemaResult.data.analysis.hasTriggers ? "⚠️ Yes" : "✅ No"}</li>
+                      </ul>
+                      {schemaResult.data.analysis.updatedAtDetails && (
+                        <div className="mt-2">
+                          <p className="text-sm font-medium">updated_at column details:</p>
+                          <pre className="text-xs bg-white p-2 rounded mt-1">
+                            {JSON.stringify(schemaResult.data.analysis.updatedAtDetails, null, 2)}
+                          </pre>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        )}
+
+        {testInsertResult && (
+          <Card>
+            <CardHeader>
+              <CardTitle>Device Insert Test Results</CardTitle>
+              <CardDescription>Multiple INSERT tests to identify the exact issue</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {renderResult(testInsertResult, "Insert Tests")}
+              {testInsertResult.success && testInsertResult.data?.tests && (
+                <div className="mt-4 space-y-4">
+                  <div className="grid gap-4 md:grid-cols-2">
+                    {Object.entries(testInsertResult.data.tests).map(([testName, result]: [string, any]) => (
+                      <div
+                        key={testName}
+                        className={`p-3 border rounded-lg ${result?.success ? "border-green-200 bg-green-50" : "border-red-200 bg-red-50"}`}
+                      >
+                        <h5 className="font-medium flex items-center space-x-2">
+                          {result?.success ? (
+                            <CheckCircle className="h-4 w-4 text-green-600" />
+                          ) : (
+                            <AlertCircle className="h-4 w-4 text-red-600" />
+                          )}
+                          <span>{testName.toUpperCase()}</span>
+                        </h5>
+                        <p className="text-sm mt-1">{result?.success ? "✅ Success" : `❌ ${result?.error}`}</p>
+                        {result?.data && (
+                          <pre className="text-xs bg-white p-2 rounded mt-2 overflow-auto">
+                            {JSON.stringify(result.data, null, 2)}
+                          </pre>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+
+                  {testInsertResult.data.analysis?.recommendation && (
+                    <Alert>
+                      <AlertCircle className="h-4 w-4" />
+                      <AlertDescription>
+                        <strong>Recommendation:</strong> {testInsertResult.data.analysis.recommendation}
+                      </AlertDescription>
+                    </Alert>
+                  )}
                 </div>
               )}
             </CardContent>
@@ -282,23 +454,39 @@ export default function DeviceRegistrationDebug() {
               <CardTitle>Pairing Codes Analysis</CardTitle>
               <CardDescription>Device pairing codes and their relationships</CardDescription>
             </CardHeader>
-            <CardContent>{renderResult(pairingResult, "Pairing Codes Check")}</CardContent>
+            <CardContent>
+              {renderResult(pairingResult, "Pairing Codes Check")}
+              {pairingResult.success && pairingResult.data?.analysis && (
+                <div className="mt-4 p-4 bg-blue-50 rounded-lg">
+                  <h5 className="font-medium mb-2">Pairing Analysis:</h5>
+                  <ul className="text-sm space-y-1">
+                    <li>• Total codes: {pairingResult.data.analysis.totalCodes}</li>
+                    <li>• Active codes: {pairingResult.data.analysis.activeCodes}</li>
+                    <li>• Used codes: {pairingResult.data.analysis.usedCodes}</li>
+                    <li>• Expired codes: {pairingResult.data.analysis.expiredCodes}</li>
+                    <li>
+                      • Has user association: {pairingResult.data.analysis.hasUserAssociation ? "✅ Yes" : "❌ No"}
+                    </li>
+                  </ul>
+                </div>
+              )}
+            </CardContent>
           </Card>
         )}
 
-        {testInsertResult && (
+        {allTablesResult && (
           <Card>
             <CardHeader>
-              <CardTitle>Device Insert Test</CardTitle>
-              <CardDescription>Test device insertion to reproduce the error</CardDescription>
+              <CardTitle>All Device Tables Analysis</CardTitle>
+              <CardDescription>Comprehensive analysis of all device-related tables</CardDescription>
             </CardHeader>
-            <CardContent>{renderResult(testInsertResult, "Insert Test")}</CardContent>
+            <CardContent>{renderResult(allTablesResult, "All Tables Check")}</CardContent>
           </Card>
         )}
 
         <Card>
           <CardHeader>
-            <CardTitle>Error Analysis</CardTitle>
+            <CardTitle>Error Analysis & Next Steps</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
             <div>
@@ -314,14 +502,38 @@ export default function DeviceRegistrationDebug() {
             <Separator />
 
             <div>
-              <h4 className="font-medium mb-2">Possible Causes</h4>
+              <h4 className="font-medium mb-2">Likely Root Causes</h4>
               <ul className="text-sm text-muted-foreground space-y-1 list-disc list-inside">
-                <li>Database trigger interfering with INSERT operation</li>
-                <li>Column constraint preventing insertion</li>
-                <li>Data type mismatch in the updated_at field</li>
-                <li>Neon database driver SQL generation issue</li>
-                <li>Column permissions or access restrictions</li>
+                <li>
+                  <strong>Database Trigger:</strong> A BEFORE INSERT trigger might be interfering with the operation
+                </li>
+                <li>
+                  <strong>Column Constraint:</strong> The updated_at column might have a constraint preventing manual
+                  insertion
+                </li>
+                <li>
+                  <strong>Neon Driver Issue:</strong> The Neon serverless driver might be generating unexpected SQL
+                </li>
+                <li>
+                  <strong>Transaction Context:</strong> The error might occur within a transaction that affects column
+                  visibility
+                </li>
+                <li>
+                  <strong>User Association Missing:</strong> Pairing codes have no user_id, which might be required for
+                  device creation
+                </li>
               </ul>
+            </div>
+
+            <div>
+              <h4 className="font-medium mb-2">Recommended Actions</h4>
+              <ol className="text-sm text-muted-foreground space-y-1 list-decimal list-inside">
+                <li>Run the INSERT tests above to identify which approach works</li>
+                <li>Check for database triggers on the devices table</li>
+                <li>Verify if user_id is required for device creation</li>
+                <li>Test with a simpler INSERT statement excluding updated_at</li>
+                <li>Check database logs for more detailed error information</li>
+              </ol>
             </div>
           </CardContent>
         </Card>
