@@ -5,84 +5,57 @@ const sql = neon(process.env.DATABASE_URL!)
 
 export async function GET() {
   try {
-    console.log("🔍 [DEBUG ALL DEVICE TABLES] Starting comprehensive device tables analysis...")
+    console.log("🔍 [DEBUG ALL DEVICE TABLES] Starting comprehensive analysis...")
 
     // Get all device-related tables
-    const deviceTables = await sql`
+    const tables = await sql`
       SELECT table_name, table_type
       FROM information_schema.tables 
-      WHERE table_name LIKE '%device%' 
-      OR table_name LIKE '%pairing%'
-      OR table_name LIKE '%heartbeat%'
+      WHERE table_schema = 'public' 
+      AND table_name LIKE '%device%'
       ORDER BY table_name
     `
 
-    // Get detailed info for each table
+    // Get table details and sample data
     const tableDetails = {}
 
-    for (const table of deviceTables) {
-      const tableName = table.table_name
-
+    for (const table of tables) {
       try {
-        // Get columns
-        const columns = await sql`
-          SELECT 
-            column_name,
-            data_type,
-            is_nullable,
-            column_default,
-            character_maximum_length
+        // Get table structure
+        const structure = await sql`
+          SELECT column_name, data_type, is_nullable, column_default
           FROM information_schema.columns 
-          WHERE table_name = ${tableName}
+          WHERE table_name = ${table.table_name}
           ORDER BY ordinal_position
         `
 
         // Get row count
         const countResult = await sql`
-          SELECT COUNT(*) as count FROM ${sql(tableName)}
+          SELECT COUNT(*) as count FROM ${sql(table.table_name)}
         `
 
-        // Get constraints
-        const constraints = await sql`
-          SELECT 
-            constraint_name,
-            constraint_type
-          FROM information_schema.table_constraints 
-          WHERE table_name = ${tableName}
+        // Get sample data (first 5 rows)
+        const sampleData = await sql`
+          SELECT * FROM ${sql(table.table_name)} 
+          ORDER BY id DESC 
+          LIMIT 5
         `
 
-        // Get foreign keys
-        const foreignKeys = await sql`
-          SELECT 
-            kcu.column_name,
-            ccu.table_name AS foreign_table_name,
-            ccu.column_name AS foreign_column_name
-          FROM information_schema.key_column_usage kcu
-          JOIN information_schema.constraint_column_usage ccu 
-            ON kcu.constraint_name = ccu.constraint_name
-          JOIN information_schema.table_constraints tc 
-            ON kcu.constraint_name = tc.constraint_name
-          WHERE kcu.table_name = ${tableName}
-          AND tc.constraint_type = 'FOREIGN KEY'
-        `
-
-        tableDetails[tableName] = {
-          columns,
-          rowCount: countResult[0].count,
-          constraints,
-          foreignKeys,
+        tableDetails[table.table_name] = {
+          structure,
+          rowCount: countResult[0]?.count || 0,
+          sampleData,
         }
       } catch (error) {
-        tableDetails[tableName] = {
+        tableDetails[table.table_name] = {
           error: error instanceof Error ? error.message : "Unknown error",
         }
       }
     }
 
-    // Analyze relationships
+    // Analyze relationships between devices and pairing codes
     const relationships = []
 
-    // Check device -> pairing relationship
     try {
       const devicePairingRelation = await sql`
         SELECT 
@@ -95,18 +68,11 @@ export async function GET() {
         LEFT JOIN device_pairing_codes dpc ON d.id = dpc.device_id
         ORDER BY d.id
       `
-      relationships.push({
-        type: "device_pairing",
-        data: devicePairingRelation,
-      })
+      relationships.push({ type: "device_pairing", data: devicePairingRelation })
     } catch (error) {
-      relationships.push({
-        type: "device_pairing",
-        error: error instanceof Error ? error.message : "Unknown error",
-      })
+      relationships.push({ type: "device_pairing", error: error.message })
     }
 
-    // Check device -> heartbeat relationship
     try {
       const deviceHeartbeatRelation = await sql`
         SELECT 
@@ -114,67 +80,62 @@ export async function GET() {
           d.name as device_name,
           d.status as device_status,
           dh.status as heartbeat_status,
-          dh.updated_at as last_heartbeat
+          dh.last_heartbeat
         FROM devices d
         LEFT JOIN device_heartbeats dh ON d.id = dh.device_id
         ORDER BY d.id
       `
-      relationships.push({
-        type: "device_heartbeat",
-        data: deviceHeartbeatRelation,
-      })
+      relationships.push({ type: "device_heartbeat", data: deviceHeartbeatRelation })
     } catch (error) {
-      relationships.push({
-        type: "device_heartbeat",
-        error: error instanceof Error ? error.message : "Unknown error",
-      })
+      relationships.push({ type: "device_heartbeat", error: error.message })
     }
 
     // Check for orphaned records
-    let orphanedAnalysis = {}
+    const orphanedAnalysis = {}
 
     try {
-      // Pairing codes without devices
       const orphanedPairingCodes = await sql`
         SELECT COUNT(*) as count
-        FROM device_pairing_codes 
-        WHERE device_id IS NULL AND used_at IS NOT NULL
+        FROM device_pairing_codes dpc
+        LEFT JOIN devices d ON dpc.device_id = d.id
+        WHERE dpc.device_id IS NOT NULL AND d.id IS NULL
       `
+      orphanedAnalysis.orphanedPairingCodes = orphanedPairingCodes[0]?.count || "0"
 
-      // Devices without pairing codes
       const devicesWithoutPairing = await sql`
         SELECT COUNT(*) as count
         FROM devices d
-        WHERE NOT EXISTS (
-          SELECT 1 FROM device_pairing_codes dpc 
-          WHERE dpc.device_id = d.id
-        )
+        LEFT JOIN device_pairing_codes dpc ON d.id = dpc.device_id
+        WHERE dpc.device_id IS NULL
       `
-
-      orphanedAnalysis = {
-        orphanedPairingCodes: orphanedPairingCodes[0].count,
-        devicesWithoutPairing: devicesWithoutPairing[0].count,
-      }
+      orphanedAnalysis.devicesWithoutPairing = devicesWithoutPairing[0]?.count || "0"
     } catch (error) {
-      orphanedAnalysis.error = error instanceof Error ? error.message : "Unknown error"
+      orphanedAnalysis.error = error.message
     }
 
-    console.log("🔍 [DEBUG ALL DEVICE TABLES] Found tables:", deviceTables.length)
+    // Summary statistics
+    const summary = {
+      totalTables: tables.length,
+      tablesWithData: Object.values(tableDetails).filter((table: any) => table.rowCount > 0).length,
+      totalDevices: tableDetails.devices?.rowCount || 0,
+      totalPairingCodes: tableDetails.device_pairing_codes?.rowCount || 0,
+      totalHeartbeats: tableDetails.device_heartbeats?.rowCount || 0,
+    }
+
+    console.log("🔍 [DEBUG ALL DEVICE TABLES] Analysis complete:", {
+      tables: tables.length,
+      relationships: relationships.length,
+      summary,
+    })
 
     return NextResponse.json({
       success: true,
       data: {
-        tables: deviceTables,
+        tables,
         tableDetails,
         relationships,
         orphanedAnalysis,
-        summary: {
-          totalTables: deviceTables.length,
-          tablesWithData: Object.values(tableDetails).filter((t: any) => t.rowCount > 0).length,
-          totalDevices: tableDetails.devices?.rowCount || 0,
-          totalPairingCodes: tableDetails.device_pairing_codes?.rowCount || 0,
-          totalHeartbeats: tableDetails.device_heartbeats?.rowCount || 0,
-        },
+        summary,
       },
     })
   } catch (error) {
@@ -182,7 +143,7 @@ export async function GET() {
     return NextResponse.json(
       {
         success: false,
-        error: "Failed to analyze all device tables",
+        error: "Failed to analyze device tables",
         details: error instanceof Error ? error.message : "Unknown error",
       },
       { status: 500 },
