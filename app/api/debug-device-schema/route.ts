@@ -7,7 +7,7 @@ export async function GET() {
   try {
     console.log("🔍 [DEBUG DEVICE SCHEMA] Starting schema analysis...")
 
-    // Get detailed schema information for devices table
+    // Get devices table columns
     const columns = await sql`
       SELECT 
         column_name,
@@ -16,24 +16,27 @@ export async function GET() {
         column_default,
         character_maximum_length,
         numeric_precision,
-        numeric_scale,
-        datetime_precision
+        numeric_scale
       FROM information_schema.columns 
-      WHERE table_name = 'devices' 
+      WHERE table_name = 'devices'
       ORDER BY ordinal_position
     `
 
-    // Check for constraints
+    // Get table constraints
     const constraints = await sql`
       SELECT 
-        constraint_name,
-        constraint_type,
-        column_name
+        tc.constraint_name,
+        tc.constraint_type,
+        kcu.column_name,
+        ccu.table_name AS foreign_table_name,
+        ccu.column_name AS foreign_column_name
       FROM information_schema.table_constraints tc
-      JOIN information_schema.constraint_column_usage ccu 
+      LEFT JOIN information_schema.key_column_usage kcu 
+        ON tc.constraint_name = kcu.constraint_name
+      LEFT JOIN information_schema.constraint_column_usage ccu 
         ON tc.constraint_name = ccu.constraint_name
       WHERE tc.table_name = 'devices'
-      ORDER BY constraint_type, constraint_name
+      ORDER BY tc.constraint_type, tc.constraint_name
     `
 
     // Check for triggers
@@ -48,7 +51,7 @@ export async function GET() {
       ORDER BY trigger_name
     `
 
-    // Check indexes
+    // Get table indexes
     const indexes = await sql`
       SELECT 
         indexname,
@@ -58,19 +61,50 @@ export async function GET() {
       ORDER BY indexname
     `
 
-    // Get table creation info
-    const tableInfo = await sql`
+    // Analyze updated_at column specifically
+    const updatedAtColumn = columns.find((col) => col.column_name === "updated_at")
+
+    // Check if there are any rules on the table
+    const rules = await sql`
       SELECT 
-        table_name,
-        table_type,
-        table_schema
-      FROM information_schema.tables 
-      WHERE table_name = 'devices'
+        rulename,
+        definition
+      FROM pg_rules 
+      WHERE tablename = 'devices'
     `
 
-    console.log("🔍 [DEBUG DEVICE SCHEMA] Found columns:", columns.length)
-    console.log("🔍 [DEBUG DEVICE SCHEMA] Found constraints:", constraints.length)
-    console.log("🔍 [DEBUG DEVICE SCHEMA] Found triggers:", triggers.length)
+    // Get table owner and permissions
+    const tableInfo = await sql`
+      SELECT 
+        t.table_name,
+        t.table_type,
+        t.table_schema,
+        c.relowner::regrole as table_owner
+      FROM information_schema.tables t
+      JOIN pg_class c ON c.relname = t.table_name
+      WHERE t.table_name = 'devices'
+      AND t.table_schema = 'public'
+    `
+
+    const analysis = {
+      hasUpdatedAtColumn: !!updatedAtColumn,
+      totalColumns: columns.length,
+      hasConstraints: constraints.length > 0,
+      hasTriggers: triggers.length > 0,
+      hasIndexes: indexes.length > 0,
+      hasRules: rules.length > 0,
+      updatedAtDetails: updatedAtColumn,
+      constraintTypes: [...new Set(constraints.map((c) => c.constraint_type))],
+      triggerCount: triggers.length,
+      indexCount: indexes.length,
+    }
+
+    console.log("🔍 [DEBUG DEVICE SCHEMA] Analysis complete:", {
+      columns: columns.length,
+      constraints: constraints.length,
+      triggers: triggers.length,
+      hasUpdatedAt: analysis.hasUpdatedAtColumn,
+    })
 
     return NextResponse.json({
       success: true,
@@ -79,14 +113,9 @@ export async function GET() {
         constraints,
         triggers,
         indexes,
+        rules,
         tableInfo,
-        analysis: {
-          hasUpdatedAtColumn: columns.some((col) => col.column_name === "updated_at"),
-          updatedAtDetails: columns.find((col) => col.column_name === "updated_at"),
-          totalColumns: columns.length,
-          hasConstraints: constraints.length > 0,
-          hasTriggers: triggers.length > 0,
-        },
+        analysis,
       },
     })
   } catch (error) {

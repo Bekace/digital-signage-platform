@@ -7,7 +7,7 @@ export async function GET() {
   try {
     console.log("🔍 [DEBUG PAIRING CODES] Starting pairing codes analysis...")
 
-    // Get all pairing codes with their relationships
+    // Get all pairing codes
     const pairingCodes = await sql`
       SELECT 
         id,
@@ -20,51 +20,100 @@ export async function GET() {
         used_at,
         completed_at,
         created_at
-      FROM device_pairing_codes 
+      FROM device_pairing_codes
       ORDER BY created_at DESC
     `
 
-    // Get pairing codes schema
-    const pairingSchema = await sql`
+    // Get pairing codes with device relationships
+    const pairingWithDevices = await sql`
       SELECT 
-        column_name,
-        data_type,
-        is_nullable,
-        column_default
-      FROM information_schema.columns 
-      WHERE table_name = 'device_pairing_codes' 
-      ORDER BY ordinal_position
+        dpc.id,
+        dpc.code,
+        dpc.user_id,
+        dpc.device_id,
+        dpc.screen_name,
+        dpc.device_type,
+        dpc.expires_at,
+        dpc.used_at,
+        dpc.completed_at,
+        dpc.created_at,
+        d.name as device_name,
+        d.status as device_status,
+        d.platform as device_platform
+      FROM device_pairing_codes dpc
+      LEFT JOIN devices d ON dpc.device_id = d.id
+      ORDER BY dpc.created_at DESC
     `
 
-    // Check for active pairing codes
+    // Get active (non-expired) codes
     const activeCodes = await sql`
+      SELECT COUNT(*) as count
+      FROM device_pairing_codes
+      WHERE expires_at > NOW()
+      AND used_at IS NULL
+    `
+
+    // Get used codes
+    const usedCodes = await sql`
+      SELECT COUNT(*) as count
+      FROM device_pairing_codes
+      WHERE used_at IS NOT NULL
+    `
+
+    // Get expired codes
+    const expiredCodes = await sql`
+      SELECT COUNT(*) as count
+      FROM device_pairing_codes
+      WHERE expires_at <= NOW()
+    `
+
+    // Check for codes with user association
+    const codesWithUsers = await sql`
+      SELECT COUNT(*) as count
+      FROM device_pairing_codes
+      WHERE user_id IS NOT NULL
+    `
+
+    // Get codes that should be available for pairing
+    const availableCodes = await sql`
       SELECT 
         code,
         expires_at,
-        CASE 
-          WHEN expires_at > NOW() THEN 'active'
-          ELSE 'expired'
-        END as status,
-        device_id IS NOT NULL as is_used
+        screen_name,
+        device_type,
+        EXTRACT(EPOCH FROM (expires_at - NOW())) / 60 as minutes_until_expiry
       FROM device_pairing_codes
-      ORDER BY expires_at DESC
+      WHERE expires_at > NOW()
+      AND used_at IS NULL
+      AND device_id IS NULL
+      ORDER BY expires_at ASC
     `
 
-    console.log("🔍 [DEBUG PAIRING CODES] Found codes:", pairingCodes.length)
-    console.log("🔍 [DEBUG PAIRING CODES] Active codes:", activeCodes.filter((c) => c.status === "active").length)
+    const analysis = {
+      totalCodes: pairingCodes.length,
+      activeCodes: activeCodes[0].count,
+      usedCodes: usedCodes[0].count,
+      expiredCodes: expiredCodes[0].count,
+      hasUserAssociation: codesWithUsers[0].count > 0,
+      availableForPairing: availableCodes.length,
+    }
+
+    console.log("🔍 [DEBUG PAIRING CODES] Analysis complete:", analysis)
 
     return NextResponse.json({
       success: true,
       data: {
         pairingCodes,
-        pairingSchema,
-        activeCodes,
-        analysis: {
-          totalCodes: pairingCodes.length,
-          activeCodes: activeCodes.filter((c) => c.status === "active").length,
-          usedCodes: pairingCodes.filter((c) => c.device_id !== null).length,
-          expiredCodes: activeCodes.filter((c) => c.status === "expired").length,
-          hasUserAssociation: pairingCodes.some((c) => c.user_id !== null),
+        pairingWithDevices,
+        availableCodes,
+        analysis,
+        stats: {
+          total: pairingCodes.length,
+          active: activeCodes[0].count,
+          used: usedCodes[0].count,
+          expired: expiredCodes[0].count,
+          withUsers: codesWithUsers[0].count,
+          available: availableCodes.length,
         },
       },
     })
