@@ -195,7 +195,7 @@ export default function UsersAdminPage() {
 
   // Debug refresh trigger changes
   useEffect(() => {
-    debugLogger.refresh("UsersPage", `refreshTrigger changed to ${refreshTrigger}`)
+    debugLogger.stateChange("UsersPage", `refreshTrigger changed to ${refreshTrigger}`)
   }, [refreshTrigger])
 
   const triggerRefresh = () => {

@@ -1,615 +1,556 @@
-"use client"
-
-import { useState } from "react"
 import Link from "next/link"
+import { Button } from "@/components/ui/button"
+import { Card, CardContent } from "@/components/ui/card"
+import { Badge } from "@/components/ui/badge"
 import Image from "next/image"
 import {
   ArrowRight,
-  CheckCircle,
-  Globe,
-  Shield,
-  Users,
-  Building2,
   Star,
-  Play,
-  ChevronRight,
-  Menu,
-  X,
+  Users,
+  Globe,
+  BarChart3,
+  Monitor,
+  Building,
+  Utensils,
+  Hotel,
+  Stethoscope,
+  Car,
+  GraduationCap,
+  ChevronDown,
+  Zap,
+  Coffee,
 } from "lucide-react"
 
-import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
-
 export default function HomePage() {
-  const [isMenuOpen, setIsMenuOpen] = useState(false)
-
   return (
-    <div className="min-h-screen bg-white">
+    <div className="flex flex-col min-h-screen bg-white">
       {/* Header */}
-      <header className="border-b border-gray-200 sticky top-0 bg-white/95 backdrop-blur-sm z-50">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center py-4">
-            <div className="flex items-center">
-              <Link href="/" className="flex items-center">
-                <Image src="/images/xkreen-logo.png" alt="xkreen" width={120} height={40} className="h-8 w-auto" />
-              </Link>
-            </div>
+      <header className="px-6 lg:px-8 h-16 flex items-center justify-between border-b border-gray-100 bg-white sticky top-0 z-50">
+        <Link className="flex items-center" href="/">
+          <Image src="/images/xkreen-logo.png" alt="xkreen" width={120} height={32} className="h-8 w-auto" />
+        </Link>
 
-            {/* Desktop Navigation */}
-            <nav className="hidden md:flex items-center space-x-8">
-              <Link href="#features" className="text-gray-600 hover:text-gray-900 transition-colors">
-                Features
-              </Link>
-              <Link href="#industries" className="text-gray-600 hover:text-gray-900 transition-colors">
-                Industries
-              </Link>
-              <Link href="#pricing" className="text-gray-600 hover:text-gray-900 transition-colors">
-                Pricing
-              </Link>
-              <Link href="#about" className="text-gray-600 hover:text-gray-900 transition-colors">
-                About
-              </Link>
-            </nav>
-
-            <div className="hidden md:flex items-center space-x-4">
-              <Link href="/login">
-                <Button variant="ghost">Sign In</Button>
-              </Link>
-              <Link href="/signup">
-                <Button>Get Started</Button>
-              </Link>
-            </div>
-
-            {/* Mobile menu button */}
-            <button className="md:hidden" onClick={() => setIsMenuOpen(!isMenuOpen)}>
-              {isMenuOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
-            </button>
+        <nav className="hidden lg:flex items-center space-x-8">
+          <div className="flex items-center space-x-1 text-gray-700 hover:text-gray-900 cursor-pointer">
+            <span className="text-sm font-medium">Solutions</span>
+            <ChevronDown className="h-4 w-4" />
           </div>
+          <div className="flex items-center space-x-1 text-gray-700 hover:text-gray-900 cursor-pointer">
+            <span className="text-sm font-medium">Industries</span>
+            <ChevronDown className="h-4 w-4" />
+          </div>
+          <Link className="text-sm font-medium text-gray-700 hover:text-gray-900" href="/case-studies">
+            Case studies
+          </Link>
+          <Link className="text-sm font-medium text-gray-700 hover:text-gray-900" href="/pricing">
+            Pricing
+          </Link>
+          <div className="flex items-center space-x-1 text-gray-700 hover:text-gray-900 cursor-pointer">
+            <span className="text-sm font-medium">Resources</span>
+            <ChevronDown className="h-4 w-4" />
+          </div>
+          <Link className="text-sm font-medium text-gray-700 hover:text-gray-900" href="/become-partner">
+            Become a Partner
+          </Link>
+        </nav>
 
-          {/* Mobile Navigation */}
-          {isMenuOpen && (
-            <div className="md:hidden py-4 border-t border-gray-200">
-              <nav className="flex flex-col space-y-4">
-                <Link href="#features" className="text-gray-600 hover:text-gray-900 transition-colors">
-                  Features
-                </Link>
-                <Link href="#industries" className="text-gray-600 hover:text-gray-900 transition-colors">
-                  Industries
-                </Link>
-                <Link href="#pricing" className="text-gray-600 hover:text-gray-900 transition-colors">
-                  Pricing
-                </Link>
-                <Link href="#about" className="text-gray-600 hover:text-gray-900 transition-colors">
-                  About
-                </Link>
-                <div className="flex flex-col space-y-2 pt-4">
-                  <Link href="/login">
-                    <Button variant="ghost" className="w-full">
-                      Sign In
-                    </Button>
-                  </Link>
-                  <Link href="/signup">
-                    <Button className="w-full">Get Started</Button>
-                  </Link>
-                </div>
-              </nav>
-            </div>
-          )}
+        <div className="flex items-center space-x-4">
+          <button className="w-6 h-6 rounded-full border border-gray-300 flex items-center justify-center">
+            <div className="w-3 h-3 rounded-full bg-gray-400"></div>
+          </button>
+          <Link href="/login" className="text-sm font-medium text-gray-700 hover:text-gray-900">
+            Log in
+          </Link>
+          <Button className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg text-sm font-medium">
+            Book a demo
+          </Button>
         </div>
       </header>
 
-      <main className="flex-1">
-        {/* Hero Section */}
-        <section className="relative overflow-hidden bg-gradient-to-br from-blue-50 via-white to-purple-50">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-20 lg:py-32">
-            <div className="grid lg:grid-cols-2 gap-12 items-center">
-              <div className="space-y-8">
-                <div className="space-y-4">
-                  <Badge variant="outline" className="w-fit">
-                    AI-Powered Digital Signage
-                  </Badge>
-                  <h1 className="text-4xl lg:text-6xl font-bold text-gray-900 leading-tight">
-                    Transform Your
-                    <span className="text-blue-600"> Digital </span>
-                    Presence
-                  </h1>
-                  <p className="text-xl text-gray-600 leading-relaxed">
-                    Revolutionize your communication with AI-driven digital signage that adapts, engages, and delivers
-                    results across every screen.
-                  </p>
-                </div>
+      {/* Hero Section */}
+      <section className="px-6 lg:px-8 py-16 lg:py-20 bg-gray-50">
+        <div className="max-w-6xl mx-auto">
+          <div className="text-center mb-12">
+            <h1 className="text-4xl lg:text-6xl font-bold text-gray-900 leading-tight mb-6">
+              <span className="bg-gradient-to-r from-purple-600 to-blue-600 bg-clip-text text-transparent">
+                AI-Powered
+              </span>{" "}
+              <span className="text-gray-900">Audience Analytics</span>
+              <br />
+              <span className="text-gray-900">and Smart Digital Signage</span>
+            </h1>
 
-                <div className="flex flex-col sm:flex-row gap-4">
-                  <Link href="/signup">
-                    <Button size="lg" className="w-full sm:w-auto">
-                      Start Free Trial
-                      <ArrowRight className="ml-2 h-5 w-5" />
-                    </Button>
-                  </Link>
-                  <Button variant="outline" size="lg" className="w-full sm:w-auto bg-transparent">
-                    <Play className="mr-2 h-5 w-5" />
-                    Watch Demo
-                  </Button>
-                </div>
+            <p className="text-lg text-gray-600 mb-8 max-w-2xl mx-auto">
+              Analyze, engage and monetize offline audience to increase sales. Start gaining store visitor insights with
+              a pilot project in just one week!
+            </p>
 
-                <div className="flex items-center space-x-6 text-sm text-gray-500">
-                  <div className="flex items-center">
-                    <CheckCircle className="h-4 w-4 text-green-500 mr-2" />
-                    14-day free trial
-                  </div>
-                  <div className="flex items-center">
-                    <CheckCircle className="h-4 w-4 text-green-500 mr-2" />
-                    No credit card required
-                  </div>
-                </div>
-              </div>
+            <Button className="bg-purple-600 hover:bg-purple-700 text-white px-8 py-4 rounded-lg text-lg font-medium inline-flex items-center space-x-2 mb-8">
+              <span>Get Started</span>
+              <ArrowRight className="h-5 w-5" />
+            </Button>
 
-              <div className="relative">
-                <div className="relative z-10">
-                  <Image
-                    src="/placeholder.svg?height=600&width=800&text=Digital+Signage+Dashboard"
-                    alt="Digital Signage Dashboard"
-                    width={800}
-                    height={600}
-                    className="rounded-2xl shadow-2xl"
-                  />
-                </div>
-                <div className="absolute -top-4 -right-4 w-72 h-72 bg-blue-200 rounded-full mix-blend-multiply filter blur-xl opacity-70 animate-blob"></div>
-                <div className="absolute -bottom-8 -left-4 w-72 h-72 bg-purple-200 rounded-full mix-blend-multiply filter blur-xl opacity-70 animate-blob animation-delay-2000"></div>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        {/* AI Ethics Section */}
-        <section className="py-20 bg-gray-50">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="text-center space-y-4 mb-16">
-              <Badge variant="outline" className="w-fit mx-auto">
-                AI Ethics & Transparency
+            {/* Compliance Badges */}
+            <div className="flex flex-wrap justify-center items-center gap-6 mb-12">
+              <Badge variant="outline" className="px-3 py-1 text-xs">
+                EU AI ACT COMPLIANT
               </Badge>
-              <h2 className="text-3xl lg:text-4xl font-bold text-gray-900">Responsible AI at the Core</h2>
-              <p className="text-xl text-gray-600 max-w-3xl mx-auto">
-                Our AI-powered digital signage platform is built on principles of transparency, fairness, and user
-                control.
-              </p>
-            </div>
-
-            <div className="grid md:grid-cols-3 gap-8">
-              <Card className="text-center">
-                <CardHeader>
-                  <Shield className="h-12 w-12 text-blue-600 mx-auto mb-4" />
-                  <CardTitle>Privacy First</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <p className="text-gray-600">
-                    Your data remains secure with end-to-end encryption and transparent data handling practices.
-                  </p>
-                </CardContent>
-              </Card>
-
-              <Card className="text-center">
-                <CardHeader>
-                  <Users className="h-12 w-12 text-blue-600 mx-auto mb-4" />
-                  <CardTitle>Human-Centered</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <p className="text-gray-600">
-                    AI enhances human creativity and decision-making rather than replacing it.
-                  </p>
-                </CardContent>
-              </Card>
-
-              <Card className="text-center">
-                <CardHeader>
-                  <Globe className="h-12 w-12 text-blue-600 mx-auto mb-4" />
-                  <CardTitle>Accessible Design</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <p className="text-gray-600">
-                    Built with accessibility standards to ensure inclusive experiences for all users.
-                  </p>
-                </CardContent>
-              </Card>
+              <Badge variant="outline" className="px-3 py-1 text-xs">
+                GDPR COMPLIANT
+              </Badge>
+              <Badge variant="outline" className="px-3 py-1 text-xs">
+                LGPD COMPLIANT
+              </Badge>
+              <Badge variant="outline" className="px-3 py-1 text-xs">
+                CCPA COMPLIANT
+              </Badge>
             </div>
           </div>
-        </section>
 
-        {/* Industries Section */}
-        <section id="industries" className="py-20">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="text-center space-y-4 mb-16">
-              <h2 className="text-3xl lg:text-4xl font-bold text-gray-900">Trusted Across Industries</h2>
-              <p className="text-xl text-gray-600 max-w-3xl mx-auto">
-                From retail to healthcare, our digital signage solutions adapt to your industry's unique needs.
-              </p>
-            </div>
-
-            <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
-              {[
-                { icon: Building2, title: "Retail", desc: "Boost sales with dynamic product displays" },
-                { icon: Users, title: "Corporate", desc: "Enhance internal communications" },
-                { icon: Shield, title: "Healthcare", desc: "Improve patient experience and wayfinding" },
-                { icon: Globe, title: "Education", desc: "Engage students with interactive content" },
-              ].map((industry, index) => (
-                <Card key={index} className="text-center hover:shadow-lg transition-shadow">
-                  <CardHeader>
-                    <industry.icon className="h-12 w-12 text-blue-600 mx-auto mb-4" />
-                    <CardTitle className="text-lg">{industry.title}</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <p className="text-gray-600 text-sm">{industry.desc}</p>
-                  </CardContent>
-                </Card>
-              ))}
+          {/* Hero Video */}
+          <div className="relative max-w-5xl mx-auto">
+            <div className="relative rounded-2xl overflow-hidden shadow-2xl bg-gray-900">
+              <video className="w-full h-auto" autoPlay muted loop playsInline controls>
+                <source
+                  src="https://hebbkx1anhila5yf.public.blob.vercel-storage.com/DISPL-compress-TRKe0Ig6NSVvrVPYE1kVkvWhGyjbjF.mp4"
+                  type="video/mp4"
+                />
+                Your browser does not support the video tag.
+              </video>
             </div>
           </div>
-        </section>
+        </div>
+      </section>
 
-        {/* All-in-One Solution */}
-        <section className="py-20 bg-gray-50">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="grid lg:grid-cols-2 gap-12 items-center">
-              <div className="space-y-6">
-                <div className="space-y-4">
-                  <Badge variant="outline" className="w-fit">
-                    Complete Solution
-                  </Badge>
-                  <h2 className="text-3xl lg:text-4xl font-bold text-gray-900">Everything You Need in One Platform</h2>
-                  <p className="text-xl text-gray-600">
-                    From content creation to analytics, manage your entire digital signage network with ease.
-                  </p>
-                </div>
-
-                <div className="space-y-4">
-                  {[
-                    "Drag-and-drop content editor",
-                    "Real-time content scheduling",
-                    "Multi-screen management",
-                    "Advanced analytics dashboard",
-                    "Cloud-based infrastructure",
-                  ].map((feature, index) => (
-                    <div key={index} className="flex items-center">
-                      <CheckCircle className="h-5 w-5 text-green-500 mr-3 flex-shrink-0" />
-                      <span className="text-gray-700">{feature}</span>
-                    </div>
-                  ))}
-                </div>
-
-                <Button size="lg">
-                  Explore Features
-                  <ChevronRight className="ml-2 h-5 w-5" />
-                </Button>
-              </div>
-
-              <div className="relative">
-                <Image
-                  src="/placeholder.svg?height=500&width=600&text=Platform+Features"
-                  alt="Platform Features"
-                  width={600}
-                  height={500}
-                  className="rounded-2xl shadow-xl"
+      {/* AI Ethics Section */}
+      <section className="px-6 lg:px-8 py-16 bg-white">
+        <div className="max-w-6xl mx-auto">
+          <div className="grid lg:grid-cols-2 gap-12 items-center">
+            <div>
+              <h2 className="text-3xl lg:text-4xl font-bold text-gray-900 mb-6">
+                Built on the foundations of{" "}
+                <span className="bg-gradient-to-r from-purple-600 to-blue-600 bg-clip-text text-transparent">
+                  AI ethics and security
+                </span>
+              </h2>
+              <p className="text-gray-600 mb-6">
+                Our platform is designed with privacy-first principles, ensuring complete anonymity while delivering
+                powerful insights. We comply with global data protection regulations and maintain the highest standards
+                of ethical AI practices.
+              </p>
+              <Button variant="outline" className="border-purple-600 text-purple-600 hover:bg-purple-50 bg-transparent">
+                Learn more
+              </Button>
+            </div>
+            <div className="relative">
+              <div className="rounded-lg overflow-hidden h-64">
+                <img
+                  src="https://hebbkx1anhila5yf.public.blob.vercel-storage.com/67ad0591c8a8fa1fe77c3eb7_IMG_Security.jpg-j4j70anygT4Ax2qFa2av0YrhcxvRMm.jpeg"
+                  alt="Data security and privacy"
+                  className="w-full h-full object-cover"
                 />
               </div>
             </div>
           </div>
-        </section>
+        </div>
+      </section>
 
-        {/* Make Decisions Section */}
-        <section className="py-20">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="grid lg:grid-cols-2 gap-12 items-center">
-              <div className="relative order-2 lg:order-1">
-                <Image
-                  src="/placeholder.svg?height=500&width=600&text=Analytics+Dashboard"
-                  alt="Analytics Dashboard"
-                  width={600}
-                  height={500}
-                  className="rounded-2xl shadow-xl"
-                />
-              </div>
+      {/* Industries Section */}
+      <section className="px-6 lg:px-8 py-16 bg-gray-50">
+        <div className="max-w-6xl mx-auto">
+          <h2 className="text-3xl lg:text-4xl font-bold text-gray-900 text-center mb-12">Industries</h2>
 
-              <div className="space-y-6 order-1 lg:order-2">
-                <div className="space-y-4">
-                  <Badge variant="outline" className="w-fit">
-                    Data-Driven Insights
-                  </Badge>
-                  <h2 className="text-3xl lg:text-4xl font-bold text-gray-900">Make Informed Decisions</h2>
-                  <p className="text-xl text-gray-600">
-                    Leverage powerful analytics to understand your audience and optimize your content strategy.
-                  </p>
-                </div>
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-3 gap-6">
+            <Card className="p-6 hover:shadow-lg transition-shadow cursor-pointer">
+              <CardContent className="p-0">
+                <Monitor className="h-8 w-8 text-purple-600 mb-4" />
+                <h3 className="font-semibold text-gray-900 mb-2">Media Owners</h3>
+                <p className="text-sm text-gray-600">Digital out-of-home advertising networks</p>
+              </CardContent>
+            </Card>
 
-                <div className="grid grid-cols-2 gap-6">
-                  <div className="text-center">
-                    <div className="text-3xl font-bold text-blue-600 mb-2">98%</div>
-                    <div className="text-sm text-gray-600">Uptime Guarantee</div>
-                  </div>
-                  <div className="text-center">
-                    <div className="text-3xl font-bold text-blue-600 mb-2">24/7</div>
-                    <div className="text-sm text-gray-600">Support Available</div>
-                  </div>
-                  <div className="text-center">
-                    <div className="text-3xl font-bold text-blue-600 mb-2">50+</div>
-                    <div className="text-sm text-gray-600">Integrations</div>
-                  </div>
-                  <div className="text-center">
-                    <div className="text-3xl font-bold text-blue-600 mb-2">10k+</div>
-                    <div className="text-sm text-gray-600">Active Users</div>
-                  </div>
-                </div>
-              </div>
+            <Card className="p-6 hover:shadow-lg transition-shadow cursor-pointer">
+              <CardContent className="p-0">
+                <Building className="h-8 w-8 text-purple-600 mb-4" />
+                <h3 className="font-semibold text-gray-900 mb-2">Malls</h3>
+                <p className="text-sm text-gray-600">Shopping centers and retail complexes</p>
+              </CardContent>
+            </Card>
+
+            <Card className="p-6 hover:shadow-lg transition-shadow cursor-pointer">
+              <CardContent className="p-0">
+                <Zap className="h-8 w-8 text-purple-600 mb-4" />
+                <h3 className="font-semibold text-gray-900 mb-2">Consumer Electronics</h3>
+                <p className="text-sm text-gray-600">Electronics and technology retailers</p>
+              </CardContent>
+            </Card>
+
+            <Card className="p-6 hover:shadow-lg transition-shadow cursor-pointer">
+              <CardContent className="p-0">
+                <Utensils className="h-8 w-8 text-purple-600 mb-4" />
+                <h3 className="font-semibold text-gray-900 mb-2">Restaurants & Cafes</h3>
+                <p className="text-sm text-gray-600">Food service and hospitality</p>
+              </CardContent>
+            </Card>
+
+            <Card className="p-6 hover:shadow-lg transition-shadow cursor-pointer">
+              <CardContent className="p-0">
+                <Hotel className="h-8 w-8 text-purple-600 mb-4" />
+                <h3 className="font-semibold text-gray-900 mb-2">Hotels & Resorts</h3>
+                <p className="text-sm text-gray-600">Hospitality and tourism industry</p>
+              </CardContent>
+            </Card>
+
+            <Card className="p-6 hover:shadow-lg transition-shadow cursor-pointer">
+              <CardContent className="p-0">
+                <Coffee className="h-8 w-8 text-purple-600 mb-4" />
+                <h3 className="font-semibold text-gray-900 mb-2">Food & Beverage</h3>
+                <p className="text-sm text-gray-600">F&B chains and quick service restaurants</p>
+              </CardContent>
+            </Card>
+          </div>
+
+          <div className="flex flex-wrap justify-center gap-8 mt-12">
+            <div className="flex items-center space-x-2 text-gray-600">
+              <Stethoscope className="h-5 w-5" />
+              <span className="text-sm">Healthcare</span>
+            </div>
+            <div className="flex items-center space-x-2 text-gray-600">
+              <Car className="h-5 w-5" />
+              <span className="text-sm">Transportation</span>
+            </div>
+            <div className="flex items-center space-x-2 text-gray-600">
+              <GraduationCap className="h-5 w-5" />
+              <span className="text-sm">Education</span>
             </div>
           </div>
-        </section>
+        </div>
+      </section>
 
-        {/* AI Media Player Hardware */}
-        <section className="py-20 bg-gray-50">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="grid lg:grid-cols-2 gap-12 items-center">
-              <div className="space-y-6">
-                <div className="space-y-4">
-                  <Badge variant="outline" className="w-fit">
-                    Hardware Solution
-                  </Badge>
-                  <h2 className="text-3xl lg:text-4xl font-bold text-gray-900">AI Media Player for Easy Start</h2>
-                  <p className="text-xl text-gray-600">
-                    Get started instantly with our plug-and-play AI media player. No technical expertise required.
-                  </p>
-                </div>
+      {/* All-in-one Solution */}
+      <section className="px-6 lg:px-8 py-16 bg-gradient-to-br from-purple-900 to-blue-900 text-white">
+        <div className="max-w-6xl mx-auto text-center">
+          <h2 className="text-3xl lg:text-4xl font-bold mb-6">All-in-one solution</h2>
+          <p className="text-lg text-purple-100 mb-12 max-w-3xl mx-auto">
+            From audience analytics to content management, our platform provides everything you need to create engaging
+            digital experiences and drive business growth.
+          </p>
 
-                <div className="space-y-4">
-                  {[
-                    "4K Ultra HD output",
-                    "Wi-Fi and Ethernet connectivity",
-                    "Remote management capabilities",
-                    "Energy-efficient design",
-                    "Easy wall mounting",
-                  ].map((feature, index) => (
-                    <div key={index} className="flex items-center">
-                      <CheckCircle className="h-5 w-5 text-green-500 mr-3 flex-shrink-0" />
-                      <span className="text-gray-700">{feature}</span>
-                    </div>
-                  ))}
-                </div>
-
-                <Button size="lg">
-                  Order Hardware
-                  <ArrowRight className="ml-2 h-5 w-5" />
-                </Button>
-              </div>
-
-              <div className="relative">
-                <div className="aspect-square rounded-2xl overflow-hidden shadow-xl">
-                  <Image
-                    src="/images/ai-media-player.jpg"
-                    alt="AI Media Player Hardware"
-                    width={600}
-                    height={600}
-                    className="w-full h-full object-cover"
-                  />
-                </div>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        {/* Global Presence */}
-        <section className="py-20">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="text-center space-y-4 mb-16">
-              <h2 className="text-3xl lg:text-4xl font-bold text-gray-900">Global Presence, Local Support</h2>
-              <p className="text-xl text-gray-600 max-w-3xl mx-auto">
-                Serving customers worldwide with localized support and compliance.
-              </p>
-            </div>
-
-            <div className="grid md:grid-cols-4 gap-8 text-center">
-              <div>
-                <div className="text-4xl font-bold text-blue-600 mb-2">50+</div>
-                <div className="text-gray-600">Countries Served</div>
-              </div>
-              <div>
-                <div className="text-4xl font-bold text-blue-600 mb-2">25</div>
-                <div className="text-gray-600">Languages Supported</div>
-              </div>
-              <div>
-                <div className="text-4xl font-bold text-blue-600 mb-2">99.9%</div>
-                <div className="text-gray-600">Global Uptime</div>
-              </div>
-              <div>
-                <div className="text-4xl font-bold text-blue-600 mb-2">24/7</div>
-                <div className="text-gray-600">Support Coverage</div>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        {/* Certification Section */}
-        <section className="py-20 bg-gray-50">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="text-center space-y-4 mb-16">
-              <h2 className="text-3xl lg:text-4xl font-bold text-gray-900">Enterprise-Grade Security & Compliance</h2>
-              <p className="text-xl text-gray-600 max-w-3xl mx-auto">
-                Trusted by enterprises worldwide with industry-leading security certifications.
-              </p>
-            </div>
-
-            <div className="grid md:grid-cols-4 gap-8">
-              {[
-                { name: "SOC 2 Type II", desc: "Security & Availability" },
-                { name: "ISO 27001", desc: "Information Security" },
-                { name: "GDPR", desc: "Data Protection" },
-                { name: "HIPAA", desc: "Healthcare Compliance" },
-              ].map((cert, index) => (
-                <Card key={index} className="text-center">
-                  <CardHeader>
-                    <Shield className="h-12 w-12 text-blue-600 mx-auto mb-4" />
-                    <CardTitle className="text-lg">{cert.name}</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <p className="text-gray-600 text-sm">{cert.desc}</p>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-          </div>
-        </section>
-
-        {/* Partner Reviews */}
-        <section className="py-20">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="text-center space-y-4 mb-16">
-              <h2 className="text-3xl lg:text-4xl font-bold text-gray-900">Trusted by Industry Leaders</h2>
-              <p className="text-xl text-gray-600 max-w-3xl mx-auto">
-                See what our partners and customers say about their experience.
-              </p>
-            </div>
-
-            <div className="grid md:grid-cols-3 gap-8">
-              {[
-                {
-                  quote: "The AI-powered content optimization has increased our customer engagement by 40%.",
-                  author: "Sarah Johnson",
-                  title: "Marketing Director",
-                  company: "RetailCorp",
-                  rating: 5,
-                },
-                {
-                  quote: "Implementation was seamless, and the support team is exceptional. Highly recommended.",
-                  author: "Michael Chen",
-                  title: "IT Manager",
-                  company: "TechStart Inc.",
-                  rating: 5,
-                },
-                {
-                  quote: "The analytics dashboard provides insights we never had before. Game-changing platform.",
-                  author: "Emily Rodriguez",
-                  title: "Operations Manager",
-                  company: "HealthSystem",
-                  rating: 5,
-                },
-              ].map((review, index) => (
-                <Card key={index}>
-                  <CardContent className="pt-6">
-                    <div className="flex mb-4">
-                      {[...Array(review.rating)].map((_, i) => (
-                        <Star key={i} className="h-5 w-5 text-yellow-400 fill-current" />
-                      ))}
-                    </div>
-                    <blockquote className="text-gray-700 mb-4">"{review.quote}"</blockquote>
-                    <div>
-                      <div className="font-semibold text-gray-900">{review.author}</div>
-                      <div className="text-sm text-gray-600">{review.title}</div>
-                      <div className="text-sm text-gray-600">{review.company}</div>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-          </div>
-        </section>
-
-        {/* Xkreen Academy */}
-        <section className="py-20 bg-blue-600 text-white">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="grid lg:grid-cols-2 gap-12 items-center">
-              <div className="space-y-6">
-                <div className="space-y-4">
-                  <Badge variant="secondary" className="w-fit">
-                    Learning Hub
-                  </Badge>
-                  <h2 className="text-3xl lg:text-4xl font-bold">Xkreen Academy</h2>
-                  <p className="text-xl text-blue-100">
-                    Master digital signage with our comprehensive learning resources, tutorials, and best practices.
-                  </p>
-                </div>
-
-                <div className="space-y-4">
-                  {[
-                    "Step-by-step video tutorials",
-                    "Industry best practices",
-                    "Design templates library",
-                    "Certification programs",
-                    "Community forums",
-                  ].map((feature, index) => (
-                    <div key={index} className="flex items-center">
-                      <CheckCircle className="h-5 w-5 text-blue-200 mr-3 flex-shrink-0" />
-                      <span className="text-blue-100">{feature}</span>
-                    </div>
-                  ))}
-                </div>
-
-                <Button variant="secondary" size="lg">
-                  Start Learning
-                  <ArrowRight className="ml-2 h-5 w-5" />
-                </Button>
-              </div>
-
-              <div className="relative">
-                <Image
-                  src="/placeholder.svg?height=400&width=500&text=Learning+Platform"
-                  alt="Xkreen Academy"
-                  width={500}
-                  height={400}
-                  className="rounded-2xl shadow-xl"
-                />
-              </div>
-            </div>
-          </div>
-        </section>
-
-        {/* CTA Section */}
-        <section className="py-20 bg-gray-900 text-white">
-          <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-            <div className="space-y-8">
-              <div className="space-y-4">
-                <h2 className="text-3xl lg:text-4xl font-bold">Ready to Transform Your Digital Presence?</h2>
-                <p className="text-xl text-gray-300">
-                  Join thousands of businesses already using our platform to engage their audiences.
+          <div className="grid md:grid-cols-2 gap-8">
+            <Card className="bg-white/10 backdrop-blur border-white/20 p-8">
+              <CardContent className="p-0 text-left">
+                <BarChart3 className="h-12 w-12 text-purple-300 mb-4" />
+                <h3 className="text-xl font-semibold mb-4">Analytics Dashboard</h3>
+                <p className="text-purple-100 mb-6">
+                  Real-time insights and comprehensive reporting for data-driven decisions that boost your ROI.
                 </p>
-              </div>
-
-              <div className="flex flex-col sm:flex-row gap-4 justify-center">
-                <Link href="/signup">
-                  <Button size="lg" variant="secondary" className="w-full sm:w-auto">
-                    Start Free Trial
-                    <ArrowRight className="ml-2 h-5 w-5" />
-                  </Button>
-                </Link>
-                <Button
-                  variant="outline"
-                  size="lg"
-                  className="w-full sm:w-auto border-gray-600 text-white hover:bg-gray-800 bg-transparent"
-                >
-                  Book a Demo
+                <Button variant="outline" className="border-white/30 text-white hover:bg-white/10 bg-transparent">
+                  Explore
                 </Button>
-              </div>
+              </CardContent>
+            </Card>
 
-              <div className="flex items-center justify-center space-x-6 text-sm text-gray-400">
-                <div className="flex items-center">
-                  <CheckCircle className="h-4 w-4 text-green-400 mr-2" />
-                  14-day free trial
-                </div>
-                <div className="flex items-center">
-                  <CheckCircle className="h-4 w-4 text-green-400 mr-2" />
-                  No setup fees
-                </div>
-                <div className="flex items-center">
-                  <CheckCircle className="h-4 w-4 text-green-400 mr-2" />
-                  Cancel anytime
+            <Card className="bg-white/10 backdrop-blur border-white/20 p-8">
+              <CardContent className="p-0 text-left">
+                <Monitor className="h-12 w-12 text-purple-300 mb-4" />
+                <h3 className="text-xl font-semibold mb-4">Content Management</h3>
+                <p className="text-purple-100 mb-6">
+                  Easy-to-use tools for creating, scheduling, and managing digital signage content across all locations.
+                </p>
+                <Button variant="outline" className="border-white/30 text-white hover:bg-white/10 bg-transparent">
+                  Explore
+                </Button>
+              </CardContent>
+            </Card>
+          </div>
+        </div>
+      </section>
+
+      {/* Make Decisions Section */}
+      <section className="px-6 lg:px-8 py-16 bg-white">
+        <div className="max-w-6xl mx-auto">
+          <div className="grid lg:grid-cols-2 gap-12 items-center">
+            <div>
+              <h2 className="text-3xl lg:text-4xl font-bold text-gray-900 mb-6">Make decisions based on data</h2>
+              <p className="text-gray-600 mb-6">
+                Get real-time insights about your audience behavior, demographics, and engagement patterns to optimize
+                your business strategy. Our AI-powered analytics provide actionable intelligence that drives results.
+              </p>
+              <ul className="space-y-3 mb-6">
+                <li className="flex items-center space-x-3">
+                  <div className="w-2 h-2 bg-purple-600 rounded-full"></div>
+                  <span className="text-gray-700">Real-time audience demographics</span>
+                </li>
+                <li className="flex items-center space-x-3">
+                  <div className="w-2 h-2 bg-purple-600 rounded-full"></div>
+                  <span className="text-gray-700">Engagement and dwell time analytics</span>
+                </li>
+                <li className="flex items-center space-x-3">
+                  <div className="w-2 h-2 bg-purple-600 rounded-full"></div>
+                  <span className="text-gray-700">Heat maps and traffic patterns</span>
+                </li>
+              </ul>
+              <Button className="bg-purple-600 hover:bg-purple-700 text-white">View Dashboard</Button>
+            </div>
+            <div className="relative">
+              <div className="bg-gradient-to-br from-purple-50 to-blue-50 rounded-lg p-8 h-80 flex items-center justify-center">
+                <div className="text-center">
+                  <BarChart3 className="h-20 w-20 text-purple-600 mx-auto mb-4" />
+                  <p className="text-gray-700 font-medium">Analytics Dashboard Preview</p>
                 </div>
               </div>
             </div>
           </div>
-        </section>
+        </div>
+      </section>
 
-        {/* Footer */}
-        <footer className="bg-gray-900 text-white py-16">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="grid md:grid-cols-4 gap-8">
-              <div className="space-y-4">
+      {/* AI Media Player Section */}
+      <section className="px-6 lg:px-8 py-16 bg-gradient-to-br from-purple-50 to-blue-50">
+        <div className="max-w-6xl mx-auto">
+          <div className="grid lg:grid-cols-2 gap-12 items-center">
+            <div className="relative">
+              <div className="rounded-lg overflow-hidden aspect-square">
+                <img
+                  src="https://hebbkx1anhila5yf.public.blob.vercel-storage.com/67bf7352968940a8f367cd2b_ai.jpg-y8DKvr6qulv38o8EadPz6mQujYwIbb.jpeg"
+                  alt="AI Media Player Hardware"
+                  className="w-full h-full object-cover"
+                />
+              </div>
+            </div>
+            <div>
+              <h2 className="text-3xl lg:text-4xl font-bold text-gray-900 mb-6">AI Media Player for Easy Start</h2>
+              <p className="text-gray-600 mb-6">
+                Plug-and-play solution that gets you started with AI-powered digital signage in minutes, not months. Our
+                hardware comes pre-configured with everything you need.
+              </p>
+              <div className="flex items-center space-x-4 mb-6">
+                <Badge className="bg-green-100 text-green-800">Easy Setup</Badge>
+                <Badge className="bg-blue-100 text-blue-800">Cloud-based</Badge>
+                <Badge className="bg-purple-100 text-purple-800">AI-powered</Badge>
+              </div>
+              <div className="space-y-3 mb-6">
+                <div className="flex items-center space-x-3">
+                  <div className="w-2 h-2 bg-purple-600 rounded-full"></div>
+                  <span className="text-gray-700">5-minute setup process</span>
+                </div>
+                <div className="flex items-center space-x-3">
+                  <div className="w-2 h-2 bg-purple-600 rounded-full"></div>
+                  <span className="text-gray-700">Built-in AI processing</span>
+                </div>
+                <div className="flex items-center space-x-3">
+                  <div className="w-2 h-2 bg-purple-600 rounded-full"></div>
+                  <span className="text-gray-700">Remote management capabilities</span>
+                </div>
+              </div>
+              <Button className="bg-purple-600 hover:bg-purple-700 text-white">Learn More</Button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Global Presence */}
+      <section className="px-6 lg:px-8 py-16 bg-white">
+        <div className="max-w-6xl mx-auto text-center">
+          <h2 className="text-3xl lg:text-4xl font-bold text-gray-900 mb-6">
+            Xcreen works in 1000+ locations globally
+          </h2>
+          <p className="text-gray-600 mb-8 max-w-2xl mx-auto">
+            Trusted by businesses worldwide, our platform operates across multiple countries and continents.
+          </p>
+          <div className="flex justify-center items-center space-x-8 mb-8">
+            <div className="w-12 h-8 bg-gradient-to-r from-red-500 to-red-600 rounded flex items-center justify-center">
+              <span className="text-white text-xs font-bold">IT</span>
+            </div>
+            <div className="w-12 h-8 bg-gradient-to-r from-blue-500 to-blue-600 rounded-full flex items-center justify-center">
+              <span className="text-white text-xs font-bold">EU</span>
+            </div>
+            <div className="w-12 h-8 bg-gradient-to-r from-green-500 to-green-600 rounded flex items-center justify-center">
+              <span className="text-white text-xs font-bold">BR</span>
+            </div>
+            <div className="w-12 h-8 bg-gradient-to-r from-red-600 to-red-700 rounded flex items-center justify-center">
+              <span className="text-white text-xs font-bold">SG</span>
+            </div>
+          </div>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-8 max-w-2xl mx-auto">
+            <div className="text-center">
+              <div className="text-2xl font-bold text-purple-600">1000+</div>
+              <div className="text-sm text-gray-600">Active Locations</div>
+            </div>
+            <div className="text-center">
+              <div className="text-2xl font-bold text-purple-600">50+</div>
+              <div className="text-sm text-gray-600">Countries</div>
+            </div>
+            <div className="text-center">
+              <div className="text-2xl font-bold text-purple-600">10M+</div>
+              <div className="text-sm text-gray-600">Analyzed Visitors</div>
+            </div>
+            <div className="text-center">
+              <div className="text-2xl font-bold text-purple-600">99.9%</div>
+              <div className="text-sm text-gray-600">Uptime</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Certification Section */}
+      <section className="px-6 lg:px-8 py-16 bg-gradient-to-br from-purple-50 to-pink-50">
+        <div className="max-w-6xl mx-auto">
+          <div className="grid lg:grid-cols-2 gap-12 items-center">
+            <div>
+              <h2 className="text-3xl lg:text-4xl font-bold text-gray-900 mb-6">Become certified Xcreen</h2>
+              <p className="text-gray-600 mb-6">
+                Join our partner network and get certified to offer Xcreen solutions to your clients. Access
+                comprehensive training, resources, and ongoing support to grow your business.
+              </p>
+              <div className="space-y-3 mb-6">
+                <div className="flex items-center space-x-3">
+                  <div className="w-2 h-2 bg-purple-600 rounded-full"></div>
+                  <span className="text-gray-700">Comprehensive training program</span>
+                </div>
+                <div className="flex items-center space-x-3">
+                  <div className="w-2 h-2 bg-purple-600 rounded-full"></div>
+                  <span className="text-gray-700">Sales and marketing support</span>
+                </div>
+                <div className="flex items-center space-x-3">
+                  <div className="w-2 h-2 bg-purple-600 rounded-full"></div>
+                  <span className="text-gray-700">Technical certification</span>
+                </div>
+              </div>
+              <Button className="bg-purple-600 hover:bg-purple-700 text-white">Get Certified</Button>
+            </div>
+            <div className="relative">
+              <div className="bg-gradient-to-br from-purple-100 to-blue-100 rounded-lg p-8 h-64 flex items-center justify-center">
+                <div className="text-center">
+                  <GraduationCap className="h-16 w-16 text-purple-600 mx-auto mb-4" />
+                  <p className="text-gray-700 font-medium">Xcreen Certification Program</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Partner Reviews */}
+      <section className="px-6 lg:px-8 py-16 bg-white">
+        <div className="max-w-6xl mx-auto">
+          <h2 className="text-3xl lg:text-4xl font-bold text-gray-900 text-center mb-12">Our partners reviews</h2>
+
+          <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
+            {[
+              {
+                name: "Sarah Johnson",
+                company: "RetailTech Solutions",
+                review:
+                  "Xkreen has transformed how we understand our customers. The insights are incredible and the setup was seamless.",
+              },
+              {
+                name: "Michael Chen",
+                company: "Digital Displays Inc",
+                review:
+                  "The AI-powered analytics have helped our clients increase sales by 25%. Outstanding platform and support.",
+              },
+              {
+                name: "Emma Rodriguez",
+                company: "Smart Signage Co",
+                review:
+                  "Implementation was quick and our team was up and running in no time. The ROI has been fantastic.",
+              },
+              {
+                name: "David Kim",
+                company: "Future Media Group",
+                review: "Best-in-class audience analytics. Our clients love the detailed insights and real-time data.",
+              },
+            ].map((testimonial, i) => (
+              <Card key={i} className="p-6">
+                <CardContent className="p-0">
+                  <div className="flex items-center space-x-3 mb-4">
+                    <div className="w-10 h-10 bg-gray-200 rounded-full"></div>
+                    <div>
+                      <div className="font-semibold text-sm">{testimonial.name}</div>
+                      <div className="text-xs text-gray-500">{testimonial.company}</div>
+                    </div>
+                  </div>
+                  <div className="flex mb-3">
+                    {[1, 2, 3, 4, 5].map((star) => (
+                      <Star key={star} className="h-4 w-4 fill-yellow-400 text-yellow-400" />
+                    ))}
+                  </div>
+                  <p className="text-sm text-gray-600">"{testimonial.review}"</p>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* Xkreen Academy */}
+      <section className="px-6 lg:px-8 py-16 bg-gradient-to-br from-purple-900 to-blue-900 text-white">
+        <div className="max-w-6xl mx-auto">
+          <div className="grid lg:grid-cols-2 gap-12 items-center">
+            <div>
+              <h2 className="text-3xl lg:text-4xl font-bold mb-6">Xkreen Academy helps you start selling faster</h2>
+              <p className="text-purple-100 mb-6">
+                Comprehensive training programs, resources, and certification courses to help you master Xkreen
+                technology and grow your business. Get access to expert-led sessions and hands-on workshops.
+              </p>
+              <div className="space-y-3 mb-6">
+                <div className="flex items-center space-x-3">
+                  <div className="w-2 h-2 bg-purple-300 rounded-full"></div>
+                  <span className="text-purple-100">Interactive online courses</span>
+                </div>
+                <div className="flex items-center space-x-3">
+                  <div className="w-2 h-2 bg-purple-300 rounded-full"></div>
+                  <span className="text-purple-100">Live expert sessions</span>
+                </div>
+                <div className="flex items-center space-x-3">
+                  <div className="w-2 h-2 bg-purple-300 rounded-full"></div>
+                  <span className="text-purple-100">Hands-on workshops</span>
+                </div>
+              </div>
+              <Button variant="outline" className="border-white/30 text-white hover:bg-white/10 bg-transparent">
+                Start Learning
+              </Button>
+            </div>
+            <div className="relative">
+              <div className="bg-white/10 backdrop-blur rounded-lg p-8 h-64 flex items-center justify-center">
+                <div className="text-center">
+                  <GraduationCap className="h-16 w-16 text-purple-300 mx-auto mb-4" />
+                  <p className="text-purple-100 font-medium">Xkreen Academy Learning Platform</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Book a Demo CTA */}
+      <section className="px-6 lg:px-8 py-16 bg-gradient-to-br from-purple-50 to-pink-50">
+        <div className="max-w-4xl mx-auto text-center">
+          <div className="flex justify-center mb-6">
+            <div className="flex -space-x-2">
+              {[1, 2, 3].map((i) => (
+                <div key={i} className="w-10 h-10 bg-gray-200 rounded-full border-2 border-white"></div>
+              ))}
+            </div>
+          </div>
+
+          <h2 className="text-3xl lg:text-4xl font-bold text-gray-900 mb-6">Book a demo</h2>
+          <p className="text-lg text-gray-600 mb-8 max-w-2xl mx-auto">
+            <strong>3.5K people call us now</strong>
+            <br />
+            to analyze, engage and monetize offline audience to increase sales
+          </p>
+
+          <Button className="bg-purple-600 hover:bg-purple-700 text-white px-8 py-4 text-lg">Book a demo</Button>
+        </div>
+      </section>
+
+      {/* Footer */}
+      <footer className="bg-gray-900 text-white px-6 lg:px-8 py-16">
+        <div className="max-w-6xl mx-auto">
+          <div className="grid md:grid-cols-2 lg:grid-cols-5 gap-8">
+            <div className="lg:col-span-1">
+              <div className="mb-6">
                 <Image
                   src="/images/xkreen-logo.png"
                   alt="xkreen"
@@ -617,95 +558,128 @@ export default function HomePage() {
                   height={32}
                   className="h-8 w-auto brightness-0 invert"
                 />
-                <p className="text-gray-400">Transforming digital communication with AI-powered signage solutions.</p>
-                <div className="flex space-x-4">{/* Social media icons would go here */}</div>
               </div>
-
-              <div>
-                <h3 className="font-semibold mb-4">Product</h3>
-                <ul className="space-y-2 text-gray-400">
-                  <li>
-                    <Link href="#" className="hover:text-white transition-colors">
-                      Features
-                    </Link>
-                  </li>
-                  <li>
-                    <Link href="#" className="hover:text-white transition-colors">
-                      Pricing
-                    </Link>
-                  </li>
-                  <li>
-                    <Link href="#" className="hover:text-white transition-colors">
-                      Hardware
-                    </Link>
-                  </li>
-                  <li>
-                    <Link href="#" className="hover:text-white transition-colors">
-                      Integrations
-                    </Link>
-                  </li>
-                </ul>
-              </div>
-
-              <div>
-                <h3 className="font-semibold mb-4">Resources</h3>
-                <ul className="space-y-2 text-gray-400">
-                  <li>
-                    <Link href="#" className="hover:text-white transition-colors">
-                      Documentation
-                    </Link>
-                  </li>
-                  <li>
-                    <Link href="#" className="hover:text-white transition-colors">
-                      Academy
-                    </Link>
-                  </li>
-                  <li>
-                    <Link href="#" className="hover:text-white transition-colors">
-                      Support
-                    </Link>
-                  </li>
-                  <li>
-                    <Link href="#" className="hover:text-white transition-colors">
-                      Community
-                    </Link>
-                  </li>
-                </ul>
-              </div>
-
-              <div>
-                <h3 className="font-semibold mb-4">Company</h3>
-                <ul className="space-y-2 text-gray-400">
-                  <li>
-                    <Link href="#" className="hover:text-white transition-colors">
-                      About
-                    </Link>
-                  </li>
-                  <li>
-                    <Link href="#" className="hover:text-white transition-colors">
-                      Careers
-                    </Link>
-                  </li>
-                  <li>
-                    <Link href="#" className="hover:text-white transition-colors">
-                      Privacy
-                    </Link>
-                  </li>
-                  <li>
-                    <Link href="#" className="hover:text-white transition-colors">
-                      Terms
-                    </Link>
-                  </li>
-                </ul>
-              </div>
+              <p className="text-gray-400 text-sm">AI-powered audience analytics and smart digital signage platform.</p>
             </div>
 
-            <div className="border-t border-gray-800 mt-12 pt-8 text-center text-gray-400">
-              <p>&copy; 2024 xkreen. All rights reserved.</p>
+            <div>
+              <h3 className="font-semibold mb-4">Solutions</h3>
+              <ul className="space-y-2 text-sm text-gray-400">
+                <li>
+                  <Link href="#" className="hover:text-white">
+                    Audience Analytics
+                  </Link>
+                </li>
+                <li>
+                  <Link href="#" className="hover:text-white">
+                    Digital Signage
+                  </Link>
+                </li>
+                <li>
+                  <Link href="#" className="hover:text-white">
+                    Content Management
+                  </Link>
+                </li>
+                <li>
+                  <Link href="#" className="hover:text-white">
+                    AI Media Player
+                  </Link>
+                </li>
+              </ul>
+            </div>
+
+            <div>
+              <h3 className="font-semibold mb-4">Industries</h3>
+              <ul className="space-y-2 text-sm text-gray-400">
+                <li>
+                  <Link href="#" className="hover:text-white">
+                    Retail
+                  </Link>
+                </li>
+                <li>
+                  <Link href="#" className="hover:text-white">
+                    Hospitality
+                  </Link>
+                </li>
+                <li>
+                  <Link href="#" className="hover:text-white">
+                    Healthcare
+                  </Link>
+                </li>
+                <li>
+                  <Link href="#" className="hover:text-white">
+                    Transportation
+                  </Link>
+                </li>
+              </ul>
+            </div>
+
+            <div>
+              <h3 className="font-semibold mb-4">Resources</h3>
+              <ul className="space-y-2 text-sm text-gray-400">
+                <li>
+                  <Link href="#" className="hover:text-white">
+                    Documentation
+                  </Link>
+                </li>
+                <li>
+                  <Link href="#" className="hover:text-white">
+                    API Reference
+                  </Link>
+                </li>
+                <li>
+                  <Link href="#" className="hover:text-white">
+                    Case Studies
+                  </Link>
+                </li>
+                <li>
+                  <Link href="#" className="hover:text-white">
+                    Blog
+                  </Link>
+                </li>
+              </ul>
+            </div>
+
+            <div>
+              <h3 className="font-semibold mb-4">Company</h3>
+              <ul className="space-y-2 text-sm text-gray-400">
+                <li>
+                  <Link href="#" className="hover:text-white">
+                    About Us
+                  </Link>
+                </li>
+                <li>
+                  <Link href="#" className="hover:text-white">
+                    Careers
+                  </Link>
+                </li>
+                <li>
+                  <Link href="#" className="hover:text-white">
+                    Contact
+                  </Link>
+                </li>
+                <li>
+                  <Link href="#" className="hover:text-white">
+                    Privacy Policy
+                  </Link>
+                </li>
+              </ul>
             </div>
           </div>
-        </footer>
-      </main>
+
+          <div className="border-t border-gray-800 mt-12 pt-8 flex flex-col md:flex-row justify-between items-center">
+            <p className="text-sm text-gray-400">© 2025 Xkreen. All rights reserved.</p>
+            <div className="flex items-center space-x-6 mt-4 md:mt-0">
+              <Link href="#" className="text-gray-400 hover:text-white">
+                <Globe className="h-5 w-5" />
+              </Link>
+              <Link href="#" className="text-gray-400 hover:text-white">
+                <Users className="h-5 w-5" />
+              </Link>
+            </div>
+          </div>
+        </div>
+      </footer>
     </div>
   )
 }

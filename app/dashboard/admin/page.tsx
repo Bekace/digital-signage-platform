@@ -23,13 +23,34 @@ interface User {
   storageUsed: number
 }
 
-function formatFileSize(bytes: number): string {
+interface Plan {
+  plan_type: string
+  name: string
+  price_monthly: number
+  is_active: boolean
+}
+
+const formatFileSize = (bytes: number): string => {
   if (bytes === 0) return "0 Bytes"
   const k = 1024
   const sizes = ["Bytes", "KB", "MB", "GB"]
   const i = Math.floor(Math.log(bytes) / Math.log(k))
   return Number.parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i]
 }
+
+const formatBytes = (bytes: number): string => {
+  if (bytes === 0) return "0 Bytes"
+  const k = 1024
+  const sizes = ["Bytes", "KB", "MB", "GB"]
+  const i = Math.floor(Math.log(bytes) / Math.log(k))
+  return Number.parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i]
+}
+
+const plans: Plan[] = [
+  { plan_type: "free", name: "Free Plan", price_monthly: 0, is_active: true },
+  { plan_type: "pro", name: "Pro Plan", price_monthly: 10, is_active: true },
+  { plan_type: "enterprise", name: "Enterprise Plan", price_monthly: 100, is_active: true },
+]
 
 export default function AdminPage() {
   const [users, setUsers] = useState<User[]>([])
@@ -281,7 +302,7 @@ export default function AdminPage() {
                               Files: {user.mediaCount}/{limits.files}
                             </div>
                             <div>
-                              Storage: {formatFileSize(user.storageUsed)}/{formatFileSize(limits.storage)}
+                              Storage: {formatFileSize(user.storageUsed)}/{formatBytes(limits.storage)}
                             </div>
                           </div>
                         </TableCell>
@@ -296,9 +317,13 @@ export default function AdminPage() {
                               <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
-                              <SelectItem value="free">Free</SelectItem>
-                              <SelectItem value="pro">Pro</SelectItem>
-                              <SelectItem value="enterprise">Enterprise</SelectItem>
+                              {plans
+                                .filter((plan) => plan.is_active)
+                                .map((plan) => (
+                                  <SelectItem key={plan.plan_type} value={plan.plan_type}>
+                                    {plan.name} - ${plan.price_monthly}/mo
+                                  </SelectItem>
+                                ))}
                             </SelectContent>
                           </Select>
                         </TableCell>

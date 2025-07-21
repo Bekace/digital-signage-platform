@@ -248,7 +248,7 @@ export default function FeaturesAdminPage() {
     }
   }
 
-  const handleEditFeature = (feature: Feature) => {
+  const handleEditFeature = async (feature: Feature) => {
     setEditingFeature({ ...feature })
     setIsEditDialogOpen(true)
   }
@@ -339,8 +339,6 @@ export default function FeaturesAdminPage() {
         description: "Failed to delete feature",
         variant: "destructive",
       })
-    } finally {
-      setLoading(false)
     }
   }
 

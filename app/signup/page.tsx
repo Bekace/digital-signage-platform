@@ -3,17 +3,18 @@
 import type React from "react"
 
 import { useState } from "react"
-import Image from "next/image"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
+import { Monitor, Eye, EyeOff, CheckCircle, XCircle } from "lucide-react"
+
 import { Button } from "@/components/ui/button"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { Eye, EyeOff, AlertCircle, CheckCircle } from "lucide-react"
 
-export default function SignupPage() {
+export default function SignUpPage() {
   const [formData, setFormData] = useState({
     firstName: "",
     lastName: "",
@@ -21,42 +22,37 @@ export default function SignupPage() {
     company: "",
     password: "",
     confirmPassword: "",
+    plan: "monthly",
   })
-  const [showPassword, setShowPassword] = useState(false)
-  const [showConfirmPassword, setShowConfirmPassword] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
-  const [success, setSuccess] = useState(false)
+  const [showPassword, setShowPassword] = useState(false)
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false)
   const router = useRouter()
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setFormData({
-      ...formData,
-      [e.target.name]: e.target.value,
-    })
+  // Password validation
+  const passwordValidation = {
+    length: formData.password.length >= 6,
+    match: formData.password === formData.confirmPassword && formData.confirmPassword.length > 0,
   }
 
-  const validateForm = () => {
-    if (!formData.firstName.trim()) return "First name is required"
-    if (!formData.lastName.trim()) return "Last name is required"
-    if (!formData.email.trim()) return "Email is required"
-    if (!formData.password) return "Password is required"
-    if (formData.password.length < 8) return "Password must be at least 8 characters"
-    if (formData.password !== formData.confirmPassword) return "Passwords do not match"
-    return null
-  }
+  const isFormValid =
+    formData.firstName.trim() &&
+    formData.lastName.trim() &&
+    formData.email.trim() &&
+    passwordValidation.length &&
+    passwordValidation.match
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    setLoading(true)
     setError("")
 
-    const validationError = validateForm()
-    if (validationError) {
-      setError(validationError)
+    if (!isFormValid) {
+      setError("Please fill in all required fields correctly")
+      setLoading(false)
       return
     }
-
-    setLoading(true)
 
     try {
       const response = await fetch("/api/auth/register", {
@@ -70,213 +66,201 @@ export default function SignupPage() {
           email: formData.email,
           company: formData.company,
           password: formData.password,
+          plan: formData.plan,
         }),
       })
 
       const data = await response.json()
 
-      if (response.ok) {
-        setSuccess(true)
-        setTimeout(() => {
-          router.push("/login")
-        }, 2000)
+      if (data.success) {
+        // Store token in localStorage
+        localStorage.setItem("token", data.token)
+        localStorage.setItem("user", JSON.stringify(data.user))
+
+        // Redirect to dashboard
+        router.push("/dashboard")
       } else {
         setError(data.message || "Registration failed")
       }
-    } catch (err) {
+    } catch (error) {
       setError("Network error. Please try again.")
     } finally {
       setLoading(false)
     }
   }
 
-  if (success) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
-        <div className="max-w-md w-full">
-          <Card>
-            <CardContent className="pt-6">
-              <div className="text-center">
-                <CheckCircle className="mx-auto h-12 w-12 text-green-500" />
-                <h2 className="mt-4 text-2xl font-bold text-gray-900">Account Created!</h2>
-                <p className="mt-2 text-gray-600">
-                  Your account has been successfully created. You will be redirected to the login page shortly.
-                </p>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      </div>
-    )
-  }
-
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
+    <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900 py-12 px-4 sm:px-6 lg:px-8">
       <div className="max-w-md w-full space-y-8">
         <div className="text-center">
-          <Link href="/">
-            <Image src="/images/xkreen-logo.png" alt="xkreen" width={150} height={50} className="mx-auto h-12 w-auto" />
+          <Link href="/" className="flex items-center justify-center mb-6">
+            <Image src="/images/xkreen-logo.png" alt="xkreen" width={120} height={32} className="h-8 w-auto" />
           </Link>
-          <h2 className="mt-6 text-3xl font-extrabold text-gray-900">Create your account</h2>
-          <p className="mt-2 text-sm text-gray-600">
-            Or{" "}
-            <Link href="/login" className="font-medium text-blue-600 hover:text-blue-500">
-              sign in to your existing account
-            </Link>
-          </p>
+          <h2 className="text-3xl font-bold">Create your account</h2>
+          <p className="mt-2 text-gray-600">Start your digital signage journey today</p>
         </div>
 
         <Card>
           <CardHeader>
-            <CardTitle>Get started for free</CardTitle>
-            <CardDescription>Create your account and start managing your digital signage</CardDescription>
+            <CardTitle>Sign Up</CardTitle>
+            <CardDescription>Enter your information to create an account</CardDescription>
           </CardHeader>
           <CardContent>
-            <form onSubmit={handleSubmit} className="space-y-6">
-              {error && (
-                <Alert variant="destructive">
-                  <AlertCircle className="h-4 w-4" />
-                  <AlertDescription>{error}</AlertDescription>
-                </Alert>
-              )}
+            {error && (
+              <Alert className="mb-4" variant="destructive">
+                <XCircle className="h-4 w-4" />
+                <AlertDescription>{error}</AlertDescription>
+              </Alert>
+            )}
 
+            <form onSubmit={handleSubmit} className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <Label htmlFor="firstName">First name</Label>
+                <div className="space-y-2">
+                  <Label htmlFor="firstName">First name *</Label>
                   <Input
                     id="firstName"
-                    name="firstName"
-                    type="text"
-                    required
                     value={formData.firstName}
-                    onChange={handleChange}
+                    onChange={(e) => setFormData((prev) => ({ ...prev, firstName: e.target.value }))}
                     placeholder="John"
-                    className="mt-1"
+                    required
                   />
                 </div>
-                <div>
-                  <Label htmlFor="lastName">Last name</Label>
+                <div className="space-y-2">
+                  <Label htmlFor="lastName">Last name *</Label>
                   <Input
                     id="lastName"
-                    name="lastName"
-                    type="text"
-                    required
                     value={formData.lastName}
-                    onChange={handleChange}
+                    onChange={(e) => setFormData((prev) => ({ ...prev, lastName: e.target.value }))}
                     placeholder="Doe"
-                    className="mt-1"
+                    required
                   />
                 </div>
               </div>
 
-              <div>
-                <Label htmlFor="email">Email address</Label>
+              <div className="space-y-2">
+                <Label htmlFor="email">Email *</Label>
                 <Input
                   id="email"
-                  name="email"
                   type="email"
-                  autoComplete="email"
-                  required
                   value={formData.email}
-                  onChange={handleChange}
+                  onChange={(e) => setFormData((prev) => ({ ...prev, email: e.target.value }))}
                   placeholder="john@example.com"
-                  className="mt-1"
+                  required
                 />
               </div>
 
-              <div>
-                <Label htmlFor="company">Company (optional)</Label>
+              <div className="space-y-2">
+                <Label htmlFor="company">Company name</Label>
                 <Input
                   id="company"
-                  name="company"
-                  type="text"
                   value={formData.company}
-                  onChange={handleChange}
-                  placeholder="Your company name"
-                  className="mt-1"
+                  onChange={(e) => setFormData((prev) => ({ ...prev, company: e.target.value }))}
+                  placeholder="Acme Inc."
                 />
               </div>
 
-              <div>
-                <Label htmlFor="password">Password</Label>
-                <div className="relative mt-1">
+              <div className="space-y-2">
+                <Label htmlFor="password">Password *</Label>
+                <div className="relative">
                   <Input
                     id="password"
-                    name="password"
                     type={showPassword ? "text" : "password"}
-                    required
                     value={formData.password}
-                    onChange={handleChange}
-                    placeholder="At least 8 characters"
-                    className="pr-10"
+                    onChange={(e) => setFormData((prev) => ({ ...prev, password: e.target.value }))}
+                    required
                   />
-                  <button
+                  <Button
                     type="button"
-                    className="absolute inset-y-0 right-0 pr-3 flex items-center"
+                    variant="ghost"
+                    size="sm"
+                    className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
                     onClick={() => setShowPassword(!showPassword)}
                   >
-                    {showPassword ? (
-                      <EyeOff className="h-4 w-4 text-gray-400" />
-                    ) : (
-                      <Eye className="h-4 w-4 text-gray-400" />
-                    )}
-                  </button>
+                    {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </Button>
+                </div>
+                <div className="flex items-center space-x-2 text-sm">
+                  {passwordValidation.length ? (
+                    <CheckCircle className="h-4 w-4 text-green-500" />
+                  ) : (
+                    <XCircle className="h-4 w-4 text-gray-400" />
+                  )}
+                  <span className={passwordValidation.length ? "text-green-600" : "text-gray-500"}>
+                    At least 6 characters
+                  </span>
                 </div>
               </div>
 
-              <div>
-                <Label htmlFor="confirmPassword">Confirm password</Label>
-                <div className="relative mt-1">
+              <div className="space-y-2">
+                <Label htmlFor="confirmPassword">Confirm password *</Label>
+                <div className="relative">
                   <Input
                     id="confirmPassword"
-                    name="confirmPassword"
                     type={showConfirmPassword ? "text" : "password"}
-                    required
                     value={formData.confirmPassword}
-                    onChange={handleChange}
-                    placeholder="Confirm your password"
-                    className="pr-10"
+                    onChange={(e) => setFormData((prev) => ({ ...prev, confirmPassword: e.target.value }))}
+                    required
                   />
-                  <button
+                  <Button
                     type="button"
-                    className="absolute inset-y-0 right-0 pr-3 flex items-center"
+                    variant="ghost"
+                    size="sm"
+                    className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
                     onClick={() => setShowConfirmPassword(!showConfirmPassword)}
                   >
-                    {showConfirmPassword ? (
-                      <EyeOff className="h-4 w-4 text-gray-400" />
-                    ) : (
-                      <Eye className="h-4 w-4 text-gray-400" />
-                    )}
-                  </button>
+                    {showConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </Button>
                 </div>
+                {formData.confirmPassword && (
+                  <div className="flex items-center space-x-2 text-sm">
+                    {passwordValidation.match ? (
+                      <CheckCircle className="h-4 w-4 text-green-500" />
+                    ) : (
+                      <XCircle className="h-4 w-4 text-red-500" />
+                    )}
+                    <span className={passwordValidation.match ? "text-green-600" : "text-red-600"}>
+                      Passwords match
+                    </span>
+                  </div>
+                )}
               </div>
 
-              <Button type="submit" className="w-full" disabled={loading}>
-                {loading ? "Creating account..." : "Create account"}
+              <div className="space-y-3">
+                <Label>Choose your plan</Label>
+                <RadioGroup
+                  value={formData.plan}
+                  onValueChange={(value) => setFormData((prev) => ({ ...prev, plan: value }))}
+                >
+                  <div className="flex items-center space-x-2 p-3 border rounded-lg">
+                    <RadioGroupItem value="monthly" id="monthly" />
+                    <Label htmlFor="monthly" className="flex-1 cursor-pointer">
+                      <div className="font-medium">Monthly - $15/screen/month</div>
+                      <div className="text-sm text-gray-500">Perfect for getting started</div>
+                    </Label>
+                  </div>
+                  <div className="flex items-center space-x-2 p-3 border rounded-lg">
+                    <RadioGroupItem value="annual" id="annual" />
+                    <Label htmlFor="annual" className="flex-1 cursor-pointer">
+                      <div className="font-medium">Annual - $144/screen/year</div>
+                      <div className="text-sm text-gray-500">Save 20% with annual billing</div>
+                    </Label>
+                  </div>
+                </RadioGroup>
+              </div>
+
+              <Button type="submit" className="w-full" size="lg" disabled={loading || !isFormValid}>
+                {loading ? "Creating Account..." : "Create Account & Start Free Trial"}
               </Button>
-
-              <div className="text-xs text-gray-500 text-center">
-                By creating an account, you agree to our{" "}
-                <Link href="#" className="text-blue-600 hover:text-blue-500">
-                  Terms of Service
-                </Link>{" "}
-                and{" "}
-                <Link href="#" className="text-blue-600 hover:text-blue-500">
-                  Privacy Policy
-                </Link>
-              </div>
             </form>
+
+            <div className="text-center text-sm mt-4">
+              Already have an account?{" "}
+              <Link href="/login" className="font-medium text-primary hover:underline">
+                Sign in
+              </Link>
+            </div>
           </CardContent>
         </Card>
-
-        <div className="text-center">
-          <p className="text-sm text-gray-600">
-            Already have an account?{" "}
-            <Link href="/login" className="font-medium text-blue-600 hover:text-blue-500">
-              Sign in
-            </Link>
-          </p>
-        </div>
       </div>
     </div>
   )

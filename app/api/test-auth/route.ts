@@ -1,13 +1,12 @@
 import { type NextRequest, NextResponse } from "next/server"
-import { getCurrentUser } from "@/lib/auth"
-import { extractTokenFromRequest, getTokenInfo } from "@/lib/auth-utils"
+import { getTokenInfo, getCurrentUser } from "./utils" // Assuming these functions are declared in a utils file
 
 export async function GET(request: NextRequest) {
   try {
     console.log("🔐 [TEST AUTH] Request received")
 
     // Extract token from request
-    const token = extractTokenFromRequest(request)
+    const token = request.headers.get("authorization")?.replace("Bearer ", "")
     const authHeader = request.headers.get("authorization")
 
     console.log("🔐 [TEST AUTH] Auth header:", authHeader)

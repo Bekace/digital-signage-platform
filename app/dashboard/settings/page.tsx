@@ -704,17 +704,17 @@ export default function SettingsPage() {
                     id="companyAddress"
                     value={companyData.companyAddress}
                     onChange={(e) => setCompanyData((prev) => ({ ...prev, companyAddress: e.target.value }))}
-                    placeholder="Enter company address"
+                    placeholder="123 Business St, City, State 12345"
                     maxLength={200}
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="companyPhone">Phone Number</Label>
+                  <Label htmlFor="companyPhone">Phone</Label>
                   <Input
                     id="companyPhone"
                     value={companyData.companyPhone}
                     onChange={(e) => setCompanyData((prev) => ({ ...prev, companyPhone: e.target.value }))}
-                    placeholder="Enter phone number"
+                    placeholder="+1 (555) 123-4567"
                     maxLength={20}
                   />
                 </div>
