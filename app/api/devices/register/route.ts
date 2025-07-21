@@ -73,8 +73,7 @@ export async function POST(request: NextRequest) {
         UPDATE devices 
         SET 
           last_seen = NOW(),
-          status = 'online',
-          updated_at = NOW()
+          status = 'online'
         WHERE id = ${pairing.device_id}
         RETURNING id, name, device_type, status
       `
@@ -96,8 +95,7 @@ export async function POST(request: NextRequest) {
         capabilities,
         screen_resolution,
         created_at,
-        last_seen,
-        updated_at
+        last_seen
       ) VALUES (
         ${name},
         ${deviceType || type || pairing.device_type},
@@ -105,7 +103,6 @@ export async function POST(request: NextRequest) {
         ${platform || "unknown"},
         ${JSON.stringify(capabilities || [])},
         ${screenResolution || "unknown"},
-        NOW(),
         NOW(),
         NOW()
       )
