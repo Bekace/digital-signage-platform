@@ -1,6 +1,28 @@
 "use client"
 
 import { useState, useEffect, useCallback, useRef } from "react"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { Badge } from "@/components/ui/badge"
+import { Alert, AlertDescription } from "@/components/ui/alert"
+import {
+  Loader2,
+  Monitor,
+  WifiOff,
+  Play,
+  Pause,
+  SkipForward,
+  SkipBack,
+  RefreshCw,
+  AlertCircle,
+  CheckCircle,
+  Eye,
+  Maximize,
+  Volume2,
+  ExternalLink,
+  FileText,
+} from "lucide-react"
 
 interface DeviceInfo {
   name: string
@@ -466,4 +488,448 @@ export default function DevicePlayerPage() {
   const renderCurrentMedia = () => {
     if (!currentPlaylist || !isPlaying) {
       return (
-        <div className="flex items-center justify-center h-64 bg-gray-100 rounded-lg\
+        <div className="flex items-center justify-center h-64 bg-gray-100 rounded-lg">
+          <div className="text-center text-gray-500">
+            <Monitor className="h-12 w-12 mx-auto mb-2" />
+            <p>No content playing</p>
+          </div>
+        </div>
+      )
+    }
+
+    if (currentPlaylist.items.length === 0) {
+      return (
+        <div className="flex items-center justify-center h-64 bg-gray-100 rounded-lg">
+          <div className="text-center text-gray-500">
+            <AlertCircle className="h-12 w-12 mx-auto mb-2" />
+            <p>Playlist has no items</p>
+          </div>
+        </div>
+      )
+    }
+
+    const mediaFile = getCurrentMediaFile()
+    if (!mediaFile) {
+      return (
+        <div className="flex items-center justify-center h-64 bg-gray-100 rounded-lg">
+          <div className="text-center text-gray-500">
+            <AlertCircle className="h-12 w-12 mx-auto mb-2" />
+            <p>Media file not found</p>
+          </div>
+        </div>
+      )
+    }
+
+    if (isSlidesFile(mediaFile)) {
+      return (
+        <div className="w-full aspect-video bg-black rounded-lg overflow-hidden">
+          {!iframeError ? (
+            <iframe
+              src={getEmbedUrl(mediaFile.external_url || mediaFile.url)}
+              className="w-full h-full border-0"
+              frameBorder="0"
+              allowFullScreen
+              title={mediaFile.original_name || mediaFile.filename}
+              onError={() => setIframeError(true)}
+            />
+          ) : (
+            <div className="w-full h-full flex flex-col items-center justify-center bg-blue-50 border border-blue-200 text-gray-600">
+              <FileText className="h-16 w-16 text-blue-600 mx-auto mb-4" />
+              <h3 className="text-lg font-medium text-gray-900 mb-2">Google Slides Presentation</h3>
+              <p className="text-gray-600 mb-4">Unable to embed presentation</p>
+              <Button
+                onClick={() => {
+                  window.open(mediaFile.external_url || mediaFile.url, "_blank")
+                }}
+                className="bg-blue-600 hover:bg-blue-700"
+              >
+                <ExternalLink className="h-4 w-4 mr-2" />
+                Open in Google Slides
+              </Button>
+            </div>
+          )}
+        </div>
+      )
+    } else if (isImageFile(mediaFile)) {
+      return (
+        <div className="w-full aspect-video bg-black rounded-lg overflow-hidden">
+          {!imageError ? (
+            <img
+              src={mediaFile.url || "/placeholder.svg"}
+              alt={mediaFile.original_name || mediaFile.filename}
+              className="w-full h-full object-contain"
+              onError={() => setImageError(true)}
+            />
+          ) : (
+            <div className="w-full h-full flex items-center justify-center bg-red-50 border border-red-200">
+              <div className="text-center text-gray-600">
+                <FileText className="h-16 w-16 mx-auto mb-4 text-red-400" />
+                <h3 className="text-lg font-medium text-red-900 mb-2">Image Load Error</h3>
+                <p className="text-red-700 mb-4">Unable to load image</p>
+                <p className="text-sm mt-2">{mediaFile.original_name || mediaFile.filename}</p>
+              </div>
+            </div>
+          )}
+        </div>
+      )
+    } else if (isVideoFile(mediaFile)) {
+      return (
+        <div className="w-full aspect-video bg-black rounded-lg overflow-hidden">
+          {!videoError ? (
+            <video
+              src={mediaFile.url}
+              className="w-full h-full object-contain"
+              controls
+              autoPlay
+              onEnded={nextItem}
+              onError={() => setVideoError(true)}
+            >
+              Your browser does not support video playback.
+            </video>
+          ) : (
+            <div className="w-full h-full flex items-center justify-center bg-red-50 border border-red-200">
+              <div className="text-center text-gray-600">
+                <FileText className="h-16 w-16 mx-auto mb-4 text-red-400" />
+                <h3 className="text-lg font-medium text-red-900 mb-2">Video Load Error</h3>
+                <p className="text-red-700 mb-4">Unable to load video</p>
+                <p className="text-sm mt-2">{mediaFile.original_name || mediaFile.filename}</p>
+              </div>
+            </div>
+          )}
+        </div>
+      )
+    } else if (isAudioFile(mediaFile)) {
+      return (
+        <div className="w-full aspect-video bg-gray-900 rounded-lg overflow-hidden flex items-center justify-center">
+          <div className="text-center text-white">
+            <Volume2 className="h-16 w-16 mx-auto mb-4" />
+            <h3 className="text-lg font-medium">{mediaFile.original_name || mediaFile.filename}</h3>
+            <audio src={mediaFile.url} controls autoPlay className="mt-4" onEnded={nextItem} />
+          </div>
+        </div>
+      )
+    } else if (isPDFFile(mediaFile)) {
+      return (
+        <div className="w-full aspect-video bg-black rounded-lg overflow-hidden">
+          <iframe
+            src={`${mediaFile.url}#toolbar=0&navpanes=0&scrollbar=0`}
+            className="w-full h-full border-0"
+            title={mediaFile.original_name || mediaFile.filename}
+          />
+        </div>
+      )
+    } else {
+      return (
+        <div className="w-full aspect-video bg-gray-100 rounded-lg overflow-hidden flex items-center justify-center">
+          <div className="text-center text-gray-600">
+            <FileText className="h-16 w-16 mx-auto mb-4" />
+            <h3 className="text-lg font-medium">{mediaFile.original_name || mediaFile.filename}</h3>
+            <p className="text-sm mt-2">Unsupported file type</p>
+          </div>
+        </div>
+      )
+    }
+  }
+
+  // Render preview mode
+  const renderPreviewMode = () => {
+    if (!showPreview) return null
+
+    return (
+      <div className={`fixed inset-0 z-50 bg-black ${isFullscreen ? "" : "p-4"}`}>
+        <div className="absolute top-4 right-4 z-10 flex space-x-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={toggleFullscreen}
+            className="bg-black/50 text-white border-white/20"
+          >
+            <Maximize className="h-4 w-4" />
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={togglePreview}
+            className="bg-black/50 text-white border-white/20"
+          >
+            Close
+          </Button>
+        </div>
+
+        <div className="h-full flex flex-col">
+          {/* Media Container */}
+          <div className="flex-1 flex items-center justify-center">{renderCurrentMedia()}</div>
+
+          {/* Controls */}
+          {!isFullscreen && (
+            <div className="mt-4 bg-black/80 p-4 rounded-lg">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-2">
+                  <Button variant="ghost" size="sm" onClick={previousItem}>
+                    <SkipBack className="h-4 w-4" />
+                  </Button>
+                  <Button variant="ghost" size="sm" onClick={togglePlayback}>
+                    {isPlaying ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
+                  </Button>
+                  <Button variant="ghost" size="sm" onClick={nextItem}>
+                    <SkipForward className="h-4 w-4" />
+                  </Button>
+                </div>
+
+                <div className="text-white text-sm">
+                  {currentPlaylist && (
+                    <span>
+                      {currentItemIndex + 1} / {currentPlaylist.items.length}
+                    </span>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="container mx-auto py-8 px-4">
+      <h1 className="text-3xl font-bold mb-8 flex items-center">
+        <Monitor className="mr-2 h-8 w-8" />
+        Device Player
+      </h1>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+        {/* Connection Card */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Device Connection</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {!isConnected ? (
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <label htmlFor="pairingCode" className="text-sm font-medium">
+                    Enter Pairing Code
+                  </label>
+                  <Input
+                    id="pairingCode"
+                    placeholder="Enter 6-digit code"
+                    value={pairingCode}
+                    onChange={(e) => setPairingCode(e.target.value.toUpperCase())}
+                    maxLength={6}
+                    className="text-center text-lg font-mono tracking-widest"
+                  />
+                </div>
+
+                {error && (
+                  <Alert variant="destructive">
+                    <AlertCircle className="h-4 w-4" />
+                    <AlertDescription>{error}</AlertDescription>
+                  </Alert>
+                )}
+
+                <Button onClick={connectDevice} disabled={isConnecting || !pairingCode.trim()} className="w-full">
+                  {isConnecting ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Connecting...
+                    </>
+                  ) : (
+                    "Connect Device"
+                  )}
+                </Button>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center">
+                    {connectionStatus === "connected" ? (
+                      <Badge className="bg-green-500">
+                        <CheckCircle className="h-3 w-3 mr-1" />
+                        Connected
+                      </Badge>
+                    ) : connectionStatus === "reconnecting" ? (
+                      <Badge variant="outline" className="bg-yellow-100 text-yellow-800 border-yellow-300">
+                        <RefreshCw className="h-3 w-3 mr-1 animate-spin" />
+                        Reconnecting...
+                      </Badge>
+                    ) : (
+                      <Badge variant="destructive">
+                        <WifiOff className="h-3 w-3 mr-1" />
+                        Disconnected
+                      </Badge>
+                    )}
+                  </div>
+
+                  <div className="text-sm text-gray-500">
+                    {lastHeartbeat && `Last heartbeat: ${lastHeartbeat.toLocaleTimeString()}`}
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-500">Device ID:</span>
+                    <span className="font-mono">{deviceId}</span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-500">Pairing Code:</span>
+                    <span className="font-mono">{pairingCode}</span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-500">Status:</span>
+                    <span>{playbackStatus}</span>
+                  </div>
+                </div>
+
+                <div className="flex space-x-2">
+                  <Button variant="outline" onClick={disconnectDevice} className="flex-1 bg-transparent">
+                    Disconnect
+                  </Button>
+                  <Button onClick={togglePreview} className="flex-1">
+                    <Eye className="h-4 w-4 mr-2" />
+                    {showPreview ? "Exit Preview" : "Preview Mode"}
+                  </Button>
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Device Info Card */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Device Information</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {deviceInfo && (
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <div className="flex justify-between">
+                    <span className="text-gray-500">Name:</span>
+                    <span>{deviceInfo.name}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-500">Type:</span>
+                    <span>{deviceInfo.type.replace("_", " ")}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-500">Platform:</span>
+                    <span>{deviceInfo.platform}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-500">Resolution:</span>
+                    <span>{deviceInfo.screenResolution}</span>
+                  </div>
+                </div>
+
+                <div>
+                  <h4 className="text-sm font-medium mb-2">Capabilities</h4>
+                  <div className="flex flex-wrap gap-2">
+                    {deviceInfo.capabilities.map((cap) => (
+                      <Badge key={cap} variant="outline" className="capitalize">
+                        {cap}
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Playlist Preview */}
+      {isConnected && (
+        <Card className="mt-8">
+          <CardHeader>
+            <CardTitle>Current Playlist</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {!currentPlaylist ? (
+              <div className="text-center py-8">
+                <div className="text-gray-500">
+                  <AlertCircle className="h-12 w-12 mx-auto mb-2" />
+                  <p>No playlist assigned to this device</p>
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-lg font-medium">{currentPlaylist.name}</h3>
+                  <div className="flex items-center space-x-2">
+                    <Badge variant="outline">
+                      {currentPlaylist.items.length} {currentPlaylist.items.length === 1 ? "item" : "items"}
+                    </Badge>
+                    {currentPlaylist.settings?.loop && <Badge variant="outline">Loop</Badge>}
+                    {currentPlaylist.settings?.shuffle && <Badge variant="outline">Shuffle</Badge>}
+                  </div>
+                </div>
+
+                {/* Media Preview */}
+                <div className="border rounded-lg overflow-hidden">{renderCurrentMedia()}</div>
+
+                {/* Playback Controls */}
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-2">
+                    <Button variant="outline" size="sm" onClick={previousItem}>
+                      <SkipBack className="h-4 w-4" />
+                    </Button>
+                    <Button variant="outline" size="sm" onClick={togglePlayback}>
+                      {isPlaying ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
+                    </Button>
+                    <Button variant="outline" size="sm" onClick={nextItem}>
+                      <SkipForward className="h-4 w-4" />
+                    </Button>
+                  </div>
+
+                  <div className="text-sm text-gray-500">
+                    {currentPlaylist.items.length > 0 && (
+                      <span>
+                        {currentItemIndex + 1} of {currentPlaylist.items.length}
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                {/* Item List */}
+                {currentPlaylist.items.length > 0 && (
+                  <div className="mt-4">
+                    <h4 className="text-sm font-medium mb-2">Playlist Items</h4>
+                    <div className="space-y-2 max-h-60 overflow-y-auto pr-2">
+                      {currentPlaylist.items.map((item, index) => (
+                        <div
+                          key={item.id}
+                          className={`flex items-center p-2 rounded-md ${
+                            index === currentItemIndex ? "bg-blue-50 border border-blue-200" : "hover:bg-gray-50"
+                          }`}
+                          onClick={() => setCurrentItemIndex(index)}
+                        >
+                          <div className="w-8 h-8 bg-gray-100 rounded flex items-center justify-center mr-3 flex-shrink-0">
+                            {index === currentItemIndex && isPlaying ? (
+                              <Play className="h-4 w-4 text-blue-600" />
+                            ) : (
+                              <span className="text-xs text-gray-500">{index + 1}</span>
+                            )}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium truncate">{item.name}</p>
+                            <p className="text-xs text-gray-500">
+                              {item.type} • {item.duration}s
+                            </p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Preview Mode */}
+      {renderPreviewMode()}
+    </div>
+  )
+}

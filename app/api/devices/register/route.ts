@@ -1,147 +1,89 @@
-import { type NextRequest, NextResponse } from "next/server"
-import { neon } from "@neondatabase/serverless"
+import { NextResponse } from "next/server"
+import { sql } from "@vercel/postgres"
 
-export const dynamic = "force-dynamic"
-
-const sql = neon(process.env.DATABASE_URL!)
-
-export async function POST(request: NextRequest) {
+export async function POST(request: Request) {
   try {
-    console.log("📱 [DEVICE REGISTER] Starting device registration...")
-
     const body = await request.json()
-    const { deviceCode, pairingCode, name, deviceType, type, platform, userAgent, screenResolution, capabilities } =
-      body
+    const { deviceCode, name, deviceType, platform, userAgent, screenResolution, capabilities } = body
 
-    // Support both deviceCode and pairingCode for backward compatibility
-    const code = deviceCode || pairingCode
-
-    console.log("📱 [DEVICE REGISTER] Registration request:", {
-      code,
-      name,
-      deviceType: deviceType || type,
-      platform,
-      screenResolution,
-      capabilities,
-    })
-
-    if (!code || !name) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: "Pairing code and device name are required",
-        },
-        { status: 400 },
-      )
+    if (!deviceCode) {
+      return NextResponse.json({ success: false, error: "Device code is required" }, { status: 400 })
     }
 
-    // Find the pairing code
-    const pairingRecord = await sql`
-      SELECT 
-        id,
-        code,
-        screen_name,
-        device_type,
-        user_id,
-        expires_at,
-        device_id
-      FROM device_pairing_codes 
-      WHERE code = ${code}
+    // Validate the device code
+    const codeResult = await sql`
+      SELECT * FROM device_pairing_codes 
+      WHERE code = ${deviceCode} 
+      AND used = false 
       AND expires_at > NOW()
-      ORDER BY created_at DESC
-      LIMIT 1
     `
 
-    if (pairingRecord.length === 0) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: "Invalid or expired pairing code",
-        },
-        { status: 400 },
-      )
+    if (codeResult.rows.length === 0) {
+      return NextResponse.json({ success: false, error: "Invalid or expired device code" }, { status: 400 })
     }
 
-    const pairing = pairingRecord[0]
+    const pairingCode = codeResult.rows[0]
+    const userId = pairingCode.user_id
 
-    // Check if device already exists for this pairing code
-    if (pairing.device_id) {
-      console.log("📱 [DEVICE REGISTER] Device already registered for this code")
-
-      // Update existing device with latest info
-      const updatedDevice = await sql`
-        UPDATE devices 
-        SET 
-          last_seen = NOW(),
-          status = 'online'
-        WHERE id = ${pairing.device_id}
-        RETURNING id, name, device_type, status
-      `
-
-      return NextResponse.json({
-        success: true,
-        device: updatedDevice[0],
-        message: "Device reconnected successfully",
-      })
-    }
-
-    // Create new device - COMPLETELY REMOVE updated_at from INSERT
+    // Register the device - IMPORTANT: Don't include updated_at, created_at, or last_seen fields
+    // Let the database handle these with default values or triggers
     const deviceResult = await sql`
       INSERT INTO devices (
-        name,
-        device_type,
+        name, 
+        device_type, 
+        user_id, 
         status,
         platform,
-        capabilities,
+        user_agent,
         screen_resolution,
-        user_id
-      ) VALUES (
-        ${name},
-        ${deviceType || type || pairing.device_type || "web_browser"},
-        'online',
-        ${platform || "unknown"},
-        ${JSON.stringify(capabilities || [])},
-        ${screenResolution || "unknown"},
-        ${pairing.user_id}
+        capabilities
+      ) 
+      VALUES (
+        ${name || `Device ${deviceCode}`}, 
+        ${deviceType || "unknown"}, 
+        ${userId}, 
+        ${"online"},
+        ${platform || null},
+        ${userAgent || null},
+        ${screenResolution || null},
+        ${capabilities ? JSON.stringify(capabilities) : null}
       )
-      RETURNING id, name, device_type, status, created_at
+      RETURNING *
     `
 
-    const device = deviceResult[0]
+    if (deviceResult.rows.length === 0) {
+      return NextResponse.json({ success: false, error: "Failed to register device" }, { status: 500 })
+    }
 
-    // Link the device to the pairing code
+    const device = deviceResult.rows[0]
+
+    // Mark the pairing code as used
     await sql`
       UPDATE device_pairing_codes 
-      SET 
-        device_id = ${device.id},
-        used_at = NOW()
-      WHERE id = ${pairing.id}
+      SET used = true, device_id = ${device.id}
+      WHERE id = ${pairingCode.id}
     `
 
-    console.log("📱 [DEVICE REGISTER] Device registered successfully:", {
-      deviceId: device.id,
-      deviceName: device.name,
-      pairingCode: code,
-    })
+    // Log the device registration
+    console.log(`Device registered: ${device.id} with code ${deviceCode}`)
 
     return NextResponse.json({
       success: true,
       device: {
         id: device.id,
         name: device.name,
-        deviceType: device.device_type,
+        type: device.device_type,
         status: device.status,
-        createdAt: device.created_at,
+        created_at: device.created_at,
       },
-      message: "Device registered successfully",
     })
   } catch (error) {
-    console.error("📱 [DEVICE REGISTER] Error:", error)
+    console.error("Error registering device:", error)
     return NextResponse.json(
       {
         success: false,
-        error: "Failed to register device",
-        details: error instanceof Error ? error.message : "Unknown error",
+        error: error instanceof Error ? error.message : "Unknown error",
+        details: error instanceof Error ? error.stack : undefined,
       },
       { status: 500 },
     )
