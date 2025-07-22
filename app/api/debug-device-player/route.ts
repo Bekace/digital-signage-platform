@@ -1,6 +1,8 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { neon } from "@neondatabase/serverless"
 
+export const dynamic = "force-dynamic"
+
 const sql = neon(process.env.DATABASE_URL!)
 
 export async function GET(request: NextRequest) {
@@ -250,75 +252,267 @@ export async function POST(request: NextRequest) {
 
     console.log("🔍 [DEBUG DEVICE PLAYER] POST action:", action, { deviceId, pairingCode })
 
-    switch (action) {
-      case "generatePairingCode":
-        // Generate a new pairing code for testing
-        const newCode = Math.random().toString(36).substring(2, 8).toUpperCase()
-        const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000) // 24 hours
+    const results: any = {
+      timestamp: new Date().toISOString(),
+      deviceId,
+      pairingCode,
+      tests: {},
+      summary: {
+        issues: [],
+        recommendations: [],
+      },
+    }
 
-        const insertResult = await sql`
-          INSERT INTO device_pairing_codes (code, expires_at, created_by)
-          VALUES (${newCode}, ${expiresAt.toISOString()}, 'debug-system')
-          RETURNING *
-        `
-
-        return NextResponse.json({
-          success: true,
-          pairingCode: insertResult[0],
-        })
-
-      case "assignTestPlaylist":
-        if (!deviceId) {
-          return NextResponse.json(
-            {
-              success: false,
-              error: "Device ID required",
-            },
-            { status: 400 },
-          )
-        }
-
-        // Find a test playlist or create one
-        let testPlaylist = await sql`
-          SELECT * FROM playlists WHERE name LIKE '%test%' OR name LIKE '%debug%' LIMIT 1
-        `
-
-        if (testPlaylist.length === 0) {
-          // Create a test playlist
-          testPlaylist = await sql`
-            INSERT INTO playlists (name, description, status, loop_enabled, created_by)
-            VALUES ('Debug Test Playlist', 'Auto-generated for debugging', 'active', true, 'debug-system')
-            RETURNING *
-          `
-        }
-
-        // Assign playlist to device
-        await sql`
-          UPDATE devices 
-          SET assigned_playlist_id = ${testPlaylist[0].id}
+    // Test 1: Check if device exists in database
+    if (deviceId) {
+      try {
+        const deviceCheck = await sql`
+          SELECT 
+            id,
+            name,
+            device_type,
+            status,
+            user_id,
+            assigned_playlist_id,
+            playlist_status,
+            platform,
+            screen_resolution,
+            last_seen,
+            created_at,
+            updated_at
+          FROM devices 
           WHERE id = ${deviceId}
         `
 
-        return NextResponse.json({
-          success: true,
-          playlist: testPlaylist[0],
+        results.tests.deviceExists = {
+          status: deviceCheck.length > 0 ? "PASS" : "FAIL",
+          data: deviceCheck[0] || null,
+          message:
+            deviceCheck.length > 0
+              ? `Device ${deviceId} found in database`
+              : `Device ${deviceId} NOT found in database`,
+        }
+
+        if (deviceCheck.length === 0) {
+          results.summary.issues.push(`Device ID ${deviceId} does not exist in the devices table`)
+          results.summary.recommendations.push(
+            "The device needs to be properly registered through a valid pairing code",
+          )
+        }
+      } catch (error) {
+        results.tests.deviceExists = {
+          status: "ERROR",
+          error: error instanceof Error ? error.message : "Unknown error",
+          message: "Failed to check device existence",
+        }
+      }
+    }
+
+    // Test 2: Check pairing code validity
+    if (pairingCode) {
+      try {
+        const pairingCheck = await sql`
+          SELECT 
+            id,
+            code,
+            screen_name,
+            device_type,
+            user_id,
+            expires_at,
+            device_id,
+            used_at,
+            created_at
+          FROM device_pairing_codes 
+          WHERE code = ${pairingCode}
+          ORDER BY created_at DESC
+          LIMIT 1
+        `
+
+        const isValid = pairingCheck.length > 0
+        const isExpired = isValid && new Date(pairingCheck[0].expires_at) < new Date()
+        const isUsed = isValid && pairingCheck[0].device_id !== null
+
+        results.tests.pairingCode = {
+          status: isValid && !isExpired && !isUsed ? "PASS" : "FAIL",
+          data: pairingCheck[0] || null,
+          message: !isValid
+            ? `Pairing code ${pairingCode} not found`
+            : isExpired
+              ? `Pairing code ${pairingCode} has expired`
+              : isUsed
+                ? `Pairing code ${pairingCode} already used for device ${pairingCheck[0].device_id}`
+                : `Pairing code ${pairingCode} is valid and available`,
+        }
+
+        if (!isValid) {
+          results.summary.issues.push(`Pairing code ${pairingCode} does not exist`)
+          results.summary.recommendations.push("Generate a new pairing code from the dashboard")
+        } else if (isExpired) {
+          results.summary.issues.push(`Pairing code ${pairingCode} has expired`)
+          results.summary.recommendations.push("Generate a new pairing code - codes expire after a certain time")
+        } else if (isUsed) {
+          results.summary.issues.push(`Pairing code ${pairingCode} is already used`)
+          results.summary.recommendations.push("This code was already used to register a device - generate a new one")
+        }
+      } catch (error) {
+        results.tests.pairingCode = {
+          status: "ERROR",
+          error: error instanceof Error ? error.message : "Unknown error",
+          message: "Failed to check pairing code",
+        }
+      }
+    }
+
+    // Test 3: Check all devices in database
+    try {
+      const allDevices = await sql`
+        SELECT 
+          id,
+          name,
+          device_type,
+          status,
+          user_id,
+          assigned_playlist_id,
+          created_at
+        FROM devices 
+        ORDER BY created_at DESC
+        LIMIT 10
+      `
+
+      results.tests.allDevices = {
+        status: "INFO",
+        data: allDevices,
+        message: `Found ${allDevices.length} devices in database`,
+      }
+    } catch (error) {
+      results.tests.allDevices = {
+        status: "ERROR",
+        error: error instanceof Error ? error.message : "Unknown error",
+        message: "Failed to fetch devices",
+      }
+    }
+
+    // Test 4: Check all pairing codes
+    try {
+      const allPairingCodes = await sql`
+        SELECT 
+          id,
+          code,
+          screen_name,
+          device_type,
+          user_id,
+          expires_at,
+          device_id,
+          used_at,
+          created_at
+        FROM device_pairing_codes 
+        ORDER BY created_at DESC
+        LIMIT 10
+      `
+
+      results.tests.allPairingCodes = {
+        status: "INFO",
+        data: allPairingCodes,
+        message: `Found ${allPairingCodes.length} pairing codes in database`,
+      }
+    } catch (error) {
+      results.tests.allPairingCodes = {
+        status: "ERROR",
+        error: error instanceof Error ? error.message : "Unknown error",
+        message: "Failed to fetch pairing codes",
+      }
+    }
+
+    // Test 5: Test device registration API
+    if (pairingCode && action === "test_registration") {
+      try {
+        const registrationTest = await fetch(`${request.nextUrl.origin}/api/devices/register`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            deviceCode: pairingCode,
+            name: `Debug Test Device ${Date.now()}`,
+            deviceType: "web_browser",
+            platform: "debug",
+            userAgent: "Debug Test",
+            screenResolution: "1920x1080",
+            capabilities: ["debug"],
+          }),
         })
 
-      default:
-        return NextResponse.json(
-          {
-            success: false,
-            error: "Unknown action",
-          },
-          { status: 400 },
-        )
+        const registrationResult = await registrationTest.json()
+
+        results.tests.registrationAPI = {
+          status: registrationResult.success ? "PASS" : "FAIL",
+          data: registrationResult,
+          message: registrationResult.success
+            ? "Device registration API working correctly"
+            : `Registration failed: ${registrationResult.error}`,
+        }
+
+        if (!registrationResult.success) {
+          results.summary.issues.push(`Device registration API failed: ${registrationResult.error}`)
+        }
+      } catch (error) {
+        results.tests.registrationAPI = {
+          status: "ERROR",
+          error: error instanceof Error ? error.message : "Unknown error",
+          message: "Failed to test registration API",
+        }
+      }
     }
+
+    // Test 6: Test playlist API if device exists
+    if (deviceId && results.tests.deviceExists?.status === "PASS") {
+      try {
+        const playlistTest = await fetch(`${request.nextUrl.origin}/api/devices/${deviceId}/playlist`)
+        const playlistResult = await playlistTest.json()
+
+        results.tests.playlistAPI = {
+          status: playlistTest.ok ? "PASS" : "FAIL",
+          data: playlistResult,
+          message: playlistTest.ok
+            ? "Playlist API working correctly"
+            : `Playlist API failed: ${playlistResult.error || "Unknown error"}`,
+        }
+      } catch (error) {
+        results.tests.playlistAPI = {
+          status: "ERROR",
+          error: error instanceof Error ? error.message : "Unknown error",
+          message: "Failed to test playlist API",
+        }
+      }
+    }
+
+    // Generate summary
+    const failedTests = Object.values(results.tests).filter((test: any) => test.status === "FAIL").length
+    const errorTests = Object.values(results.tests).filter((test: any) => test.status === "ERROR").length
+
+    results.summary.status = failedTests === 0 && errorTests === 0 ? "HEALTHY" : "ISSUES_FOUND"
+    results.summary.totalTests = Object.keys(results.tests).length
+    results.summary.failedTests = failedTests
+    results.summary.errorTests = errorTests
+
+    // Add general recommendations
+    if (results.summary.issues.length === 0) {
+      results.summary.recommendations.push("All tests passed - the device player should be working correctly")
+    } else {
+      results.summary.recommendations.push("Fix the identified issues to resolve device player problems")
+    }
+
+    return NextResponse.json({
+      success: true,
+      debug: results,
+    })
   } catch (error) {
-    console.error("🔍 [DEBUG DEVICE PLAYER] POST Error:", error)
+    console.error("🔍 [DEBUG DEVICE PLAYER] Error:", error)
     return NextResponse.json(
       {
         success: false,
-        error: error instanceof Error ? error.message : "Unknown error",
+        error: "Debug analysis failed",
+        details: error instanceof Error ? error.message : "Unknown error",
       },
       { status: 500 },
     )
