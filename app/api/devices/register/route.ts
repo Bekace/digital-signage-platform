@@ -12,18 +12,31 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
     const { pairingCode, deviceInfo } = body
 
-    console.log("🔗 [DEVICE REGISTER] Request:", { pairingCode, deviceInfo })
+    console.log("🔗 [DEVICE REGISTER] Request data:", { pairingCode, deviceInfo })
 
     if (!pairingCode) {
       return NextResponse.json({ success: false, error: "Pairing code is required" }, { status: 400 })
     }
 
+    // Test database connection
+    try {
+      await sql`SELECT 1`
+      console.log("🔗 [DEVICE REGISTER] Database connection successful")
+    } catch (dbError) {
+      console.error("🔗 [DEVICE REGISTER] Database connection failed:", dbError)
+      return NextResponse.json({ success: false, error: "Database connection failed" }, { status: 500 })
+    }
+
     // Verify pairing code exists and is not expired
+    console.log("🔗 [DEVICE REGISTER] Looking up pairing code:", pairingCode)
+
     const pairingResult = await sql`
-      SELECT id, screen_name, device_type, user_id, expires_at, completed_at
+      SELECT id, screen_name, device_type, user_id, expires_at, completed_at, device_id
       FROM device_pairing_codes 
       WHERE code = ${pairingCode}
     `
+
+    console.log("🔗 [DEVICE REGISTER] Pairing code query result:", pairingResult)
 
     if (pairingResult.length === 0) {
       console.log("🔗 [DEVICE REGISTER] Pairing code not found:", pairingCode)
@@ -46,7 +59,7 @@ export async function POST(request: NextRequest) {
 
     console.log("🔗 [DEVICE REGISTER] Valid pairing code found for user:", pairing.user_id)
 
-    // Create device record - ONLY use columns that exist in the database
+    // Create device record
     const deviceData = {
       name: pairing.screen_name,
       device_type: pairing.device_type || "web_browser",
@@ -59,7 +72,7 @@ export async function POST(request: NextRequest) {
 
     console.log("🔗 [DEVICE REGISTER] Creating device with data:", deviceData)
 
-    // Insert new device - REMOVED updated_at field that doesn't exist
+    // Insert new device
     const deviceResult = await sql`
       INSERT INTO devices (
         name, 
@@ -69,7 +82,8 @@ export async function POST(request: NextRequest) {
         screen_resolution, 
         user_id, 
         status,
-        last_seen
+        last_seen,
+        created_at
       ) VALUES (
         ${deviceData.name},
         ${deviceData.device_type},
@@ -78,22 +92,30 @@ export async function POST(request: NextRequest) {
         ${deviceData.screen_resolution},
         ${deviceData.user_id},
         ${deviceData.status},
+        NOW(),
         NOW()
       )
-      RETURNING id, name, device_type, platform, screen_resolution, status, created_at
+      RETURNING id, name, device_type, platform, screen_resolution, status, user_id, created_at
     `
 
     const device = deviceResult[0]
-    console.log("🔗 [DEVICE REGISTER] Device created:", device)
+    console.log("🔗 [DEVICE REGISTER] Device created successfully:", device)
 
-    // Mark pairing code as completed
-    await sql`
+    // Mark pairing code as completed and link to device
+    const updateResult = await sql`
       UPDATE device_pairing_codes 
-      SET completed_at = NOW(), device_id = ${device.id}
+      SET completed_at = NOW(), device_id = ${device.id}, used_at = NOW()
       WHERE code = ${pairingCode}
+      RETURNING id, completed_at, device_id
     `
 
-    console.log("🔗 [DEVICE REGISTER] Pairing code marked as completed")
+    console.log("🔗 [DEVICE REGISTER] Pairing code updated:", updateResult)
+
+    // Verify the device was created by querying back
+    const verification = await sql`
+      SELECT * FROM devices WHERE id = ${device.id}
+    `
+    console.log("🔗 [DEVICE REGISTER] Device verification:", verification)
 
     return NextResponse.json({
       success: true,
@@ -104,9 +126,15 @@ export async function POST(request: NextRequest) {
         platform: device.platform,
         screenResolution: device.screen_resolution,
         status: device.status,
+        userId: device.user_id,
         createdAt: device.created_at,
       },
       message: "Device registered successfully",
+      debug: {
+        deviceId: device.id,
+        pairingCodeId: pairing.id,
+        timestamp: new Date().toISOString(),
+      },
     })
   } catch (error) {
     console.error("🔗 [DEVICE REGISTER] Error:", error)

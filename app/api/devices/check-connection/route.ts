@@ -18,6 +18,15 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: "Pairing code is required" }, { status: 400 })
     }
 
+    // Test database connection
+    try {
+      await sql`SELECT 1`
+      console.log("🔍 [CHECK CONNECTION] Database connection successful")
+    } catch (dbError) {
+      console.error("🔍 [CHECK CONNECTION] Database connection failed:", dbError)
+      return NextResponse.json({ success: false, error: "Database connection failed" }, { status: 500 })
+    }
+
     // Check if pairing code exists and get device info
     const result = await sql`
       SELECT 
@@ -44,6 +53,7 @@ export async function POST(request: NextRequest) {
     console.log("🔍 [CHECK CONNECTION] Query result:", result)
 
     if (result.length === 0) {
+      console.log("🔍 [CHECK CONNECTION] No valid pairing code found")
       return NextResponse.json({
         success: false,
         connected: false,
@@ -84,6 +94,11 @@ export async function POST(request: NextRequest) {
             status: pairing.device_status,
           }
         : null,
+      debug: {
+        pairingId: pairing.id,
+        deviceId: pairing.device_id,
+        timestamp: new Date().toISOString(),
+      },
     })
   } catch (error) {
     console.error("🔍 [CHECK CONNECTION] Error:", error)

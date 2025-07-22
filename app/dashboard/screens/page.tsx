@@ -48,6 +48,7 @@ interface Device {
   platform?: string
   screen_resolution?: string
   capabilities?: string[]
+  user_id?: number
 }
 
 const getDeviceIcon = (deviceType: string) => {
@@ -89,18 +90,43 @@ export default function ScreensPage() {
       console.log("📱 [SCREENS PAGE] Loading devices from database...")
 
       const response = await fetch("/api/devices", {
+        method: "GET",
         credentials: "include",
+        headers: {
+          "Content-Type": "application/json",
+        },
       })
 
+      console.log("📱 [SCREENS PAGE] API response status:", response.status)
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`)
+      }
+
       const data = await response.json()
-      console.log("📱 [SCREENS PAGE] API response:", data)
+      console.log("📱 [SCREENS PAGE] API response data:", data)
 
       if (data.success) {
-        // Use ONLY real database data - NO MOCK DATA
+        // ONLY use real database data - NO MOCK DATA EVER
         const realDevices = data.devices || []
-        console.log("📱 [SCREENS PAGE] Setting real devices:", realDevices)
+        console.log("📱 [SCREENS PAGE] Setting ONLY real database devices:", realDevices)
+        console.log("📱 [SCREENS PAGE] Device count from database:", realDevices.length)
+
+        // Log each device for debugging
+        realDevices.forEach((device: Device, index: number) => {
+          console.log(`📱 [SCREENS PAGE] Real Device ${index + 1}:`, {
+            id: device.id,
+            name: device.name,
+            device_type: device.device_type,
+            status: device.status,
+            user_id: device.user_id,
+            created_at: device.created_at,
+          })
+        })
+
         setDevices(realDevices)
       } else {
+        console.error("📱 [SCREENS PAGE] API returned error:", data.error)
         setError(data.error || "Failed to load devices")
       }
     } catch (err) {
@@ -112,6 +138,7 @@ export default function ScreensPage() {
   }
 
   const handleDeviceAdded = () => {
+    console.log("📱 [SCREENS PAGE] Device added, reloading...")
     loadDevices()
     toast.success("Screen added successfully!")
   }
@@ -252,7 +279,7 @@ export default function ScreensPage() {
           </div>
           <div className="flex items-center justify-center py-12">
             <RefreshCw className="h-6 w-6 animate-spin mr-2" />
-            <span>Loading screens...</span>
+            <span>Loading screens from database...</span>
           </div>
         </div>
       </DashboardLayout>
@@ -268,10 +295,20 @@ export default function ScreensPage() {
               <h1 className="text-3xl font-bold">Screens</h1>
               <p className="text-gray-600">Manage your digital signage displays</p>
             </div>
+            <Button onClick={loadDevices} variant="outline">
+              <RefreshCw className="h-4 w-4 mr-2" />
+              Retry
+            </Button>
           </div>
           <Alert variant="destructive">
             <AlertCircle className="h-4 w-4" />
-            <AlertDescription>{error}</AlertDescription>
+            <AlertDescription>
+              {error}
+              <br />
+              <Button onClick={loadDevices} variant="outline" size="sm" className="mt-2 bg-transparent">
+                Try Again
+              </Button>
+            </AlertDescription>
           </Alert>
         </div>
       </DashboardLayout>
@@ -293,12 +330,17 @@ export default function ScreensPage() {
           </Button>
         </div>
 
+        {/* Debug Info */}
+        <div className="text-xs text-gray-500 bg-gray-50 p-2 rounded">
+          Database devices found: {devices.length} | Last loaded: {new Date().toLocaleTimeString()}
+        </div>
+
         {/* Devices Grid - ONLY REAL DATABASE DATA */}
         {devices.length === 0 ? (
           <Card>
             <CardContent className="p-12 text-center">
               <Monitor className="h-16 w-16 mx-auto text-gray-400 mb-4" />
-              <h3 className="text-lg font-semibold mb-2">No screens found</h3>
+              <h3 className="text-lg font-semibold mb-2">No screens found in database</h3>
               <p className="text-gray-600 mb-4">Get started by adding your first digital signage display</p>
               <Button onClick={() => setShowAddDialog(true)}>
                 <Plus className="h-4 w-4 mr-2" />
@@ -386,6 +428,10 @@ export default function ScreensPage() {
                     <div className="flex justify-between">
                       <span>Added:</span>
                       <span>{formatCreatedAt(device.created_at)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>DB ID:</span>
+                      <span className="font-mono text-xs">{device.id}</span>
                     </div>
                   </div>
 
