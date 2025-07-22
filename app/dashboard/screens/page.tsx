@@ -15,6 +15,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import { AddScreenDialog } from "@/components/add-screen-dialog"
 import { AssignPlaylistDialog } from "@/components/assign-playlist-dialog"
 import { RepairScreenDialog } from "@/components/repair-screen-dialog"
+import { ScreenPreviewModal } from "@/components/screen-preview-modal"
 import { DashboardLayout } from "@/components/dashboard-layout"
 import { toast } from "sonner"
 import {
@@ -31,6 +32,7 @@ import {
   AlertCircle,
   Clock,
   Link,
+  Eye,
 } from "lucide-react"
 
 interface Device {
@@ -72,6 +74,7 @@ export default function ScreensPage() {
   const [showAddDialog, setShowAddDialog] = useState(false)
   const [showAssignDialog, setShowAssignDialog] = useState(false)
   const [showRepairDialog, setShowRepairDialog] = useState(false)
+  const [showPreviewModal, setShowPreviewModal] = useState(false)
   const [selectedDevice, setSelectedDevice] = useState<Device | null>(null)
 
   useEffect(() => {
@@ -127,6 +130,11 @@ export default function ScreensPage() {
   const handleRepairScreen = (device: Device) => {
     setSelectedDevice(device)
     setShowRepairDialog(true)
+  }
+
+  const handlePreviewScreen = (device: Device) => {
+    setSelectedDevice(device)
+    setShowPreviewModal(true)
   }
 
   const handleDeleteDevice = async (deviceId: string, deviceName: string) => {
@@ -295,6 +303,11 @@ export default function ScreensPage() {
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
+                        <DropdownMenuItem onClick={() => handlePreviewScreen(device)}>
+                          <Eye className="h-4 w-4 mr-2" />
+                          Preview Screen
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator />
                         <DropdownMenuItem onClick={() => handleAssignPlaylist(device)}>
                           <PlayCircle className="h-4 w-4 mr-2" />
                           Assign Playlist
@@ -363,6 +376,20 @@ export default function ScreensPage() {
                       {device.device_type?.replace("_", " ") || "Unknown"}
                     </Badge>
                   </div>
+
+                  {/* Preview Button */}
+                  <div className="pt-2">
+                    <Button
+                      onClick={() => handlePreviewScreen(device)}
+                      variant="outline"
+                      size="sm"
+                      className="w-full"
+                      disabled={!device.assigned_playlist_id}
+                    >
+                      <Eye className="h-4 w-4 mr-2" />
+                      {device.assigned_playlist_id ? "Preview Screen" : "No Content to Preview"}
+                    </Button>
+                  </div>
                 </CardContent>
               </Card>
             ))}
@@ -393,6 +420,11 @@ export default function ScreensPage() {
             device={selectedDevice}
             onRepairCompleted={handleRepairCompleted}
           />
+        )}
+
+        {/* Screen Preview Modal */}
+        {selectedDevice && (
+          <ScreenPreviewModal open={showPreviewModal} onOpenChange={setShowPreviewModal} device={selectedDevice} />
         )}
       </div>
     </DashboardLayout>
