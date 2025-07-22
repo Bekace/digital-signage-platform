@@ -6,91 +6,110 @@ export const dynamic = "force-dynamic"
 
 const sql = neon(process.env.DATABASE_URL!)
 
+function generatePairingCode(): string {
+  const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+  let result = ""
+  for (let i = 0; i < 6; i++) {
+    result += chars.charAt(Math.floor(Math.random() * chars.length))
+  }
+  return result
+}
+
 export async function POST(request: NextRequest) {
   try {
+    console.log("🔗 [GENERATE CODE] Starting pairing code generation...")
+
     const user = await getCurrentUser(request)
     if (!user) {
+      console.log("🔗 [GENERATE CODE] No authenticated user found")
       return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 })
     }
 
     const body = await request.json()
     const { screenName, deviceType } = body
 
-    if (!screenName) {
-      return NextResponse.json({ success: false, error: "Screen name is required" }, { status: 400 })
+    console.log("🔗 [GENERATE CODE] Request:", { screenName, deviceType, userId: user.id })
+
+    if (!screenName || !deviceType) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Screen name and device type are required",
+        },
+        { status: 400 },
+      )
     }
 
-    console.log("📱 [GENERATE CODE] Creating pairing code for:", { screenName, deviceType, userId: user.id })
-
-    // Generate a unique 6-character code
-    const generateCode = () => {
-      const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
-      let result = ""
-      for (let i = 0; i < 6; i++) {
-        result += chars.charAt(Math.floor(Math.random() * chars.length))
-      }
-      return result
-    }
-
-    let code = generateCode()
+    // Generate a unique pairing code
+    let pairingCode = ""
+    let isUnique = false
     let attempts = 0
-    const maxAttempts = 10
 
-    // Ensure code is unique
-    while (attempts < maxAttempts) {
+    while (!isUnique && attempts < 10) {
+      pairingCode = generatePairingCode()
+
       const existing = await sql`
         SELECT id FROM device_pairing_codes 
-        WHERE code = ${code} AND expires_at > NOW()
+        WHERE code = ${pairingCode} 
+        AND expires_at > NOW()
       `
 
-      if (existing.length === 0) {
-        break
-      }
-
-      code = generateCode()
+      isUnique = existing.length === 0
       attempts++
     }
 
-    if (attempts >= maxAttempts) {
-      return NextResponse.json({ success: false, error: "Failed to generate unique code" }, { status: 500 })
+    if (!isUnique) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Failed to generate unique pairing code",
+        },
+        { status: 500 },
+      )
     }
 
-    // Set expiration to 24 hours from now
-    const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000)
+    // Insert the pairing code into the database
+    const expiresAt = new Date(Date.now() + 15 * 60 * 1000) // 15 minutes from now
 
-    const result = await sql`
+    const insertResult = await sql`
       INSERT INTO device_pairing_codes (
-        code,
-        screen_name,
-        device_type,
-        user_id,
-        expires_at
+        code, 
+        screen_name, 
+        device_type, 
+        user_id, 
+        expires_at,
+        created_at
       ) VALUES (
-        ${code},
+        ${pairingCode},
         ${screenName},
-        ${deviceType || "web_browser"},
+        ${deviceType},
         ${user.id},
-        ${expiresAt.toISOString()}
+        ${expiresAt.toISOString()},
+        NOW()
       )
       RETURNING id, code, screen_name, device_type, expires_at, created_at
     `
 
-    console.log("📱 [GENERATE CODE] Pairing code created:", code)
+    const pairingRecord = insertResult[0]
+
+    console.log("🔗 [GENERATE CODE] Pairing code created:", {
+      code: pairingRecord.code,
+      screenName: pairingRecord.screen_name,
+      deviceType: pairingRecord.device_type,
+      expiresAt: pairingRecord.expires_at,
+    })
 
     return NextResponse.json({
       success: true,
-      pairingCode: {
-        id: result[0].id,
-        code: result[0].code,
-        screenName: result[0].screen_name,
-        deviceType: result[0].device_type,
-        expiresAt: result[0].expires_at,
-        createdAt: result[0].created_at,
-      },
+      pairingCode: pairingRecord.code,
+      code: pairingRecord.code, // For backward compatibility
+      screenName: pairingRecord.screen_name,
+      deviceType: pairingRecord.device_type,
+      expiresAt: pairingRecord.expires_at,
       message: "Pairing code generated successfully",
     })
   } catch (error) {
-    console.error("📱 [GENERATE CODE] Error:", error)
+    console.error("🔗 [GENERATE CODE] Error:", error)
     return NextResponse.json(
       {
         success: false,

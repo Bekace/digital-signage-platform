@@ -1,228 +1,215 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { neon } from "@neondatabase/serverless"
-import { getCurrentUser } from "@/lib/auth"
+
+export const dynamic = "force-dynamic"
 
 const sql = neon(process.env.DATABASE_URL!)
 
 export async function POST(request: NextRequest) {
   try {
-    const user = await getCurrentUser(request)
-    if (!user) {
-      return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 })
-    }
-
     const body = await request.json()
-    const { deviceId, pairingCode, action } = body
+    const { deviceId, pairingCode } = body
 
-    console.log("🔍 [DEBUG DEVICE PLAYER] Request:", { deviceId, pairingCode, action, userId: user.id })
+    console.log("🔍 [DEBUG] Starting device player debug analysis...")
+    console.log("🔍 [DEBUG] Input:", { deviceId, pairingCode })
 
-    const debug: any = {
-      timestamp: new Date().toISOString(),
+    const results = {
       deviceId,
       pairingCode,
-      tests: {},
+      timestamp: new Date().toISOString(),
+      checks: {},
+      recommendations: [],
       summary: {
-        status: "HEALTHY",
-        totalTests: 0,
-        failedTests: 0,
-        errorTests: 0,
+        status: "unknown",
         issues: [],
-        recommendations: [],
+        working: [],
       },
     }
 
-    // Test 1: Check if device exists in database
+    // Check 1: Device existence
     if (deviceId) {
       try {
         const deviceCheck = await sql`
           SELECT id, name, device_type, status, user_id, assigned_playlist_id, created_at, last_seen
           FROM devices 
-          WHERE id = ${Number.parseInt(deviceId)} AND user_id = ${user.id}
+          WHERE id = ${deviceId}
         `
 
-        debug.tests.deviceExists = {
-          status: deviceCheck.length > 0 ? "PASS" : "FAIL",
-          message:
-            deviceCheck.length > 0
-              ? `Device ${deviceId} exists in database`
-              : `Device ${deviceId} does not exist in database`,
+        results.checks.deviceExists = {
+          passed: deviceCheck.length > 0,
           data: deviceCheck[0] || null,
+          message: deviceCheck.length > 0 ? "Device found in database" : "Device ID does not exist in database",
         }
 
         if (deviceCheck.length === 0) {
-          debug.summary.issues.push(`Device ID ${deviceId} not found in database`)
-          debug.summary.recommendations.push("Use a valid pairing code to register a new device")
+          results.recommendations.push(
+            "Device ID " + deviceId + " does not exist. Generate a new pairing code and register properly.",
+          )
+          results.summary.issues.push("Device not found in database")
+        } else {
+          results.summary.working.push("Device exists in database")
         }
       } catch (error) {
-        debug.tests.deviceExists = {
-          status: "ERROR",
-          message: "Failed to check device existence",
+        results.checks.deviceExists = {
+          passed: false,
           error: error instanceof Error ? error.message : "Unknown error",
+          message: "Error checking device existence",
         }
+        results.summary.issues.push("Database error checking device")
       }
     }
 
-    // Test 2: Check pairing code validity
+    // Check 2: Pairing code validation
     if (pairingCode) {
       try {
         const pairingCheck = await sql`
-          SELECT id, code, screen_name, device_type, user_id, expires_at, device_id, used_at, created_at
+          SELECT id, code, screen_name, device_type, user_id, expires_at, completed_at, device_id, created_at
           FROM device_pairing_codes 
-          WHERE code = ${pairingCode.toUpperCase()} AND user_id = ${user.id}
-          ORDER BY created_at DESC
-          LIMIT 1
+          WHERE code = ${pairingCode}
         `
 
         if (pairingCheck.length > 0) {
           const pairing = pairingCheck[0]
           const isExpired = new Date(pairing.expires_at) < new Date()
-          const isUsed = !!pairing.used_at
+          const isUsed = pairing.completed_at !== null
 
-          let status = "PASS"
-          let message = "Pairing code is valid and available"
+          results.checks.pairingCode = {
+            passed: !isExpired && !isUsed,
+            data: pairing,
+            isExpired,
+            isUsed,
+            message: isExpired
+              ? "Pairing code has expired"
+              : isUsed
+                ? "Pairing code has already been used"
+                : "Pairing code is valid",
+          }
 
           if (isExpired) {
-            status = "FAIL"
-            message = "Pairing code has expired"
-            debug.summary.issues.push("Pairing code has expired")
-            debug.summary.recommendations.push("Generate a new pairing code from the dashboard")
+            results.recommendations.push("Pairing code has expired. Generate a new one from the dashboard.")
+            results.summary.issues.push("Pairing code expired")
           } else if (isUsed) {
-            status = "INFO"
-            message = `Pairing code already used for device ${pairing.device_id}`
-          }
-
-          debug.tests.pairingCodeValid = {
-            status,
-            message,
-            data: pairing,
+            results.recommendations.push(
+              "Pairing code already used for device ID " +
+                pairing.device_id +
+                ". Use that device ID or generate a new pairing code.",
+            )
+            results.summary.issues.push("Pairing code already used")
+          } else {
+            results.summary.working.push("Pairing code is valid")
           }
         } else {
-          debug.tests.pairingCodeValid = {
-            status: "FAIL",
-            message: "Pairing code not found or doesn't belong to current user",
+          results.checks.pairingCode = {
+            passed: false,
             data: null,
+            message: "Pairing code not found in database",
           }
-          debug.summary.issues.push("Invalid pairing code")
-          debug.summary.recommendations.push("Generate a new pairing code from the dashboard")
+          results.recommendations.push("Pairing code not found. Generate a new pairing code from the dashboard.")
+          results.summary.issues.push("Pairing code not found")
         }
       } catch (error) {
-        debug.tests.pairingCodeValid = {
-          status: "ERROR",
-          message: "Failed to check pairing code",
+        results.checks.pairingCode = {
+          passed: false,
           error: error instanceof Error ? error.message : "Unknown error",
+          message: "Error checking pairing code",
         }
+        results.summary.issues.push("Database error checking pairing code")
       }
     }
 
-    // Test 3: Check all devices for current user
+    // Check 3: Database content analysis
     try {
       const allDevices = await sql`
-        SELECT id, name, device_type, status, assigned_playlist_id, last_seen, created_at
+        SELECT id, name, device_type, status, user_id, assigned_playlist_id, created_at
         FROM devices 
-        WHERE user_id = ${user.id}
-        ORDER BY created_at DESC
-      `
-
-      debug.tests.userDevices = {
-        status: "INFO",
-        message: `Found ${allDevices.length} devices for current user`,
-        data: allDevices,
-      }
-    } catch (error) {
-      debug.tests.userDevices = {
-        status: "ERROR",
-        message: "Failed to fetch user devices",
-        error: error instanceof Error ? error.message : "Unknown error",
-      }
-    }
-
-    // Test 4: Check all pairing codes for current user
-    try {
-      const allPairingCodes = await sql`
-        SELECT id, code, screen_name, device_type, expires_at, device_id, used_at, created_at
-        FROM device_pairing_codes 
-        WHERE user_id = ${user.id}
         ORDER BY created_at DESC
         LIMIT 10
       `
 
-      debug.tests.userPairingCodes = {
-        status: "INFO",
-        message: `Found ${allPairingCodes.length} pairing codes for current user`,
-        data: allPairingCodes,
+      const allPairingCodes = await sql`
+        SELECT id, code, screen_name, expires_at, completed_at, device_id, created_at
+        FROM device_pairing_codes 
+        ORDER BY created_at DESC
+        LIMIT 10
+      `
+
+      results.checks.databaseContent = {
+        passed: true,
+        devices: allDevices,
+        pairingCodes: allPairingCodes,
+        message: `Found ${allDevices.length} devices and ${allPairingCodes.length} pairing codes in database`,
+      }
+
+      if (allDevices.length === 0) {
+        results.recommendations.push("No devices found in database. Register a device using a valid pairing code.")
+        results.summary.issues.push("No devices in database")
       }
     } catch (error) {
-      debug.tests.userPairingCodes = {
-        status: "ERROR",
-        message: "Failed to fetch pairing codes",
+      results.checks.databaseContent = {
+        passed: false,
         error: error instanceof Error ? error.message : "Unknown error",
+        message: "Error fetching database content",
       }
+      results.summary.issues.push("Database connection error")
     }
 
-    // Test 5: Test device registration if requested
-    if (action === "test_registration" && pairingCode) {
-      try {
-        const registrationResponse = await fetch(`${request.nextUrl.origin}/api/devices/register`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Cookie: request.headers.get("cookie") || "",
-          },
-          body: JSON.stringify({
-            deviceCode: pairingCode.toUpperCase(),
-            name: `Debug Test Device ${Date.now()}`,
-            deviceType: "web_browser",
-            platform: "Debug",
-            userAgent: "Debug Agent",
-            screenResolution: "1920x1080",
-            capabilities: ["video", "image", "audio", "web"],
-          }),
-        })
+    // Check 4: API endpoints test
+    try {
+      // Test device registration endpoint
+      const testRegistration = await fetch(`${request.nextUrl.origin}/api/devices/register`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ pairingCode: "TEST123" }),
+      })
 
-        const registrationData = await registrationResponse.json()
-
-        debug.tests.registrationTest = {
-          status: registrationData.success ? "PASS" : "FAIL",
-          message: registrationData.success
-            ? "Device registration successful"
-            : `Registration failed: ${registrationData.error}`,
-          data: registrationData,
-        }
-
-        if (!registrationData.success) {
-          debug.summary.issues.push(`Registration failed: ${registrationData.error}`)
-        }
-      } catch (error) {
-        debug.tests.registrationTest = {
-          status: "ERROR",
-          message: "Failed to test registration",
-          error: error instanceof Error ? error.message : "Unknown error",
-        }
+      results.checks.apiEndpoints = {
+        passed: testRegistration.status !== 500,
+        registrationStatus: testRegistration.status,
+        message:
+          testRegistration.status === 500 ? "Registration API returning 500 error" : "Registration API responding",
       }
+
+      if (testRegistration.status === 500) {
+        results.recommendations.push("Device registration API is returning 500 errors. Check server logs.")
+        results.summary.issues.push("Registration API error")
+      } else {
+        results.summary.working.push("Registration API responding")
+      }
+    } catch (error) {
+      results.checks.apiEndpoints = {
+        passed: false,
+        error: error instanceof Error ? error.message : "Unknown error",
+        message: "Error testing API endpoints",
+      }
+      results.summary.issues.push("API endpoint error")
     }
 
-    // Calculate summary
-    debug.summary.totalTests = Object.keys(debug.tests).length
-    debug.summary.failedTests = Object.values(debug.tests).filter((test: any) => test.status === "FAIL").length
-    debug.summary.errorTests = Object.values(debug.tests).filter((test: any) => test.status === "ERROR").length
-
-    if (debug.summary.failedTests > 0 || debug.summary.errorTests > 0) {
-      debug.summary.status = "ISSUES_FOUND"
+    // Determine overall status
+    if (results.summary.issues.length === 0) {
+      results.summary.status = "healthy"
+    } else if (results.summary.working.length > results.summary.issues.length) {
+      results.summary.status = "warning"
+    } else {
+      results.summary.status = "error"
     }
 
     // Add general recommendations
-    if (debug.summary.issues.length === 0) {
-      debug.summary.recommendations.push("System appears to be working correctly")
+    if (results.summary.issues.length > 0) {
+      results.recommendations.push("To fix device player issues:")
+      results.recommendations.push("1. Generate a new pairing code from dashboard screens page")
+      results.recommendations.push("2. Use the pairing code to register in device player")
+      results.recommendations.push("3. Verify the device appears in the screens dashboard")
+      results.recommendations.push("4. Assign a playlist to the device")
     }
 
-    console.log("🔍 [DEBUG DEVICE PLAYER] Results:", debug.summary)
+    console.log("🔍 [DEBUG] Analysis complete:", results.summary)
 
     return NextResponse.json({
       success: true,
-      debug,
+      debug: results,
     })
   } catch (error) {
-    console.error("🔍 [DEBUG DEVICE PLAYER] Error:", error)
+    console.error("🔍 [DEBUG] Error:", error)
     return NextResponse.json(
       {
         success: false,

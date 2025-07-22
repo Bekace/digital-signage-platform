@@ -1,1013 +1,566 @@
 "use client"
 
-import { useState, useEffect, useCallback, useRef } from "react"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { useState, useEffect, useCallback } from "react"
 import { Button } from "@/components/ui/button"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
 import { Alert, AlertDescription } from "@/components/ui/alert"
+import { Separator } from "@/components/ui/separator"
+import { toast } from "sonner"
 import {
-  Loader2,
   Monitor,
+  Wifi,
   WifiOff,
   Play,
   Pause,
   SkipForward,
   SkipBack,
-  RefreshCw,
+  Volume2,
+  Eye,
   AlertCircle,
   CheckCircle,
-  Eye,
-  Maximize,
-  Volume2,
-  ExternalLink,
-  FileText,
+  Loader2,
 } from "lucide-react"
 
 interface DeviceInfo {
+  id?: string
   name: string
-  type: string
+  deviceType: string
   platform: string
-  userAgent: string
   screenResolution: string
   capabilities: string[]
-}
-
-interface MediaFile {
-  id: number
-  filename: string
-  original_name?: string
-  original_filename?: string
-  file_type: string
-  file_size: number
-  url: string
-  thumbnail_url?: string
-  mime_type?: string
-  dimensions?: string
-  duration?: number
-  media_source?: string
-  external_url?: string
-  embed_settings?: string | object
-  created_at: string
+  status?: string
+  assignedPlaylistId?: number
+  playlistName?: string
 }
 
 interface PlaylistItem {
-  id: string
-  type: "image" | "video" | "web" | "slides"
-  url: string
+  id: number
+  media_id: number
   duration: number
-  name: string
-  media?: MediaFile
-  media_file?: MediaFile
-}
-
-interface Playlist {
-  id: string
-  name: string
-  items: PlaylistItem[]
-  settings: {
-    loop: boolean
-    shuffle: boolean
-    transitionDuration: number
+  order_index: number
+  media: {
+    id: number
+    name: string
+    type: string
+    url: string
+    thumbnail_url?: string
   }
 }
 
-export default function DevicePlayerPage() {
-  const [pairingCode, setPairingCode] = useState("")
-  const [isConnecting, setIsConnecting] = useState(false)
-  const [isConnected, setIsConnected] = useState(false)
-  const [deviceInfo, setDeviceInfo] = useState<DeviceInfo | null>(null)
-  const [deviceId, setDeviceId] = useState<string | null>(null)
-  const [error, setError] = useState("")
-  const [connectionStatus, setConnectionStatus] = useState<
-    "disconnected" | "connecting" | "connected" | "reconnecting"
-  >("disconnected")
+interface ConnectionState {
+  connected: boolean
+  deviceId?: string
+  pairingCode?: string
+  device?: DeviceInfo
+  error?: string
+}
 
-  // Playlist and playback state
-  const [currentPlaylist, setCurrentPlaylist] = useState<Playlist | null>(null)
+export default function DevicePlayerPage() {
+  const [connectionState, setConnectionState] = useState<ConnectionState>({
+    connected: false,
+  })
+  const [pairingCode, setPairingCode] = useState("")
+  const [loading, setLoading] = useState(false)
+  const [previewMode, setPreviewMode] = useState(false)
+  const [playlist, setPlaylist] = useState<PlaylistItem[]>([])
   const [currentItemIndex, setCurrentItemIndex] = useState(0)
   const [isPlaying, setIsPlaying] = useState(false)
-  const [playbackStatus, setPlaybackStatus] = useState("idle")
-  const [lastHeartbeat, setLastHeartbeat] = useState<Date | null>(null)
-  const [isFullscreen, setIsFullscreen] = useState(false)
-  const [showPreview, setShowPreview] = useState(false)
-
-  // Media state
-  const [iframeError, setIframeError] = useState(false)
-  const [videoError, setVideoError] = useState(false)
-  const [imageError, setImageError] = useState(false)
-
-  // Reconnection state
-  const [reconnectAttempts, setReconnectAttempts] = useState(0)
-  const [maxReconnectAttempts] = useState(5)
-  const [reconnectDelay, setReconnectDelay] = useState(5000)
-
-  // Refs for intervals
-  const heartbeatInterval = useRef<NodeJS.Timeout | null>(null)
-  const playlistPollInterval = useRef<NodeJS.Timeout | null>(null)
-  const reconnectTimeout = useRef<NodeJS.Timeout | null>(null)
-  const itemTimer = useRef<NodeJS.Timeout | null>(null)
+  const [volume, setVolume] = useState(50)
 
   // Generate device info
   const generateDeviceInfo = useCallback((): DeviceInfo => {
-    const getScreenResolution = () => {
-      if (typeof window !== "undefined" && window.screen) {
-        return `${window.screen.width}x${window.screen.height}`
-      }
-      return "1920x1080"
-    }
-
-    const getPlatform = () => {
-      if (typeof navigator !== "undefined" && navigator.platform) {
-        return navigator.platform
-      }
-      return "Web"
-    }
-
-    const getUserAgent = () => {
-      if (typeof navigator !== "undefined" && navigator.userAgent) {
-        return navigator.userAgent
-      }
-      return "Unknown Browser"
-    }
-
+    const deviceId = Math.random().toString(36).substring(2, 15)
     return {
-      name: "Device Player",
-      type: "web_browser",
-      platform: getPlatform(),
-      userAgent: getUserAgent(),
-      screenResolution: getScreenResolution(),
+      name: `Device Player ${deviceId}`,
+      deviceType: "web_browser",
+      platform: navigator.platform || "Web",
+      screenResolution: `${screen.width}x${screen.height}`,
       capabilities: ["video", "image", "audio", "web", "slides", "pdf", "office", "text"],
     }
   }, [])
 
-  // Initialize device info and check for existing connection
+  // Check for existing connection on load
   useEffect(() => {
-    setDeviceInfo(generateDeviceInfo())
+    const checkExistingConnection = async () => {
+      console.log("🔗 [DEVICE PLAYER] Checking for existing connection...")
 
-    // Check for saved connection - but verify it's real
-    const savedPairingCode = localStorage.getItem("devicePairingCode")
-    const savedDeviceId = localStorage.getItem("deviceId")
+      const savedDeviceId = localStorage.getItem("deviceId")
+      const savedPairingCode = localStorage.getItem("devicePairingCode")
 
-    if (savedPairingCode && savedDeviceId) {
-      // Verify the saved connection is real by checking the device exists
-      verifyExistingConnection(savedDeviceId, savedPairingCode)
-    }
-  }, [generateDeviceInfo])
+      if (savedDeviceId) {
+        console.log("🔗 [DEVICE PLAYER] Found saved device ID:", savedDeviceId)
 
-  // Verify existing connection is real
-  const verifyExistingConnection = async (savedDeviceId: string, savedPairingCode: string) => {
-    try {
-      console.log("[DEVICE PLAYER] Verifying existing connection:", { savedDeviceId, savedPairingCode })
+        try {
+          // Verify the device actually exists in the database
+          const response = await fetch(`/api/devices/${savedDeviceId}`)
+          const data = await response.json()
 
-      const response = await fetch(`/api/devices/${savedDeviceId}`, {
-        credentials: "include",
-      })
-
-      if (response.ok) {
-        const data = await response.json()
-        if (data.success && data.device) {
-          // Connection is real, restore it
-          setPairingCode(savedPairingCode)
-          setDeviceId(savedDeviceId)
-          setIsConnected(true)
-          setConnectionStatus("connected")
-          startHeartbeat()
-          startPlaylistPolling()
-          console.log("[DEVICE PLAYER] Restored real connection:", data.device)
-        } else {
-          // Device doesn't exist, clear fake connection
-          clearSavedConnection()
+          if (data.success && data.device) {
+            console.log("🔗 [DEVICE PLAYER] Verified real device connection:", data.device)
+            setConnectionState({
+              connected: true,
+              deviceId: savedDeviceId,
+              pairingCode: savedPairingCode || undefined,
+              device: data.device,
+            })
+            loadPlaylist(savedDeviceId)
+          } else {
+            console.log("🔗 [DEVICE PLAYER] Device not found in database, clearing fake connection")
+            localStorage.removeItem("deviceId")
+            localStorage.removeItem("devicePairingCode")
+            setConnectionState({ connected: false })
+          }
+        } catch (error) {
+          console.error("🔗 [DEVICE PLAYER] Error verifying connection:", error)
+          localStorage.removeItem("deviceId")
+          localStorage.removeItem("devicePairingCode")
+          setConnectionState({ connected: false })
         }
       } else {
-        // API call failed, clear fake connection
-        clearSavedConnection()
+        console.log("🔗 [DEVICE PLAYER] No saved connection found")
       }
-    } catch (error) {
-      console.error("[DEVICE PLAYER] Failed to verify connection:", error)
-      clearSavedConnection()
     }
-  }
 
-  // Clear saved connection data
-  const clearSavedConnection = () => {
-    localStorage.removeItem("devicePairingCode")
-    localStorage.removeItem("deviceId")
-    setIsConnected(false)
-    setConnectionStatus("disconnected")
-    setDeviceId(null)
-    setPairingCode("")
-    console.log("[DEVICE PLAYER] Cleared fake connection data")
-  }
-
-  // Cleanup intervals on unmount
-  useEffect(() => {
-    return () => {
-      if (heartbeatInterval.current) clearInterval(heartbeatInterval.current)
-      if (playlistPollInterval.current) clearInterval(playlistPollInterval.current)
-      if (reconnectTimeout.current) clearTimeout(reconnectTimeout.current)
-      if (itemTimer.current) clearTimeout(itemTimer.current)
-    }
+    checkExistingConnection()
   }, [])
 
-  // Connect to pairing code
-  const connectDevice = async () => {
-    if (!pairingCode.trim() || !deviceInfo) {
-      setError("Please enter a pairing code")
+  // Load playlist for device
+  const loadPlaylist = async (deviceId: string) => {
+    try {
+      console.log("🎵 [DEVICE PLAYER] Loading playlist for device:", deviceId)
+
+      const response = await fetch(`/api/devices/${deviceId}/playlist`)
+      const data = await response.json()
+
+      if (data.success && data.playlist) {
+        console.log("🎵 [DEVICE PLAYER] Playlist loaded:", data.playlist)
+        setPlaylist(data.playlist.items || [])
+      } else {
+        console.log("🎵 [DEVICE PLAYER] No playlist assigned")
+        setPlaylist([])
+      }
+    } catch (error) {
+      console.error("🎵 [DEVICE PLAYER] Error loading playlist:", error)
+      setPlaylist([])
+    }
+  }
+
+  // Connect with pairing code
+  const handleConnect = async () => {
+    if (!pairingCode.trim()) {
+      toast.error("Please enter a pairing code")
       return
     }
 
-    setIsConnecting(true)
-    setConnectionStatus("connecting")
-    setError("")
+    setLoading(true)
+    console.log("🔗 [DEVICE PLAYER] Attempting registration with pairing code:", pairingCode)
 
     try {
-      console.log("[DEVICE PLAYER] Attempting registration with:", {
-        deviceCode: pairingCode.toUpperCase(),
-        ...deviceInfo,
-      })
+      const deviceInfo = generateDeviceInfo()
+      console.log("🔗 [DEVICE PLAYER] Generated device info:", deviceInfo)
 
       const response = await fetch("/api/devices/register", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        credentials: "include",
         body: JSON.stringify({
-          deviceCode: pairingCode.toUpperCase(),
-          name: deviceInfo.name,
-          deviceType: deviceInfo.type,
-          platform: deviceInfo.platform,
-          userAgent: deviceInfo.userAgent,
-          screenResolution: deviceInfo.screenResolution,
-          capabilities: deviceInfo.capabilities,
+          pairingCode: pairingCode.trim(),
+          deviceInfo,
         }),
       })
 
-      const result = await response.json()
-      console.log("[DEVICE PLAYER] Registration response:", result)
+      const data = await response.json()
+      console.log("🔗 [DEVICE PLAYER] Registration response:", data)
 
-      if (result.success && result.device) {
-        // Verify the device was actually created by fetching it
-        const verifyResponse = await fetch(`/api/devices/${result.device.id}`, {
-          credentials: "include",
-        })
+      if (data.success && data.device) {
+        // Verify the device was actually created by fetching it back
+        const verifyResponse = await fetch(`/api/devices/${data.device.id}`)
+        const verifyData = await verifyResponse.json()
 
-        if (verifyResponse.ok) {
-          const verifyData = await verifyResponse.json()
-          if (verifyData.success && verifyData.device) {
-            // Real device created successfully
-            setDeviceId(result.device.id.toString())
-            setIsConnected(true)
-            setConnectionStatus("connected")
-            setError("")
-            setReconnectAttempts(0)
-            setReconnectDelay(5000)
+        if (verifyData.success && verifyData.device) {
+          console.log("🔗 [DEVICE PLAYER] Device registration verified:", verifyData.device)
 
-            // Save real connection info
-            localStorage.setItem("devicePairingCode", pairingCode.toUpperCase())
-            localStorage.setItem("deviceId", result.device.id.toString())
+          // Store connection info
+          localStorage.setItem("deviceId", data.device.id.toString())
+          localStorage.setItem("devicePairingCode", pairingCode.trim())
 
-            // Start monitoring
-            startHeartbeat()
-            startPlaylistPolling()
+          setConnectionState({
+            connected: true,
+            deviceId: data.device.id.toString(),
+            pairingCode: pairingCode.trim(),
+            device: verifyData.device,
+          })
 
-            console.log("[DEVICE PLAYER] Successfully connected to real device:", verifyData.device)
-          } else {
-            throw new Error("Device verification failed")
-          }
+          // Load playlist
+          loadPlaylist(data.device.id.toString())
+
+          toast.success("Device connected successfully!")
+          setPairingCode("")
         } else {
-          throw new Error("Could not verify device creation")
+          throw new Error("Device registration could not be verified")
         }
       } else {
-        setError(result.error || "Failed to connect device")
-        setConnectionStatus("disconnected")
+        throw new Error(data.error || "Registration failed")
       }
-    } catch (err) {
-      console.error("[DEVICE PLAYER] Connection error:", err)
-      setError("Failed to connect to server")
-      setConnectionStatus("disconnected")
+    } catch (error) {
+      console.error("🔗 [DEVICE PLAYER] Registration error:", error)
+      const errorMessage = error instanceof Error ? error.message : "Failed to connect device"
+      setConnectionState({
+        connected: false,
+        error: errorMessage,
+      })
+      toast.error(errorMessage)
     } finally {
-      setIsConnecting(false)
+      setLoading(false)
     }
   }
 
   // Disconnect device
-  const disconnectDevice = () => {
-    // Clear intervals
-    if (heartbeatInterval.current) clearInterval(heartbeatInterval.current)
-    if (playlistPollInterval.current) clearInterval(playlistPollInterval.current)
-    if (reconnectTimeout.current) clearTimeout(reconnectTimeout.current)
-    if (itemTimer.current) clearTimeout(itemTimer.current)
+  const handleDisconnect = () => {
+    console.log("🔗 [DEVICE PLAYER] Disconnecting device")
 
-    // Clear state
-    setIsConnected(false)
-    setConnectionStatus("disconnected")
-    setDeviceId(null)
-    setCurrentPlaylist(null)
+    localStorage.removeItem("deviceId")
+    localStorage.removeItem("devicePairingCode")
+
+    setConnectionState({ connected: false })
+    setPlaylist([])
+    setPreviewMode(false)
     setIsPlaying(false)
-    setReconnectAttempts(0)
-    setShowPreview(false)
 
-    // Clear saved connection
-    clearSavedConnection()
-
-    console.log("[DEVICE PLAYER] Disconnected")
+    toast.success("Device disconnected")
   }
 
-  // Attempt to reconnect
-  const attemptReconnect = useCallback(async () => {
-    if (reconnectAttempts >= maxReconnectAttempts) {
-      setError("Maximum reconnection attempts reached. Please reconnect manually.")
-      setConnectionStatus("disconnected")
-      clearSavedConnection()
-      return
-    }
-
-    setConnectionStatus("reconnecting")
-    setReconnectAttempts((prev) => prev + 1)
-
-    try {
-      if (deviceId) {
-        // Try to verify the device still exists
-        const response = await fetch(`/api/devices/${deviceId}`, {
-          credentials: "include",
-        })
-
-        if (response.ok) {
-          const data = await response.json()
-          if (data.success && data.device) {
-            setConnectionStatus("connected")
-            startHeartbeat()
-            startPlaylistPolling()
-            return
-          }
-        }
-      }
-
-      // If device verification fails, try re-registration
-      await connectDevice()
-    } catch (error) {
-      console.error("Reconnection failed:", error)
-
-      // Exponential backoff
-      const delay = Math.min(reconnectDelay * Math.pow(2, reconnectAttempts), 60000)
-      setReconnectDelay(delay)
-
-      reconnectTimeout.current = setTimeout(() => {
-        attemptReconnect()
-      }, delay)
-    }
-  }, [reconnectAttempts, maxReconnectAttempts, reconnectDelay, deviceId])
-
-  // Start heartbeat monitoring
-  const startHeartbeat = useCallback(() => {
-    if (heartbeatInterval.current) clearInterval(heartbeatInterval.current)
+  // Send heartbeat
+  useEffect(() => {
+    if (!connectionState.connected || !connectionState.deviceId) return
 
     const sendHeartbeat = async () => {
-      if (!deviceId) return
-
       try {
-        const response = await fetch(`/api/devices/${deviceId}/heartbeat`, {
+        await fetch(`/api/devices/${connectionState.deviceId}/heartbeat`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
           },
-          credentials: "include",
           body: JSON.stringify({
-            status: isPlaying ? "playing" : "idle",
-            currentItemId: currentPlaylist?.items[currentItemIndex]?.id || null,
-            performanceMetrics: {
-              timestamp: Date.now(),
-              playbackStatus,
-              reconnectAttempts,
-            },
+            status: previewMode ? "playing" : "idle",
+            currentItem: previewMode ? currentItemIndex : null,
           }),
         })
-
-        if (response.ok) {
-          setLastHeartbeat(new Date())
-          setConnectionStatus("connected")
-        } else {
-          throw new Error("Heartbeat failed")
-        }
       } catch (error) {
-        console.error("Heartbeat error:", error)
-        if (isConnected) {
-          attemptReconnect()
-        }
+        console.error("💓 [DEVICE PLAYER] Heartbeat error:", error)
       }
     }
 
-    // Send initial heartbeat
+    // Send heartbeat immediately
     sendHeartbeat()
 
-    // Set up interval (every 30 seconds)
-    heartbeatInterval.current = setInterval(sendHeartbeat, 30000)
-  }, [
-    deviceId,
-    isPlaying,
-    currentPlaylist,
-    currentItemIndex,
-    playbackStatus,
-    reconnectAttempts,
-    isConnected,
-    attemptReconnect,
-  ])
+    // Then send every 30 seconds
+    const interval = setInterval(sendHeartbeat, 30000)
+    return () => clearInterval(interval)
+  }, [connectionState.connected, connectionState.deviceId, previewMode, currentItemIndex])
 
-  // Start playlist polling
-  const startPlaylistPolling = useCallback(() => {
-    if (playlistPollInterval.current) clearInterval(playlistPollInterval.current)
-
-    const pollPlaylist = async () => {
-      if (!deviceId) return
-
-      try {
-        const response = await fetch(`/api/devices/${deviceId}/playlist`, {
-          credentials: "include",
-        })
-        if (response.ok) {
-          const data = await response.json()
-          if (data.playlist) {
-            setCurrentPlaylist(data.playlist)
-            if (data.playlist.items.length > 0 && !isPlaying) {
-              setIsPlaying(true)
-              setPlaybackStatus("playing")
-            }
-          }
-        }
-      } catch (error) {
-        console.error("Failed to check for playlist:", error)
-      }
-    }
-
-    // Poll immediately
-    pollPlaylist()
-
-    // Set up interval (every 10 seconds)
-    playlistPollInterval.current = setInterval(pollPlaylist, 10000)
-  }, [deviceId, isPlaying])
-
-  // Handle media playback
-  const playCurrentItem = useCallback(() => {
-    if (!currentPlaylist || currentPlaylist.items.length === 0) return
-
-    const currentItem = currentPlaylist.items[currentItemIndex]
-    setPlaybackStatus(`playing: ${currentItem.name}`)
-
-    // Clear existing timer
-    if (itemTimer.current) clearTimeout(itemTimer.current)
-
-    // Auto-advance after duration
-    itemTimer.current = setTimeout(() => {
-      nextItem()
-    }, currentItem.duration * 1000)
-  }, [currentPlaylist, currentItemIndex])
-
-  const nextItem = useCallback(() => {
-    if (!currentPlaylist) return
-
-    const nextIndex = (currentItemIndex + 1) % currentPlaylist.items.length
-    setCurrentItemIndex(nextIndex)
-  }, [currentPlaylist, currentItemIndex])
-
-  const previousItem = useCallback(() => {
-    if (!currentPlaylist) return
-
-    const prevIndex = currentItemIndex === 0 ? currentPlaylist.items.length - 1 : currentItemIndex - 1
-    setCurrentItemIndex(prevIndex)
-  }, [currentPlaylist, currentItemIndex])
-
-  const togglePlayback = () => {
-    setIsPlaying(!isPlaying)
-    setPlaybackStatus(isPlaying ? "paused" : "playing")
-
-    if (itemTimer.current) {
-      clearTimeout(itemTimer.current)
-    }
-  }
-
-  const togglePreview = () => {
-    setShowPreview(!showPreview)
-  }
-
-  const toggleFullscreen = () => {
-    setIsFullscreen(!isFullscreen)
-  }
-
-  // Start playback when playlist changes
+  // Auto-refresh playlist
   useEffect(() => {
-    if (currentPlaylist && isPlaying) {
-      playCurrentItem()
-    }
-  }, [currentPlaylist, currentItemIndex, isPlaying, playCurrentItem])
+    if (!connectionState.connected || !connectionState.deviceId) return
 
-  // Media file helpers
-  const getCurrentMediaFile = () => {
-    if (!currentPlaylist || !currentPlaylist.items[currentItemIndex]) return null
-    const currentItem = currentPlaylist.items[currentItemIndex]
-    return currentItem.media || currentItem.media_file || null
-  }
-
-  const isSlidesFile = (file: MediaFile | null) => {
-    if (!file) return false
-    return file.media_source === "google_slides" || file.file_type === "presentation" || file.mime_type === "text/html"
-  }
-
-  const isVideoFile = (file: MediaFile | null) => {
-    if (!file) return false
-    return file.file_type?.startsWith("video/") || file.mime_type?.startsWith("video/")
-  }
-
-  const isImageFile = (file: MediaFile | null) => {
-    if (!file) return false
-    return file.file_type?.startsWith("image/") || file.mime_type?.startsWith("image/")
-  }
-
-  const isAudioFile = (file: MediaFile | null) => {
-    if (!file) return false
-    return file.file_type?.startsWith("audio/") || file.mime_type?.startsWith("audio/")
-  }
-
-  const isPDFFile = (file: MediaFile | null) => {
-    if (!file) return false
-    return file.file_type?.includes("pdf") || file.mime_type?.includes("pdf")
-  }
-
-  const getEmbedUrl = (url: string) => {
-    if (!url) return url
-
-    try {
-      // Handle different Google Slides URL formats
-      if (url.includes("/presentation/d/")) {
-        // Extract the presentation ID
-        const match = url.match(/\/presentation\/d\/([a-zA-Z0-9-_]+)/)
-        if (match) {
-          const presentationId = match[1]
-          // Return embed URL with autoplay
-          return `https://docs.google.com/presentation/d/${presentationId}/embed?start=true&loop=true&delayms=5000`
-        }
-      }
-
-      // If it's already an embed URL, return as is
-      if (url.includes("/embed")) {
-        return url
-      }
-
-      // Fallback: try to convert any Google Slides URL
-      return url.replace("/edit", "/embed?start=true&loop=true&delayms=5000")
-    } catch (error) {
-      console.error("Error converting URL to embed format:", error)
-      return url
-    }
-  }
-
-  // Render current media
-  const renderCurrentMedia = () => {
-    if (!currentPlaylist || !isPlaying) {
-      return (
-        <div className="flex items-center justify-center h-64 bg-gray-100 rounded-lg">
-          <div className="text-center text-gray-500">
-            <Monitor className="h-12 w-12 mx-auto mb-2" />
-            <p>No content playing</p>
-          </div>
-        </div>
-      )
+    const refreshPlaylist = () => {
+      loadPlaylist(connectionState.deviceId!)
     }
 
-    if (currentPlaylist.items.length === 0) {
-      return (
-        <div className="flex items-center justify-center h-64 bg-gray-100 rounded-lg">
-          <div className="text-center text-gray-500">
-            <AlertCircle className="h-12 w-12 mx-auto mb-2" />
-            <p>Playlist has no items</p>
-          </div>
-        </div>
-      )
-    }
+    // Refresh playlist every 60 seconds
+    const interval = setInterval(refreshPlaylist, 60000)
+    return () => clearInterval(interval)
+  }, [connectionState.connected, connectionState.deviceId])
 
-    const mediaFile = getCurrentMediaFile()
-    if (!mediaFile) {
-      return (
-        <div className="flex items-center justify-center h-64 bg-gray-100 rounded-lg">
-          <div className="text-center text-gray-500">
-            <AlertCircle className="h-12 w-12 mx-auto mb-2" />
-            <p>Media file not found</p>
-          </div>
-        </div>
-      )
+  // Preview mode controls
+  const togglePreview = () => {
+    if (playlist.length === 0) {
+      toast.error("No playlist assigned to preview")
+      return
     }
-
-    if (isSlidesFile(mediaFile)) {
-      return (
-        <div className="w-full aspect-video bg-black rounded-lg overflow-hidden">
-          {!iframeError ? (
-            <iframe
-              src={getEmbedUrl(mediaFile.external_url || mediaFile.url)}
-              className="w-full h-full border-0"
-              frameBorder="0"
-              allowFullScreen
-              title={mediaFile.original_name || mediaFile.filename}
-              onError={() => setIframeError(true)}
-            />
-          ) : (
-            <div className="w-full h-full flex flex-col items-center justify-center bg-blue-50 border border-blue-200 text-gray-600">
-              <FileText className="h-16 w-16 text-blue-600 mx-auto mb-4" />
-              <h3 className="text-lg font-medium text-gray-900 mb-2">Google Slides Presentation</h3>
-              <p className="text-gray-600 mb-4">Unable to embed presentation</p>
-              <Button
-                onClick={() => {
-                  window.open(mediaFile.external_url || mediaFile.url, "_blank")
-                }}
-                className="bg-blue-600 hover:bg-blue-700"
-              >
-                <ExternalLink className="h-4 w-4 mr-2" />
-                Open in Google Slides
-              </Button>
-            </div>
-          )}
-        </div>
-      )
-    } else if (isImageFile(mediaFile)) {
-      return (
-        <div className="w-full aspect-video bg-black rounded-lg overflow-hidden">
-          {!imageError ? (
-            <img
-              src={mediaFile.url || "/placeholder.svg"}
-              alt={mediaFile.original_name || mediaFile.filename}
-              className="w-full h-full object-contain"
-              onError={() => setImageError(true)}
-            />
-          ) : (
-            <div className="w-full h-full flex items-center justify-center bg-red-50 border border-red-200">
-              <div className="text-center text-gray-600">
-                <FileText className="h-16 w-16 mx-auto mb-4 text-red-400" />
-                <h3 className="text-lg font-medium text-red-900 mb-2">Image Load Error</h3>
-                <p className="text-red-700 mb-4">Unable to load image</p>
-                <p className="text-sm mt-2">{mediaFile.original_name || mediaFile.filename}</p>
-              </div>
-            </div>
-          )}
-        </div>
-      )
-    } else if (isVideoFile(mediaFile)) {
-      return (
-        <div className="w-full aspect-video bg-black rounded-lg overflow-hidden">
-          {!videoError ? (
-            <video
-              src={mediaFile.url}
-              className="w-full h-full object-contain"
-              controls
-              autoPlay
-              onEnded={nextItem}
-              onError={() => setVideoError(true)}
-            >
-              Your browser does not support video playback.
-            </video>
-          ) : (
-            <div className="w-full h-full flex items-center justify-center bg-red-50 border border-red-200">
-              <div className="text-center text-gray-600">
-                <FileText className="h-16 w-16 mx-auto mb-4 text-red-400" />
-                <h3 className="text-lg font-medium text-red-900 mb-2">Video Load Error</h3>
-                <p className="text-red-700 mb-4">Unable to load video</p>
-                <p className="text-sm mt-2">{mediaFile.original_name || mediaFile.filename}</p>
-              </div>
-            </div>
-          )}
-        </div>
-      )
-    } else if (isAudioFile(mediaFile)) {
-      return (
-        <div className="w-full aspect-video bg-gray-900 rounded-lg overflow-hidden flex items-center justify-center">
-          <div className="text-center text-white">
-            <Volume2 className="h-16 w-16 mx-auto mb-4" />
-            <h3 className="text-lg font-medium">{mediaFile.original_name || mediaFile.filename}</h3>
-            <audio src={mediaFile.url} controls autoPlay className="mt-4" onEnded={nextItem} />
-          </div>
-        </div>
-      )
-    } else if (isPDFFile(mediaFile)) {
-      return (
-        <div className="w-full aspect-video bg-black rounded-lg overflow-hidden">
-          <iframe
-            src={`${mediaFile.url}#toolbar=0&navpanes=0&scrollbar=0`}
-            className="w-full h-full border-0"
-            title={mediaFile.original_name || mediaFile.filename}
-          />
-        </div>
-      )
-    } else {
-      return (
-        <div className="w-full aspect-video bg-gray-100 rounded-lg overflow-hidden flex items-center justify-center">
-          <div className="text-center text-gray-600">
-            <FileText className="h-16 w-16 mx-auto mb-4" />
-            <h3 className="text-lg font-medium">{mediaFile.original_name || mediaFile.filename}</h3>
-            <p className="text-sm mt-2">Unsupported file type</p>
-          </div>
-        </div>
-      )
-    }
+    setPreviewMode(!previewMode)
+    setIsPlaying(!previewMode)
   }
 
-  // Render preview mode
-  const renderPreviewMode = () => {
-    if (!showPreview) return null
-
-    return (
-      <div className={`fixed inset-0 z-50 bg-black ${isFullscreen ? "" : "p-4"}`}>
-        <div className="absolute top-4 right-4 z-10 flex space-x-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={toggleFullscreen}
-            className="bg-black/50 text-white border-white/20"
-          >
-            <Maximize className="h-4 w-4" />
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={togglePreview}
-            className="bg-black/50 text-white border-white/20"
-          >
-            Close
-          </Button>
-        </div>
-
-        <div className="h-full flex flex-col">
-          {/* Media Container */}
-          <div className="flex-1 flex items-center justify-center">{renderCurrentMedia()}</div>
-
-          {/* Controls */}
-          {!isFullscreen && (
-            <div className="mt-4 bg-black/80 p-4 rounded-lg">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center space-x-2">
-                  <Button variant="ghost" size="sm" onClick={previousItem}>
-                    <SkipBack className="h-4 w-4" />
-                  </Button>
-                  <Button variant="ghost" size="sm" onClick={togglePlayback}>
-                    {isPlaying ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
-                  </Button>
-                  <Button variant="ghost" size="sm" onClick={nextItem}>
-                    <SkipForward className="h-4 w-4" />
-                  </Button>
-                </div>
-
-                <div className="text-white text-sm">
-                  {currentPlaylist && (
-                    <span>
-                      {currentItemIndex + 1} / {currentPlaylist.items.length}
-                    </span>
-                  )}
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
-      </div>
-    )
+  const nextItem = () => {
+    if (playlist.length === 0) return
+    setCurrentItemIndex((prev) => (prev + 1) % playlist.length)
   }
+
+  const previousItem = () => {
+    if (playlist.length === 0) return
+    setCurrentItemIndex((prev) => (prev - 1 + playlist.length) % playlist.length)
+  }
+
+  const currentItem = playlist[currentItemIndex]
 
   return (
-    <div className="container mx-auto py-8 px-4">
-      <h1 className="text-3xl font-bold mb-8 flex items-center">
-        <Monitor className="mr-2 h-8 w-8" />
-        Device Player
-      </h1>
+    <div className="min-h-screen bg-gray-50 p-4">
+      <div className="max-w-6xl mx-auto space-y-6">
+        {/* Header */}
+        <div className="text-center">
+          <h1 className="text-3xl font-bold flex items-center justify-center gap-2">
+            <Monitor className="h-8 w-8" />
+            Device Player
+          </h1>
+          <p className="text-gray-600 mt-2">Connect your device to the digital signage platform</p>
+        </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-        {/* Connection Card */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* Connection Panel */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                {connectionState.connected ? (
+                  <CheckCircle className="h-5 w-5 text-green-500" />
+                ) : (
+                  <WifiOff className="h-5 w-5 text-gray-400" />
+                )}
+                Device Connection
+              </CardTitle>
+              <CardDescription>
+                {connectionState.connected
+                  ? "Your device is connected to the platform"
+                  : "Enter a pairing code to connect your device"}
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {connectionState.connected ? (
+                <div className="space-y-4">
+                  <Badge variant="default" className="bg-green-500">
+                    <Wifi className="h-3 w-3 mr-1" />
+                    Connected
+                  </Badge>
+
+                  <div className="space-y-2 text-sm">
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">Device ID:</span>
+                      <span className="font-mono">{connectionState.deviceId}</span>
+                    </div>
+                    {connectionState.pairingCode && (
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">Pairing Code:</span>
+                        <span className="font-mono">{connectionState.pairingCode}</span>
+                      </div>
+                    )}
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">Status:</span>
+                      <span className="capitalize">{connectionState.device?.status || "idle"}</span>
+                    </div>
+                  </div>
+
+                  <div className="flex gap-2">
+                    <Button onClick={handleDisconnect} variant="outline" size="sm">
+                      Disconnect
+                    </Button>
+                    <Button onClick={togglePreview} variant="default" size="sm">
+                      <Eye className="h-4 w-4 mr-2" />
+                      {previewMode ? "Exit Preview" : "Preview Mode"}
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {connectionState.error && (
+                    <Alert variant="destructive">
+                      <AlertCircle className="h-4 w-4" />
+                      <AlertDescription>{connectionState.error}</AlertDescription>
+                    </Alert>
+                  )}
+
+                  <div className="space-y-2">
+                    <Label htmlFor="pairingCode">Pairing Code</Label>
+                    <Input
+                      id="pairingCode"
+                      placeholder="Enter 6-character pairing code"
+                      value={pairingCode}
+                      onChange={(e) => setPairingCode(e.target.value.toUpperCase())}
+                      maxLength={6}
+                      className="font-mono text-center text-lg tracking-wider"
+                    />
+                  </div>
+
+                  <Button onClick={handleConnect} disabled={loading || !pairingCode.trim()} className="w-full">
+                    {loading ? (
+                      <>
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        Connecting...
+                      </>
+                    ) : (
+                      <>
+                        <Wifi className="h-4 w-4 mr-2" />
+                        Connect Device
+                      </>
+                    )}
+                  </Button>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Device Information */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Device Information</CardTitle>
+              <CardDescription>Technical details about this device</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {connectionState.device ? (
+                <div className="space-y-3">
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Name:</span>
+                    <span className="font-medium">{connectionState.device.name}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Type:</span>
+                    <span className="capitalize">{connectionState.device.deviceType?.replace("_", " ")}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Platform:</span>
+                    <span>{connectionState.device.platform}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Resolution:</span>
+                    <span>{connectionState.device.screenResolution}</span>
+                  </div>
+
+                  <Separator />
+
+                  <div>
+                    <span className="text-gray-600 text-sm">Capabilities</span>
+                    <div className="flex flex-wrap gap-1 mt-2">
+                      {connectionState.device.capabilities?.map((capability) => (
+                        <Badge key={capability} variant="secondary" className="text-xs capitalize">
+                          {capability}
+                        </Badge>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="text-center text-gray-500 py-8">
+                  <Monitor className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                  <p>Connect your device to view information</p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Current Playlist */}
         <Card>
           <CardHeader>
-            <CardTitle>Device Connection</CardTitle>
+            <CardTitle className="flex items-center gap-2">
+              <Play className="h-5 w-5" />
+              Current Playlist
+            </CardTitle>
+            <CardDescription>Content assigned to this device</CardDescription>
           </CardHeader>
           <CardContent>
-            {!isConnected ? (
+            {playlist.length > 0 ? (
               <div className="space-y-4">
-                <div className="space-y-2">
-                  <label htmlFor="pairingCode" className="text-sm font-medium">
-                    Enter Pairing Code
-                  </label>
-                  <Input
-                    id="pairingCode"
-                    placeholder="Enter 6-digit code"
-                    value={pairingCode}
-                    onChange={(e) => setPairingCode(e.target.value.toUpperCase())}
-                    maxLength={6}
-                    className="text-center text-lg font-mono tracking-widest"
-                  />
-                </div>
+                {/* Playlist Controls */}
+                {previewMode && (
+                  <div className="flex items-center justify-between p-4 bg-blue-50 rounded-lg border border-blue-200">
+                    <div className="flex items-center gap-4">
+                      <Button onClick={previousItem} variant="outline" size="sm">
+                        <SkipBack className="h-4 w-4" />
+                      </Button>
+                      <Button onClick={() => setIsPlaying(!isPlaying)} variant="outline" size="sm">
+                        {isPlaying ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
+                      </Button>
+                      <Button onClick={nextItem} variant="outline" size="sm">
+                        <SkipForward className="h-4 w-4" />
+                      </Button>
+                    </div>
 
-                {error && (
-                  <Alert variant="destructive">
-                    <AlertCircle className="h-4 w-4" />
-                    <AlertDescription>{error}</AlertDescription>
-                  </Alert>
+                    <div className="flex items-center gap-2">
+                      <Volume2 className="h-4 w-4" />
+                      <input
+                        type="range"
+                        min="0"
+                        max="100"
+                        value={volume}
+                        onChange={(e) => setVolume(Number(e.target.value))}
+                        className="w-20"
+                      />
+                      <span className="text-sm w-8">{volume}%</span>
+                    </div>
+                  </div>
                 )}
 
-                <Button onClick={connectDevice} disabled={isConnecting || !pairingCode.trim()} className="w-full">
-                  {isConnecting ? (
-                    <>
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Connecting...
-                    </>
-                  ) : (
-                    "Connect Device"
-                  )}
-                </Button>
-              </div>
-            ) : (
-              <div className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center">
-                    {connectionStatus === "connected" ? (
-                      <Badge className="bg-green-500">
-                        <CheckCircle className="h-3 w-3 mr-1" />
-                        Connected
+                {/* Current Item Display */}
+                {currentItem && previewMode && (
+                  <div className="p-6 bg-black rounded-lg text-white text-center">
+                    <div className="space-y-4">
+                      <h3 className="text-xl font-semibold">{currentItem.media.name}</h3>
+                      <Badge variant="secondary" className="bg-white/20 text-white">
+                        {currentItem.media.type.toUpperCase()}
                       </Badge>
-                    ) : connectionStatus === "reconnecting" ? (
-                      <Badge variant="outline" className="bg-yellow-100 text-yellow-800 border-yellow-300">
-                        <RefreshCw className="h-3 w-3 mr-1 animate-spin" />
-                        Reconnecting...
-                      </Badge>
-                    ) : (
-                      <Badge variant="destructive">
-                        <WifiOff className="h-3 w-3 mr-1" />
-                        Disconnected
-                      </Badge>
-                    )}
+                      <p className="text-sm opacity-75">
+                        Duration: {currentItem.duration}s | Item {currentItemIndex + 1} of {playlist.length}
+                      </p>
+                      {isPlaying && (
+                        <div className="flex items-center justify-center gap-2 text-green-400">
+                          <Play className="h-4 w-4" />
+                          <span className="text-sm">Playing</span>
+                        </div>
+                      )}
+                    </div>
                   </div>
+                )}
 
-                  <div className="text-sm text-gray-500">
-                    {lastHeartbeat && `Last heartbeat: ${lastHeartbeat.toLocaleTimeString()}`}
-                  </div>
-                </div>
-
+                {/* Playlist Items */}
                 <div className="space-y-2">
-                  <div className="flex justify-between text-sm">
-                    <span className="text-gray-500">Device ID:</span>
-                    <span className="font-mono">{deviceId}</span>
-                  </div>
-                  <div className="flex justify-between text-sm">
-                    <span className="text-gray-500">Pairing Code:</span>
-                    <span className="font-mono">{pairingCode}</span>
-                  </div>
-                  <div className="flex justify-between text-sm">
-                    <span className="text-gray-500">Status:</span>
-                    <span>{playbackStatus}</span>
-                  </div>
-                </div>
-
-                <div className="flex space-x-2">
-                  <Button variant="outline" onClick={disconnectDevice} className="flex-1 bg-transparent">
-                    Disconnect
-                  </Button>
-                  <Button onClick={togglePreview} className="flex-1">
-                    <Eye className="h-4 w-4 mr-2" />
-                    {showPreview ? "Exit Preview" : "Preview Mode"}
-                  </Button>
-                </div>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-        {/* Device Info Card */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Device Information</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {deviceInfo && (
-              <div className="space-y-4">
-                <div className="space-y-2">
-                  <div className="flex justify-between">
-                    <span className="text-gray-500">Name:</span>
-                    <span>{deviceInfo.name}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-gray-500">Type:</span>
-                    <span>{deviceInfo.type.replace("_", " ")}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-gray-500">Platform:</span>
-                    <span>{deviceInfo.platform}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-gray-500">Resolution:</span>
-                    <span>{deviceInfo.screenResolution}</span>
-                  </div>
-                </div>
-
-                <div>
-                  <h4 className="text-sm font-medium mb-2">Capabilities</h4>
-                  <div className="flex flex-wrap gap-2">
-                    {deviceInfo.capabilities.map((cap) => (
-                      <Badge key={cap} variant="outline" className="capitalize">
-                        {cap}
-                      </Badge>
+                  <h4 className="font-medium text-sm text-gray-600">Playlist Items ({playlist.length})</h4>
+                  <div className="space-y-2 max-h-60 overflow-y-auto">
+                    {playlist.map((item, index) => (
+                      <div
+                        key={item.id}
+                        className={`flex items-center justify-between p-3 rounded-lg border ${
+                          index === currentItemIndex && previewMode
+                            ? "border-blue-500 bg-blue-50"
+                            : "border-gray-200 bg-white"
+                        }`}
+                      >
+                        <div className="flex items-center gap-3">
+                          <span className="text-sm font-mono text-gray-500 w-6">{index + 1}</span>
+                          <div>
+                            <p className="font-medium text-sm">{item.media.name}</p>
+                            <p className="text-xs text-gray-500 capitalize">{item.media.type}</p>
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-sm font-medium">{item.duration}s</p>
+                          {index === currentItemIndex && previewMode && (
+                            <Badge variant="default" className="text-xs">
+                              Current
+                            </Badge>
+                          )}
+                        </div>
+                      </div>
                     ))}
                   </div>
                 </div>
               </div>
+            ) : (
+              <div className="text-center py-12">
+                <AlertCircle className="h-12 w-12 mx-auto text-gray-400 mb-4" />
+                <h3 className="font-medium text-gray-900 mb-2">No playlist assigned to this device</h3>
+                <p className="text-gray-500 text-sm">
+                  {connectionState.connected
+                    ? "Ask your administrator to assign a playlist to this device"
+                    : "Connect your device to check for assigned playlists"}
+                </p>
+              </div>
             )}
           </CardContent>
         </Card>
       </div>
-
-      {/* Playlist Preview */}
-      {isConnected && (
-        <Card className="mt-8">
-          <CardHeader>
-            <CardTitle>Current Playlist</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {!currentPlaylist ? (
-              <div className="text-center py-8">
-                <div className="text-gray-500">
-                  <AlertCircle className="h-12 w-12 mx-auto mb-2" />
-                  <p>No playlist assigned to this device</p>
-                </div>
-              </div>
-            ) : (
-              <div className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <h3 className="text-lg font-medium">{currentPlaylist.name}</h3>
-                  <div className="flex items-center space-x-2">
-                    <Badge variant="outline">
-                      {currentPlaylist.items.length} {currentPlaylist.items.length === 1 ? "item" : "items"}
-                    </Badge>
-                    {currentPlaylist.settings?.loop && <Badge variant="outline">Loop</Badge>}
-                    {currentPlaylist.settings?.shuffle && <Badge variant="outline">Shuffle</Badge>}
-                  </div>
-                </div>
-
-                {/* Media Preview */}
-                <div className="border rounded-lg overflow-hidden">{renderCurrentMedia()}</div>
-
-                {/* Playback Controls */}
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center space-x-2">
-                    <Button variant="outline" size="sm" onClick={previousItem}>
-                      <SkipBack className="h-4 w-4" />
-                    </Button>
-                    <Button variant="outline" size="sm" onClick={togglePlayback}>
-                      {isPlaying ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
-                    </Button>
-                    <Button variant="outline" size="sm" onClick={nextItem}>
-                      <SkipForward className="h-4 w-4" />
-                    </Button>
-                  </div>
-
-                  <div className="text-sm text-gray-500">
-                    {currentPlaylist.items.length > 0 && (
-                      <span>
-                        {currentItemIndex + 1} of {currentPlaylist.items.length}
-                      </span>
-                    )}
-                  </div>
-                </div>
-
-                {/* Item List */}
-                {currentPlaylist.items.length > 0 && (
-                  <div className="mt-4">
-                    <h4 className="text-sm font-medium mb-2">Playlist Items</h4>
-                    <div className="space-y-2 max-h-60 overflow-y-auto pr-2">
-                      {currentPlaylist.items.map((item, index) => (
-                        <div
-                          key={item.id}
-                          className={`flex items-center p-2 rounded-md ${
-                            index === currentItemIndex ? "bg-blue-50 border border-blue-200" : "hover:bg-gray-50"
-                          }`}
-                          onClick={() => setCurrentItemIndex(index)}
-                        >
-                          <div className="w-8 h-8 bg-gray-100 rounded flex items-center justify-center mr-3 flex-shrink-0">
-                            {index === currentItemIndex && isPlaying ? (
-                              <Play className="h-4 w-4 text-blue-600" />
-                            ) : (
-                              <span className="text-xs text-gray-500">{index + 1}</span>
-                            )}
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <p className="text-sm font-medium truncate">{item.name}</p>
-                            <p className="text-xs text-gray-500">
-                              {item.type} • {item.duration}s
-                            </p>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Preview Mode */}
-      {renderPreviewMode()}
     </div>
   )
 }

@@ -1,54 +1,51 @@
 "use client"
 
 import { useState } from "react"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { Separator } from "@/components/ui/separator"
-import { Loader2, Bug, CheckCircle, XCircle, AlertTriangle, Info, Database, Wifi } from "lucide-react"
-
-interface DebugTest {
-  status: "PASS" | "FAIL" | "ERROR" | "INFO"
-  message: string
-  data?: any
-  error?: string
-}
-
-interface DebugSummary {
-  status: "HEALTHY" | "ISSUES_FOUND"
-  totalTests: number
-  failedTests: number
-  errorTests: number
-  issues: string[]
-  recommendations: string[]
-}
+import { toast } from "sonner"
+import { Bug, CheckCircle, XCircle, AlertTriangle, Code, Loader2, Settings } from "lucide-react"
 
 interface DebugResults {
+  deviceId: string
+  pairingCode: string
   timestamp: string
-  deviceId?: string
-  pairingCode?: string
-  tests: Record<string, DebugTest>
-  summary: DebugSummary
+  checks: {
+    [key: string]: {
+      passed: boolean
+      data?: any
+      error?: string
+      message: string
+      isExpired?: boolean
+      isUsed?: boolean
+    }
+  }
+  recommendations: string[]
+  summary: {
+    status: "healthy" | "warning" | "error" | "unknown"
+    issues: string[]
+    working: string[]
+  }
 }
 
 export default function DebugDevicePlayerPage() {
   const [deviceId, setDeviceId] = useState("")
   const [pairingCode, setPairingCode] = useState("")
-  const [isRunning, setIsRunning] = useState(false)
+  const [loading, setLoading] = useState(false)
   const [results, setResults] = useState<DebugResults | null>(null)
-  const [error, setError] = useState("")
 
-  const runDebugAnalysis = async (includeRegistrationTest = false) => {
+  const runDebugAnalysis = async () => {
     if (!deviceId && !pairingCode) {
-      setError("Please enter either a Device ID or Pairing Code")
+      toast.error("Please enter either a Device ID or Pairing Code")
       return
     }
 
-    setIsRunning(true)
-    setError("")
-    setResults(null)
+    setLoading(true)
+    console.log("🔍 [DEBUG] Starting analysis for:", { deviceId, pairingCode })
 
     try {
       const response = await fetch("/api/debug-device-player", {
@@ -56,11 +53,9 @@ export default function DebugDevicePlayerPage() {
         headers: {
           "Content-Type": "application/json",
         },
-        credentials: "include",
         body: JSON.stringify({
           deviceId: deviceId || undefined,
           pairingCode: pairingCode || undefined,
-          action: includeRegistrationTest ? "test_registration" : "analyze",
         }),
       })
 
@@ -68,302 +63,256 @@ export default function DebugDevicePlayerPage() {
 
       if (data.success) {
         setResults(data.debug)
+        toast.success("Debug analysis completed")
       } else {
-        setError(data.error || "Debug analysis failed")
+        toast.error(data.error || "Debug analysis failed")
       }
-    } catch (err) {
-      console.error("Debug error:", err)
-      setError("Failed to run debug analysis")
+    } catch (error) {
+      console.error("🔍 [DEBUG] Error:", error)
+      toast.error("Failed to run debug analysis")
     } finally {
-      setIsRunning(false)
+      setLoading(false)
     }
   }
 
   const getStatusIcon = (status: string) => {
     switch (status) {
-      case "PASS":
-        return <CheckCircle className="h-4 w-4 text-green-600" />
-      case "FAIL":
-        return <XCircle className="h-4 w-4 text-red-600" />
-      case "ERROR":
-        return <AlertTriangle className="h-4 w-4 text-orange-600" />
-      case "INFO":
-        return <Info className="h-4 w-4 text-blue-600" />
+      case "healthy":
+        return <CheckCircle className="h-5 w-5 text-green-500" />
+      case "warning":
+        return <AlertTriangle className="h-5 w-5 text-yellow-500" />
+      case "error":
+        return <XCircle className="h-5 w-5 text-red-500" />
       default:
-        return <Info className="h-4 w-4 text-gray-600" />
+        return <Bug className="h-5 w-5 text-gray-500" />
     }
   }
 
-  const getStatusBadge = (status: string) => {
-    switch (status) {
-      case "PASS":
-        return <Badge className="bg-green-100 text-green-800 border-green-200">PASS</Badge>
-      case "FAIL":
-        return <Badge variant="destructive">FAIL</Badge>
-      case "ERROR":
-        return <Badge className="bg-orange-100 text-orange-800 border-orange-200">ERROR</Badge>
-      case "INFO":
-        return <Badge variant="outline">INFO</Badge>
-      default:
-        return <Badge variant="outline">{status}</Badge>
-    }
+  const getCheckIcon = (passed: boolean) => {
+    return passed ? <CheckCircle className="h-4 w-4 text-green-500" /> : <XCircle className="h-4 w-4 text-red-500" />
   }
 
   return (
-    <div className="container mx-auto py-8 px-4">
-      <h1 className="text-3xl font-bold mb-8 flex items-center">
-        <Bug className="mr-2 h-8 w-8" />
-        Device Player Debug
-      </h1>
+    <div className="min-h-screen bg-gray-50 p-4">
+      <div className="max-w-6xl mx-auto space-y-6">
+        {/* Header */}
+        <div className="text-center">
+          <h1 className="text-3xl font-bold flex items-center justify-center gap-2">
+            <Bug className="h-8 w-8" />
+            Device Player Debug
+          </h1>
+          <p className="text-gray-600 mt-2">Analyze and troubleshoot device player connection issues</p>
+        </div>
 
-      {/* Input Section */}
-      <Card className="mb-8">
-        <CardHeader>
-          <CardTitle>Debug Parameters</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-            <div className="space-y-2">
-              <label htmlFor="deviceId" className="text-sm font-medium">
-                Device ID (Optional)
-              </label>
-              <Input
-                id="deviceId"
-                placeholder="Enter device ID (e.g., 38)"
-                value={deviceId}
-                onChange={(e) => setDeviceId(e.target.value)}
-                type="number"
-              />
+        {/* Input Form */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Debug Analysis</CardTitle>
+            <CardDescription>Enter device information to analyze connection and registration issues</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="deviceId">Device ID (Optional)</Label>
+                <Input
+                  id="deviceId"
+                  placeholder="e.g., 38"
+                  value={deviceId}
+                  onChange={(e) => setDeviceId(e.target.value)}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="pairingCode">Pairing Code (Optional)</Label>
+                <Input
+                  id="pairingCode"
+                  placeholder="e.g., FQET5L"
+                  value={pairingCode}
+                  onChange={(e) => setPairingCode(e.target.value.toUpperCase())}
+                  maxLength={6}
+                  className="font-mono"
+                />
+              </div>
             </div>
-            <div className="space-y-2">
-              <label htmlFor="pairingCode" className="text-sm font-medium">
-                Pairing Code (Optional)
-              </label>
-              <Input
-                id="pairingCode"
-                placeholder="Enter pairing code (e.g., FQET5L)"
-                value={pairingCode}
-                onChange={(e) => setPairingCode(e.target.value.toUpperCase())}
-                maxLength={6}
-                className="font-mono"
-              />
-            </div>
-          </div>
 
-          {error && (
-            <Alert variant="destructive" className="mb-4">
-              <AlertTriangle className="h-4 w-4" />
-              <AlertDescription>{error}</AlertDescription>
-            </Alert>
-          )}
-
-          <div className="flex space-x-2">
-            <Button onClick={() => runDebugAnalysis(false)} disabled={isRunning} className="flex-1">
-              {isRunning ? (
+            <Button onClick={runDebugAnalysis} disabled={loading || (!deviceId && !pairingCode)} className="w-full">
+              {loading ? (
                 <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                   Running Analysis...
                 </>
               ) : (
                 <>
-                  <Database className="mr-2 h-4 w-4" />
+                  <Bug className="h-4 w-4 mr-2" />
                   Run Debug Analysis
                 </>
               )}
             </Button>
-            {pairingCode && (
-              <Button onClick={() => runDebugAnalysis(true)} disabled={isRunning} variant="outline" className="flex-1">
-                {isRunning ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Testing...
-                  </>
-                ) : (
-                  <>
-                    <Wifi className="mr-2 h-4 w-4" />
-                    Test Registration
-                  </>
-                )}
-              </Button>
-            )}
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Results Section */}
-      {results && (
-        <div className="space-y-6">
-          {/* Summary Card */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center justify-between">
-                Debug Summary
-                <Badge
-                  className={
-                    results.summary.status === "HEALTHY"
-                      ? "bg-green-100 text-green-800 border-green-200"
-                      : "bg-red-100 text-red-800 border-red-200"
-                  }
-                >
-                  {results.summary.status}
-                </Badge>
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-3 gap-4 mb-4">
-                <div className="text-center">
-                  <div className="text-2xl font-bold text-blue-600">{results.summary.totalTests}</div>
-                  <div className="text-sm text-gray-500">Total Tests</div>
-                </div>
-                <div className="text-center">
-                  <div className="text-2xl font-bold text-red-600">{results.summary.failedTests}</div>
-                  <div className="text-sm text-gray-500">Failed</div>
-                </div>
-                <div className="text-center">
-                  <div className="text-2xl font-bold text-orange-600">{results.summary.errorTests}</div>
-                  <div className="text-sm text-gray-500">Errors</div>
-                </div>
-              </div>
-
-              {results.summary.issues.length > 0 && (
-                <div className="mb-4">
-                  <h4 className="font-medium text-red-800 mb-2">Issues Found:</h4>
-                  <ul className="list-disc list-inside space-y-1">
-                    {results.summary.issues.map((issue, index) => (
-                      <li key={index} className="text-sm text-red-700">
-                        {issue}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-
-              {results.summary.recommendations.length > 0 && (
-                <div>
-                  <h4 className="font-medium text-blue-800 mb-2">Recommendations:</h4>
-                  <ul className="list-disc list-inside space-y-1">
-                    {results.summary.recommendations.map((rec, index) => (
-                      <li key={index} className="text-sm text-blue-700">
-                        {rec}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-
-          {/* Test Results */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Test Results</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                {Object.entries(results.tests).map(([testName, test], index) => (
-                  <div key={testName}>
-                    <div className="flex items-start justify-between">
-                      <div className="flex items-start space-x-3 flex-1">
-                        {getStatusIcon(test.status)}
-                        <div className="flex-1">
-                          <div className="flex items-center justify-between mb-1">
-                            <h4 className="font-medium capitalize">{testName.replace(/([A-Z])/g, " $1").trim()}</h4>
-                            {getStatusBadge(test.status)}
-                          </div>
-                          <p className="text-sm text-gray-600 mb-2">{test.message}</p>
-
-                          {test.error && (
-                            <Alert variant="destructive" className="mb-2">
-                              <AlertTriangle className="h-4 w-4" />
-                              <AlertDescription className="text-xs">{test.error}</AlertDescription>
-                            </Alert>
-                          )}
-
-                          {test.data && (
-                            <details className="text-xs">
-                              <summary className="cursor-pointer text-blue-600 hover:text-blue-800">View Data</summary>
-                              <pre className="mt-2 p-2 bg-gray-50 rounded border overflow-x-auto">
-                                {JSON.stringify(test.data, null, 2)}
-                              </pre>
-                            </details>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                    {index < Object.entries(results.tests).length - 1 && <Separator className="mt-4" />}
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Metadata */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Debug Metadata</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
-                <div>
-                  <span className="font-medium">Timestamp:</span>
-                  <br />
-                  {new Date(results.timestamp).toLocaleString()}
-                </div>
-                {results.deviceId && (
-                  <div>
-                    <span className="font-medium">Device ID:</span>
-                    <br />
-                    {results.deviceId}
-                  </div>
-                )}
-                {results.pairingCode && (
-                  <div>
-                    <span className="font-medium">Pairing Code:</span>
-                    <br />
-                    <code className="font-mono">{results.pairingCode}</code>
-                  </div>
-                )}
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      )}
-
-      {/* Instructions */}
-      {!results && (
-        <Card>
-          <CardHeader>
-            <CardTitle>How to Use</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4 text-sm">
-              <div>
-                <h4 className="font-medium mb-2">Debug Analysis:</h4>
-                <p>
-                  Enter a Device ID or Pairing Code to analyze the device player system. This will check database
-                  records, validate connections, and identify issues.
-                </p>
-              </div>
-              <div>
-                <h4 className="font-medium mb-2">Test Registration:</h4>
-                <p>
-                  If you have a pairing code, use "Test Registration" to simulate the device registration process and
-                  verify it works correctly.
-                </p>
-              </div>
-              <div>
-                <h4 className="font-medium mb-2">Common Issues:</h4>
-                <ul className="list-disc list-inside space-y-1 ml-4">
-                  <li>Device ID exists in localStorage but not in database (fake connection)</li>
-                  <li>Pairing code expired or already used</li>
-                  <li>Device registered but no playlist assigned</li>
-                  <li>Authentication issues preventing API access</li>
-                </ul>
-              </div>
-            </div>
           </CardContent>
         </Card>
-      )}
+
+        {/* Results */}
+        {results && (
+          <div className="space-y-6">
+            {/* Summary */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  {getStatusIcon(results.summary.status)}
+                  Analysis Summary
+                </CardTitle>
+                <CardDescription>Overall system health and status</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="text-center">
+                    <div className="text-2xl font-bold text-green-600">{results.summary.working.length}</div>
+                    <div className="text-sm text-gray-600">Working</div>
+                  </div>
+                  <div className="text-center">
+                    <div className="text-2xl font-bold text-red-600">{results.summary.issues.length}</div>
+                    <div className="text-sm text-gray-600">Issues</div>
+                  </div>
+                  <div className="text-center">
+                    <Badge
+                      variant={
+                        results.summary.status === "healthy"
+                          ? "default"
+                          : results.summary.status === "warning"
+                            ? "secondary"
+                            : "destructive"
+                      }
+                      className="text-lg px-4 py-2"
+                    >
+                      {results.summary.status.toUpperCase()}
+                    </Badge>
+                  </div>
+                </div>
+
+                {results.summary.issues.length > 0 && (
+                  <Alert variant="destructive">
+                    <AlertTriangle className="h-4 w-4" />
+                    <AlertDescription>
+                      <strong>Issues Found:</strong>
+                      <ul className="list-disc list-inside mt-2">
+                        {results.summary.issues.map((issue, index) => (
+                          <li key={index}>{issue}</li>
+                        ))}
+                      </ul>
+                    </AlertDescription>
+                  </Alert>
+                )}
+
+                {results.summary.working.length > 0 && (
+                  <Alert>
+                    <CheckCircle className="h-4 w-4" />
+                    <AlertDescription>
+                      <strong>Working Components:</strong>
+                      <ul className="list-disc list-inside mt-2">
+                        {results.summary.working.map((item, index) => (
+                          <li key={index}>{item}</li>
+                        ))}
+                      </ul>
+                    </AlertDescription>
+                  </Alert>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Detailed Checks */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {Object.entries(results.checks).map(([checkName, check]) => (
+                <Card key={checkName}>
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2 text-lg">
+                      {getCheckIcon(check.passed)}
+                      {checkName
+                        .replace(/([A-Z])/g, " $1")
+                        .replace(/^./, (str) => str.toUpperCase())
+                        .trim()}
+                    </CardTitle>
+                    <CardDescription>{check.message}</CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    {check.error && (
+                      <Alert variant="destructive">
+                        <XCircle className="h-4 w-4" />
+                        <AlertDescription>{check.error}</AlertDescription>
+                      </Alert>
+                    )}
+
+                    {check.data && (
+                      <div className="space-y-2">
+                        <h4 className="font-medium text-sm">Data:</h4>
+                        <div className="bg-gray-50 p-3 rounded-lg">
+                          <pre className="text-xs overflow-x-auto">{JSON.stringify(check.data, null, 2)}</pre>
+                        </div>
+                      </div>
+                    )}
+
+                    {checkName === "pairingCode" && check.data && (
+                      <div className="space-y-2">
+                        <div className="flex justify-between text-sm">
+                          <span>Expired:</span>
+                          <Badge variant={check.isExpired ? "destructive" : "default"}>
+                            {check.isExpired ? "Yes" : "No"}
+                          </Badge>
+                        </div>
+                        <div className="flex justify-between text-sm">
+                          <span>Used:</span>
+                          <Badge variant={check.isUsed ? "destructive" : "default"}>
+                            {check.isUsed ? "Yes" : "No"}
+                          </Badge>
+                        </div>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+
+            {/* Recommendations */}
+            {results.recommendations.length > 0 && (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Settings className="h-5 w-5" />
+                    Recommendations
+                  </CardTitle>
+                  <CardDescription>Steps to fix identified issues</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-2">
+                    {results.recommendations.map((recommendation, index) => (
+                      <div key={index} className="flex items-start gap-2">
+                        <Badge variant="outline" className="mt-0.5 text-xs">
+                          {index + 1}
+                        </Badge>
+                        <p className="text-sm">{recommendation}</p>
+                      </div>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Raw Debug Data */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Code className="h-5 w-5" />
+                  Raw Debug Data
+                </CardTitle>
+                <CardDescription>Complete analysis results for technical review</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="bg-gray-50 p-4 rounded-lg">
+                  <pre className="text-xs overflow-x-auto">{JSON.stringify(results, null, 2)}</pre>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        )}
+      </div>
     </div>
   )
 }

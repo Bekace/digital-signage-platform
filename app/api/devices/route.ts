@@ -29,7 +29,7 @@ export async function GET(request: NextRequest) {
         d.last_seen,
         d.created_at,
         d.updated_at,
-        p.name as playlist_name,
+        p.name as assigned_playlist_name,
         CASE 
           WHEN d.last_seen > NOW() - INTERVAL '2 minutes' THEN 'online'
           WHEN d.last_seen > NOW() - INTERVAL '10 minutes' THEN 'idle'
@@ -43,25 +43,9 @@ export async function GET(request: NextRequest) {
 
     console.log("📱 [GET DEVICES] Found", devices.length, "devices")
 
-    const formattedDevices = devices.map((device) => ({
-      id: device.id,
-      name: device.name,
-      deviceType: device.device_type,
-      status: device.connection_status,
-      platform: device.platform,
-      capabilities: device.capabilities,
-      screenResolution: device.screen_resolution,
-      assignedPlaylistId: device.assigned_playlist_id,
-      playlistStatus: device.playlist_status,
-      playlistName: device.playlist_name,
-      lastSeen: device.last_seen,
-      createdAt: device.created_at,
-      updatedAt: device.updated_at,
-    }))
-
     return NextResponse.json({
       success: true,
-      devices: formattedDevices,
+      devices: devices,
     })
   } catch (error) {
     console.error("📱 [GET DEVICES] Error:", error)
