@@ -100,7 +100,7 @@ export default function DevicePlayerPage() {
   // Reconnection state
   const [reconnectAttempts, setReconnectAttempts] = useState(0)
   const [maxReconnectAttempts] = useState(5)
-  const [reconnectDelay, setReconnectDelay] = useState(5000) // Start with 5 seconds
+  const [reconnectDelay, setReconnectDelay] = useState(5000)
 
   // Refs for intervals
   const heartbeatInterval = useRef<NodeJS.Timeout | null>(null)
@@ -110,9 +110,6 @@ export default function DevicePlayerPage() {
 
   // Generate device info
   const generateDeviceInfo = useCallback((): DeviceInfo => {
-    const deviceId = Math.random().toString(36).substring(2, 15)
-
-    // Safe access to browser APIs
     const getScreenResolution = () => {
       if (typeof window !== "undefined" && window.screen) {
         return `${window.screen.width}x${window.screen.height}`
@@ -135,7 +132,7 @@ export default function DevicePlayerPage() {
     }
 
     return {
-      name: `Device Player ${deviceId}`,
+      name: "Device Player",
       type: "web_browser",
       platform: getPlatform(),
       userAgent: getUserAgent(),
@@ -144,23 +141,64 @@ export default function DevicePlayerPage() {
     }
   }, [])
 
-  // Initialize device info
+  // Initialize device info and check for existing connection
   useEffect(() => {
     setDeviceInfo(generateDeviceInfo())
 
-    // Check for saved connection
+    // Check for saved connection - but verify it's real
     const savedPairingCode = localStorage.getItem("devicePairingCode")
     const savedDeviceId = localStorage.getItem("deviceId")
 
     if (savedPairingCode && savedDeviceId) {
-      setPairingCode(savedPairingCode)
-      setDeviceId(savedDeviceId)
-      setIsConnected(true)
-      setConnectionStatus("connected")
-      startHeartbeat()
-      startPlaylistPolling()
+      // Verify the saved connection is real by checking the device exists
+      verifyExistingConnection(savedDeviceId, savedPairingCode)
     }
   }, [generateDeviceInfo])
+
+  // Verify existing connection is real
+  const verifyExistingConnection = async (savedDeviceId: string, savedPairingCode: string) => {
+    try {
+      console.log("[DEVICE PLAYER] Verifying existing connection:", { savedDeviceId, savedPairingCode })
+
+      const response = await fetch(`/api/devices/${savedDeviceId}`, {
+        credentials: "include",
+      })
+
+      if (response.ok) {
+        const data = await response.json()
+        if (data.success && data.device) {
+          // Connection is real, restore it
+          setPairingCode(savedPairingCode)
+          setDeviceId(savedDeviceId)
+          setIsConnected(true)
+          setConnectionStatus("connected")
+          startHeartbeat()
+          startPlaylistPolling()
+          console.log("[DEVICE PLAYER] Restored real connection:", data.device)
+        } else {
+          // Device doesn't exist, clear fake connection
+          clearSavedConnection()
+        }
+      } else {
+        // API call failed, clear fake connection
+        clearSavedConnection()
+      }
+    } catch (error) {
+      console.error("[DEVICE PLAYER] Failed to verify connection:", error)
+      clearSavedConnection()
+    }
+  }
+
+  // Clear saved connection data
+  const clearSavedConnection = () => {
+    localStorage.removeItem("devicePairingCode")
+    localStorage.removeItem("deviceId")
+    setIsConnected(false)
+    setConnectionStatus("disconnected")
+    setDeviceId(null)
+    setPairingCode("")
+    console.log("[DEVICE PLAYER] Cleared fake connection data")
+  }
 
   // Cleanup intervals on unmount
   useEffect(() => {
@@ -184,7 +222,7 @@ export default function DevicePlayerPage() {
     setError("")
 
     try {
-      console.log("[DEVICE PLAYER] Connecting with:", {
+      console.log("[DEVICE PLAYER] Attempting registration with:", {
         deviceCode: pairingCode.toUpperCase(),
         ...deviceInfo,
       })
@@ -194,6 +232,7 @@ export default function DevicePlayerPage() {
         headers: {
           "Content-Type": "application/json",
         },
+        credentials: "include",
         body: JSON.stringify({
           deviceCode: pairingCode.toUpperCase(),
           name: deviceInfo.name,
@@ -208,27 +247,44 @@ export default function DevicePlayerPage() {
       const result = await response.json()
       console.log("[DEVICE PLAYER] Registration response:", result)
 
-      if (result.success) {
-        setDeviceId(result.device.id)
-        setIsConnected(true)
-        setConnectionStatus("connected")
-        setError("")
-        setReconnectAttempts(0)
-        setReconnectDelay(5000)
+      if (result.success && result.device) {
+        // Verify the device was actually created by fetching it
+        const verifyResponse = await fetch(`/api/devices/${result.device.id}`, {
+          credentials: "include",
+        })
 
-        // Save connection info
-        localStorage.setItem("devicePairingCode", pairingCode.toUpperCase())
-        localStorage.setItem("deviceId", result.device.id)
+        if (verifyResponse.ok) {
+          const verifyData = await verifyResponse.json()
+          if (verifyData.success && verifyData.device) {
+            // Real device created successfully
+            setDeviceId(result.device.id.toString())
+            setIsConnected(true)
+            setConnectionStatus("connected")
+            setError("")
+            setReconnectAttempts(0)
+            setReconnectDelay(5000)
 
-        // Start monitoring
-        startHeartbeat()
-        startPlaylistPolling()
+            // Save real connection info
+            localStorage.setItem("devicePairingCode", pairingCode.toUpperCase())
+            localStorage.setItem("deviceId", result.device.id.toString())
+
+            // Start monitoring
+            startHeartbeat()
+            startPlaylistPolling()
+
+            console.log("[DEVICE PLAYER] Successfully connected to real device:", verifyData.device)
+          } else {
+            throw new Error("Device verification failed")
+          }
+        } else {
+          throw new Error("Could not verify device creation")
+        }
       } else {
         setError(result.error || "Failed to connect device")
         setConnectionStatus("disconnected")
       }
     } catch (err) {
-      console.error("Connection error:", err)
+      console.error("[DEVICE PLAYER] Connection error:", err)
       setError("Failed to connect to server")
       setConnectionStatus("disconnected")
     } finally {
@@ -254,8 +310,9 @@ export default function DevicePlayerPage() {
     setShowPreview(false)
 
     // Clear saved connection
-    localStorage.removeItem("devicePairingCode")
-    localStorage.removeItem("deviceId")
+    clearSavedConnection()
+
+    console.log("[DEVICE PLAYER] Disconnected")
   }
 
   // Attempt to reconnect
@@ -263,6 +320,7 @@ export default function DevicePlayerPage() {
     if (reconnectAttempts >= maxReconnectAttempts) {
       setError("Maximum reconnection attempts reached. Please reconnect manually.")
       setConnectionStatus("disconnected")
+      clearSavedConnection()
       return
     }
 
@@ -270,20 +328,37 @@ export default function DevicePlayerPage() {
     setReconnectAttempts((prev) => prev + 1)
 
     try {
-      // Try to re-register with the same pairing code
+      if (deviceId) {
+        // Try to verify the device still exists
+        const response = await fetch(`/api/devices/${deviceId}`, {
+          credentials: "include",
+        })
+
+        if (response.ok) {
+          const data = await response.json()
+          if (data.success && data.device) {
+            setConnectionStatus("connected")
+            startHeartbeat()
+            startPlaylistPolling()
+            return
+          }
+        }
+      }
+
+      // If device verification fails, try re-registration
       await connectDevice()
     } catch (error) {
       console.error("Reconnection failed:", error)
 
       // Exponential backoff
-      const delay = Math.min(reconnectDelay * Math.pow(2, reconnectAttempts), 60000) // Max 1 minute
+      const delay = Math.min(reconnectDelay * Math.pow(2, reconnectAttempts), 60000)
       setReconnectDelay(delay)
 
       reconnectTimeout.current = setTimeout(() => {
         attemptReconnect()
       }, delay)
     }
-  }, [reconnectAttempts, maxReconnectAttempts, reconnectDelay])
+  }, [reconnectAttempts, maxReconnectAttempts, reconnectDelay, deviceId])
 
   // Start heartbeat monitoring
   const startHeartbeat = useCallback(() => {
@@ -298,6 +373,7 @@ export default function DevicePlayerPage() {
           headers: {
             "Content-Type": "application/json",
           },
+          credentials: "include",
           body: JSON.stringify({
             status: isPlaying ? "playing" : "idle",
             currentItemId: currentPlaylist?.items[currentItemIndex]?.id || null,
@@ -347,7 +423,9 @@ export default function DevicePlayerPage() {
       if (!deviceId) return
 
       try {
-        const response = await fetch(`/api/devices/${deviceId}/playlist`)
+        const response = await fetch(`/api/devices/${deviceId}/playlist`, {
+          credentials: "include",
+        })
         if (response.ok) {
           const data = await response.json()
           if (data.playlist) {
