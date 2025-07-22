@@ -15,6 +15,7 @@ export async function GET(request: NextRequest) {
 
     console.log("📱 [GET DEVICES] Fetching devices for user:", user.id)
 
+    // Query ONLY real devices from database - NO MOCK DATA
     const devices = await sql`
       SELECT 
         d.id,
@@ -28,7 +29,6 @@ export async function GET(request: NextRequest) {
         d.playlist_status,
         d.last_seen,
         d.created_at,
-        d.updated_at,
         p.name as assigned_playlist_name,
         CASE 
           WHEN d.last_seen > NOW() - INTERVAL '2 minutes' THEN 'online'
@@ -41,8 +41,9 @@ export async function GET(request: NextRequest) {
       ORDER BY d.created_at DESC
     `
 
-    console.log("📱 [GET DEVICES] Found", devices.length, "devices")
+    console.log("📱 [GET DEVICES] Found", devices.length, "real devices from database")
 
+    // Return ONLY real database data - NO MOCK DATA ADDED
     return NextResponse.json({
       success: true,
       devices: devices,

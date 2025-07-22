@@ -46,7 +46,7 @@ export async function POST(request: NextRequest) {
 
     console.log("🔗 [DEVICE REGISTER] Valid pairing code found for user:", pairing.user_id)
 
-    // Create or update device record
+    // Create device record - ONLY use columns that exist in the database
     const deviceData = {
       name: pairing.screen_name,
       device_type: pairing.device_type || "web_browser",
@@ -59,7 +59,7 @@ export async function POST(request: NextRequest) {
 
     console.log("🔗 [DEVICE REGISTER] Creating device with data:", deviceData)
 
-    // Insert new device
+    // Insert new device - REMOVED updated_at field that doesn't exist
     const deviceResult = await sql`
       INSERT INTO devices (
         name, 

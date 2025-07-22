@@ -86,19 +86,25 @@ export default function ScreensPage() {
       setLoading(true)
       setError("")
 
+      console.log("📱 [SCREENS PAGE] Loading devices from database...")
+
       const response = await fetch("/api/devices", {
         credentials: "include",
       })
 
       const data = await response.json()
+      console.log("📱 [SCREENS PAGE] API response:", data)
 
       if (data.success) {
-        setDevices(data.devices || [])
+        // Use ONLY real database data - NO MOCK DATA
+        const realDevices = data.devices || []
+        console.log("📱 [SCREENS PAGE] Setting real devices:", realDevices)
+        setDevices(realDevices)
       } else {
         setError(data.error || "Failed to load devices")
       }
     } catch (err) {
-      console.error("Error loading devices:", err)
+      console.error("📱 [SCREENS PAGE] Error loading devices:", err)
       setError("Failed to connect to server")
     } finally {
       setLoading(false)
@@ -209,15 +215,29 @@ export default function ScreensPage() {
   const formatLastSeen = (lastSeen?: string) => {
     if (!lastSeen) return "Never"
 
-    const date = new Date(lastSeen)
-    const now = new Date()
-    const diffMs = now.getTime() - date.getTime()
-    const diffMins = Math.floor(diffMs / (1000 * 60))
+    try {
+      const date = new Date(lastSeen)
+      const now = new Date()
+      const diffMs = now.getTime() - date.getTime()
+      const diffMins = Math.floor(diffMs / (1000 * 60))
 
-    if (diffMins < 1) return "Just now"
-    if (diffMins < 60) return `${diffMins}m ago`
-    if (diffMins < 1440) return `${Math.floor(diffMins / 60)}h ago`
-    return `${Math.floor(diffMins / 1440)}d ago`
+      if (diffMins < 1) return "Just now"
+      if (diffMins < 60) return `${diffMins}m ago`
+      if (diffMins < 1440) return `${Math.floor(diffMins / 60)}h ago`
+      return `${Math.floor(diffMins / 1440)}d ago`
+    } catch {
+      return "Never"
+    }
+  }
+
+  const formatCreatedAt = (createdAt?: string) => {
+    if (!createdAt) return "Unknown"
+
+    try {
+      return new Date(createdAt).toLocaleDateString()
+    } catch {
+      return "Unknown"
+    }
   }
 
   if (loading) {
@@ -273,7 +293,7 @@ export default function ScreensPage() {
           </Button>
         </div>
 
-        {/* Devices Grid */}
+        {/* Devices Grid - ONLY REAL DATABASE DATA */}
         {devices.length === 0 ? (
           <Card>
             <CardContent className="p-12 text-center">
@@ -365,7 +385,7 @@ export default function ScreensPage() {
                     </div>
                     <div className="flex justify-between">
                       <span>Added:</span>
-                      <span>{new Date(device.created_at).toLocaleDateString()}</span>
+                      <span>{formatCreatedAt(device.created_at)}</span>
                     </div>
                   </div>
 
