@@ -69,8 +69,8 @@ export default function DatabaseStructureMapPage() {
   }, [])
 
   const getTableIcon = (tableName: string) => {
-    if (tableName.includes("user")) return <Users className="h-4 w-4" />
-    if (tableName.includes("screen") || tableName.includes("device")) return <Monitor className="h-4 w-4" />
+    if (tableName.includes("user") || tableName.includes("admin")) return <Users className="h-4 w-4" />
+    if (tableName.includes("device") || tableName === "screens") return <Monitor className="h-4 w-4" />
     if (tableName.includes("playlist") || tableName.includes("media")) return <PlayCircle className="h-4 w-4" />
     if (tableName.includes("plan") || tableName.includes("feature")) return <Settings className="h-4 w-4" />
     if (tableName.includes("session") || tableName.includes("audit")) return <Activity className="h-4 w-4" />
@@ -79,10 +79,12 @@ export default function DatabaseStructureMapPage() {
   }
 
   const getTableCategory = (tableName: string) => {
-    if (tableName.includes("user") || tableName.includes("session")) return "Authentication"
-    if (tableName.includes("screen") || tableName.includes("device")) return "Screens & Devices"
+    if (tableName.includes("user") || tableName.includes("admin") || tableName.includes("password"))
+      return "Authentication & Users"
+    if (tableName.includes("device") || tableName === "screens") return "Screens & Devices"
     if (tableName.includes("playlist") || tableName.includes("media")) return "Content Management"
-    if (tableName.includes("plan") || tableName.includes("feature")) return "Subscription System"
+    if (tableName.includes("plan") || tableName.includes("feature") || tableName.includes("subscription"))
+      return "Subscription System"
     if (tableName.includes("audit") || tableName.includes("log")) return "Audit & Logging"
     if (tableName.includes("folder")) return "File Organization"
     return "Other"
@@ -117,6 +119,23 @@ export default function DatabaseStructureMapPage() {
           </h1>
           <p className="text-gray-600 mt-2">Complete analysis of your digital signage database structure</p>
         </div>
+
+        {/* Database Schema Image */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Current Database Schema</CardTitle>
+            <CardDescription>Visual representation of your database tables</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="flex justify-center">
+              <img
+                src="/database-schema.png"
+                alt="Database Schema showing tables: admin_users, device_codes, device_heartbeats, device_pairing_codes, devices, features, media_files, password_reset_tokens, plan_features, plan_limits, plan_templates, playlist_assignments, playlist_items, playlists, subscription_plans, users"
+                className="max-w-full h-auto border rounded-lg shadow-sm"
+              />
+            </div>
+          </CardContent>
+        </Card>
 
         {/* Controls */}
         <Card>
@@ -185,7 +204,7 @@ export default function DatabaseStructureMapPage() {
                   <Card key={category}>
                     <CardHeader>
                       <CardTitle className="flex items-center gap-2">
-                        {category === "Authentication" && <Shield className="h-5 w-5" />}
+                        {category === "Authentication & Users" && <Shield className="h-5 w-5" />}
                         {category === "Screens & Devices" && <Monitor className="h-5 w-5" />}
                         {category === "Content Management" && <PlayCircle className="h-5 w-5" />}
                         {category === "Subscription System" && <Settings className="h-5 w-5" />}
@@ -362,30 +381,47 @@ export default function DatabaseStructureMapPage() {
               {/* Key Insights */}
               <Card>
                 <CardHeader>
-                  <CardTitle>Key Insights</CardTitle>
-                  <CardDescription>Important observations about your database</CardDescription>
+                  <CardTitle>Key Insights & Architecture Notes</CardTitle>
+                  <CardDescription>Important observations about your database structure</CardDescription>
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-4">
                     <Alert>
                       <AlertDescription>
-                        <strong>Screens vs Devices Clarification:</strong> You're right - "screens" table is for display
-                        screens, "devices" table is for device players. This is a critical distinction for the
-                        architecture.
+                        <strong>Screens vs Devices Architecture:</strong> Based on your schema, I can see you have a
+                        "devices" table (for device players) but I don't see a "screens" table in the current structure.
+                        This suggests we may need to create the screens table or clarify the relationship between
+                        physical screens and device players.
                       </AlertDescription>
                     </Alert>
 
                     <Alert>
                       <AlertDescription>
-                        <strong>Data Status:</strong> Your database has real user data, media files, and subscription
-                        information, but appears to be missing screen/device data.
+                        <strong>Content Management System:</strong> You have a robust content system with media_files,
+                        playlists, playlist_items, and playlist_assignments tables. This shows a well-structured content
+                        management architecture.
                       </AlertDescription>
                     </Alert>
 
                     <Alert>
                       <AlertDescription>
-                        <strong>Next Steps:</strong> We should create a simple test form to verify database connectivity
-                        before proceeding with the cleanup plan.
+                        <strong>Subscription System:</strong> Your subscription system includes subscription_plans,
+                        plan_features, plan_limits, and plan_templates - indicating a sophisticated multi-tier
+                        subscription model.
+                      </AlertDescription>
+                    </Alert>
+
+                    <Alert>
+                      <AlertDescription>
+                        <strong>Device Management:</strong> You have device_codes, device_heartbeats, and
+                        device_pairing_codes tables, showing a comprehensive device management and monitoring system.
+                      </AlertDescription>
+                    </Alert>
+
+                    <Alert>
+                      <AlertDescription>
+                        <strong>Next Steps:</strong> We should test database connectivity with the test form, then
+                        clarify the screens vs devices architecture before proceeding with cleanup.
                       </AlertDescription>
                     </Alert>
                   </div>

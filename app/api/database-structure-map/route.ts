@@ -51,12 +51,18 @@ export async function GET(request: NextRequest) {
           ORDER BY ordinal_position
         `
 
-        // Get row count
-        const countResult = await sql`
-          SELECT COUNT(*) as count 
-          FROM ${sql(tableName)}
-        `
-        const rowCount = Number.parseInt(countResult[0].count)
+        // Get row count safely
+        let rowCount = 0
+        try {
+          const countResult = await sql`
+            SELECT COUNT(*) as count 
+            FROM ${sql(tableName)}
+          `
+          rowCount = Number.parseInt(countResult[0].count)
+        } catch (countError) {
+          console.warn(`🗺️ [DATABASE MAP] Could not count rows for ${tableName}:`, countError)
+          rowCount = 0
+        }
 
         tableDetails.push({
           table_name: tableName,
@@ -81,23 +87,29 @@ export async function GET(request: NextRequest) {
     }
 
     // Get foreign key relationships
-    const relationships = await sql`
-      SELECT
-        tc.table_name,
-        kcu.column_name,
-        ccu.table_name AS referenced_table,
-        ccu.column_name AS referenced_column
-      FROM information_schema.table_constraints AS tc
-      JOIN information_schema.key_column_usage AS kcu
-        ON tc.constraint_name = kcu.constraint_name
-        AND tc.table_schema = kcu.table_schema
-      JOIN information_schema.constraint_column_usage AS ccu
-        ON ccu.constraint_name = tc.constraint_name
-        AND ccu.table_schema = tc.table_schema
-      WHERE tc.constraint_type = 'FOREIGN KEY'
-        AND tc.table_schema = 'public'
-      ORDER BY tc.table_name, kcu.column_name
-    `
+    let relationships = []
+    try {
+      relationships = await sql`
+        SELECT
+          tc.table_name,
+          kcu.column_name,
+          ccu.table_name AS referenced_table,
+          ccu.column_name AS referenced_column
+        FROM information_schema.table_constraints AS tc
+        JOIN information_schema.key_column_usage AS kcu
+          ON tc.constraint_name = kcu.constraint_name
+          AND tc.table_schema = kcu.table_schema
+        JOIN information_schema.constraint_column_usage AS ccu
+          ON ccu.constraint_name = tc.constraint_name
+          AND ccu.table_schema = tc.table_schema
+        WHERE tc.constraint_type = 'FOREIGN KEY'
+          AND tc.table_schema = 'public'
+        ORDER BY tc.table_name, kcu.column_name
+      `
+    } catch (relError) {
+      console.warn("🗺️ [DATABASE MAP] Could not fetch relationships:", relError)
+      relationships = []
+    }
 
     console.log("🗺️ [DATABASE MAP] Found relationships:", relationships.length)
 
