@@ -20,19 +20,21 @@ export async function GET() {
 
     const sql = getDb()
 
-    // Check if user is admin
+    // Check if user is admin using admin_users table
     const adminCheck = await sql`
-      SELECT is_admin FROM users WHERE id = ${user.id}
+      SELECT au.role, au.permissions 
+      FROM admin_users au 
+      WHERE au.user_id = ${user.id}
     `
 
-    if (adminCheck.length === 0 || !adminCheck[0].is_admin) {
+    if (adminCheck.length === 0) {
       console.log("Admin users API: User is not admin")
       return NextResponse.json({ error: "Admin access required" }, { status: 403 })
     }
 
     console.log("Admin users API: User is admin, fetching users")
 
-    // Get all users with their usage data
+    // Get all users with their usage data and admin status
     const users = await sql`
       SELECT 
         u.id,
@@ -42,10 +44,15 @@ export async function GET() {
         u.company,
         u.plan_type as plan,
         u.created_at as "createdAt",
-        u.is_admin as "isAdmin",
+        CASE 
+          WHEN au.role IS NOT NULL THEN true 
+          ELSE false 
+        END as "isAdmin",
+        au.role as "adminRole",
         COALESCE(u.media_files_count, 0) as "mediaCount",
         COALESCE(u.storage_used_bytes, 0) as "storageUsed"
       FROM users u
+      LEFT JOIN admin_users au ON u.id = au.user_id
       ORDER BY u.created_at DESC
     `
 

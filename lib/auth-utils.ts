@@ -1,5 +1,6 @@
 import jwt from "jsonwebtoken"
 import type { NextRequest } from "next/server"
+import type { Request } from "node-fetch"
 
 export interface AuthHeaders {
   Authorization: string
@@ -255,5 +256,76 @@ export function verifyToken(token: string): any {
   } catch (error) {
     console.error("🔐 [AUTH UTILS] Token verification failed:", error)
     return null
+  }
+}
+
+/**
+ * Get token from request headers or cookies (client-side)
+ */
+export function getTokenFromRequest(request: Request): string | null {
+  // Try Authorization header first
+  const authHeader = request.headers.get("authorization")
+  if (authHeader && authHeader.startsWith("Bearer ")) {
+    return authHeader.substring(7)
+  }
+
+  // Try cookies as fallback
+  const cookieHeader = request.headers.get("cookie")
+  if (cookieHeader) {
+    const cookies = cookieHeader.split(";").reduce(
+      (acc, cookie) => {
+        const [key, value] = cookie.trim().split("=")
+        acc[key] = value
+        return acc
+      },
+      {} as Record<string, string>,
+    )
+    return cookies["auth-token"] || null
+  }
+
+  return null
+}
+
+/**
+ * Get token from localStorage (client-side)
+ */
+export function getTokenFromLocalStorage(): string | null {
+  if (typeof window === "undefined") return null
+
+  // Try multiple possible keys
+  const keys = ["auth-token", "token", "authToken"]
+  for (const key of keys) {
+    const token = localStorage.getItem(key)
+    if (token) return token
+  }
+
+  return null
+}
+
+/**
+ * Get token from cookies (client-side)
+ */
+export function getTokenFromCookies(): string | null {
+  if (typeof document === "undefined") return null
+
+  const cookies = document.cookie.split(";").reduce(
+    (acc, cookie) => {
+      const [key, value] = cookie.trim().split("=")
+      acc[key] = value
+      return acc
+    },
+    {} as Record<string, string>,
+  )
+
+  return cookies["auth-token"] || null
+}
+
+/**
+ * Get all tokens from localStorage and cookies (client-side)
+ */
+export function getAllTokens(): { localStorage: string | null; cookies: string | null } {
+  return {
+    localStorage: getTokenFromLocalStorage(),
+    cookies: getTokenFromCookies(),
   }
 }

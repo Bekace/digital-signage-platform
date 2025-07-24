@@ -4,14 +4,13 @@ import type React from "react"
 
 import { useState } from "react"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Shield, CheckCircle, AlertCircle } from "lucide-react"
 
 export default function MakeSuperAdminPage() {
-  const [email, setEmail] = useState("demo@signagecloud.com")
+  const [email, setEmail] = useState("")
   const [loading, setLoading] = useState(false)
   const [result, setResult] = useState<{ success: boolean; message: string } | null>(null)
 
@@ -33,8 +32,9 @@ export default function MakeSuperAdminPage() {
 
       if (response.ok) {
         setResult({ success: true, message: data.message })
+        setEmail("")
       } else {
-        setResult({ success: false, message: data.error || "Failed to make super admin" })
+        setResult({ success: false, message: data.error || "Failed to create super admin" })
       }
     } catch (error) {
       setResult({ success: false, message: "Network error occurred" })
@@ -44,61 +44,63 @@ export default function MakeSuperAdminPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4">
-      <div className="max-w-md w-full">
-        <Card>
-          <CardHeader className="text-center">
-            <div className="mx-auto w-12 h-12 bg-red-100 rounded-full flex items-center justify-center mb-4">
-              <Shield className="w-6 h-6 text-red-600" />
+    <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
+      <Card className="w-full max-w-md">
+        <CardHeader className="text-center">
+          <div className="mx-auto mb-4 w-12 h-12 bg-red-100 rounded-full flex items-center justify-center">
+            <Shield className="w-6 h-6 text-red-600" />
+          </div>
+          <CardTitle className="text-2xl font-bold">Create Super Admin</CardTitle>
+          <CardDescription>Grant super admin privileges to a user account</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div>
+              <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-2">
+                User Email
+              </label>
+              <Input
+                id="email"
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="Enter user email address"
+                required
+                disabled={loading}
+              />
             </div>
-            <CardTitle className="text-2xl">Make Super Admin</CardTitle>
-            <CardDescription>Grant super admin privileges to a user account</CardDescription>
-          </CardHeader>
-          <CardContent>
-            {result && (
-              <Alert
-                className={`mb-4 ${result.success ? "border-green-200 bg-green-50" : ""}`}
-                variant={result.success ? "default" : "destructive"}
-              >
+
+            <Button type="submit" className="w-full" disabled={loading || !email}>
+              {loading ? "Creating Super Admin..." : "Grant Super Admin Access"}
+            </Button>
+          </form>
+
+          {result && (
+            <Alert className={`mt-4 ${result.success ? "border-green-200 bg-green-50" : "border-red-200 bg-red-50"}`}>
+              <div className="flex items-center">
                 {result.success ? (
-                  <CheckCircle className="h-4 w-4 text-green-600" />
+                  <CheckCircle className="w-4 h-4 text-green-600 mr-2" />
                 ) : (
-                  <AlertCircle className="h-4 w-4" />
+                  <AlertCircle className="w-4 h-4 text-red-600 mr-2" />
                 )}
-                <AlertDescription className={result.success ? "text-green-800" : ""}>{result.message}</AlertDescription>
-              </Alert>
-            )}
-
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="email">User Email</Label>
-                <Input
-                  id="email"
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="user@example.com"
-                  required
-                />
+                <AlertDescription className={result.success ? "text-green-800" : "text-red-800"}>
+                  {result.message}
+                </AlertDescription>
               </div>
+            </Alert>
+          )}
 
-              <Button type="submit" className="w-full" disabled={loading}>
-                {loading ? "Processing..." : "Make Super Admin"}
-              </Button>
-            </form>
-
-            <div className="mt-6 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
-              <h4 className="font-semibold text-yellow-800 mb-2">⚠️ Important Notes:</h4>
-              <ul className="text-sm text-yellow-700 space-y-1">
-                <li>• Super admins have full access to all system features</li>
-                <li>• This action cannot be undone through the UI</li>
-                <li>• Use this feature responsibly</li>
-                <li>• Default demo email is pre-filled</li>
-              </ul>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+          <div className="mt-6 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+            <h3 className="text-sm font-medium text-yellow-800 mb-2">Important Notes:</h3>
+            <ul className="text-xs text-yellow-700 space-y-1">
+              <li>• The user must already have an account in the system</li>
+              <li>• Super admin privileges include full system access</li>
+              <li>• This action will create the admin_users table if it doesn't exist</li>
+              <li>• Use this feature carefully in production environments</li>
+            </ul>
+          </div>
+        </CardContent>
+      </Card>
     </div>
   )
 }

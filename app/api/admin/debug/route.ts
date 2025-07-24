@@ -16,22 +16,29 @@ export async function GET() {
     const sql = getDb()
     console.log("Debug: Database connection established")
 
-    // Check if users table has is_admin column
+    // Check if admin_users table exists
     try {
       const tableInfo = await sql`
         SELECT column_name, data_type 
         FROM information_schema.columns 
-        WHERE table_name = 'users' AND column_name = 'is_admin'
+        WHERE table_name = 'admin_users'
       `
-      console.log("Debug: is_admin column info:", tableInfo)
+      console.log("Debug: admin_users table columns:", tableInfo)
     } catch (err) {
-      console.log("Debug: Error checking is_admin column:", err)
+      console.log("Debug: Error checking admin_users table:", err)
     }
 
-    // Check if user is admin
+    // Check if user is admin using admin_users table
     try {
       const adminCheck = await sql`
-        SELECT id, email, is_admin FROM users WHERE id = ${user.id}
+        SELECT 
+          u.id, 
+          u.email, 
+          au.role as admin_role,
+          au.permissions as admin_permissions
+        FROM users u
+        LEFT JOIN admin_users au ON u.id = au.user_id
+        WHERE u.id = ${user.id}
       `
       console.log("Debug: User admin check:", adminCheck)
 
@@ -40,7 +47,9 @@ export async function GET() {
       }
 
       const userRecord = adminCheck[0]
-      if (!userRecord.is_admin) {
+      const isAdmin = userRecord.admin_role !== null && userRecord.admin_role !== undefined
+
+      if (!isAdmin) {
         return NextResponse.json(
           {
             success: false,

@@ -1,69 +1,66 @@
-import { type NextRequest, NextResponse } from "next/server"
+import { NextResponse } from "next/server"
 import { getCurrentUser } from "@/lib/auth"
 import { getDb } from "@/lib/db"
 
-export async function POST(request: NextRequest) {
-  try {
-    console.log("🔄 [UPDATE PLAN] Starting plan update...")
+export const dynamic = "force-dynamic"
 
-    // Check if user is admin
-    const currentUser = await getCurrentUser()
-    if (!currentUser) {
+export async function POST(request: Request) {
+  try {
+    const user = await getCurrentUser()
+    if (!user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
     const sql = getDb()
 
-    // Verify admin status
+    // Check if user is admin
     const adminCheck = await sql`
-      SELECT is_admin FROM users WHERE id = ${currentUser.id}
+      SELECT au.role 
+      FROM admin_users au 
+      WHERE au.user_id = ${user.id}
     `
 
-    if (!adminCheck[0]?.is_admin) {
+    if (adminCheck.length === 0) {
       return NextResponse.json({ error: "Admin access required" }, { status: 403 })
     }
 
-    const { userEmail, newPlan } = await request.json()
-    console.log("📊 [UPDATE PLAN] Request:", { userEmail, newPlan })
+    const { userId, planType } = await request.json()
 
-    if (!userEmail || !newPlan) {
-      return NextResponse.json({ error: "User email and plan are required" }, { status: 400 })
+    if (!userId || !planType) {
+      return NextResponse.json({ error: "User ID and plan type are required" }, { status: 400 })
     }
 
-    // Verify the plan exists
-    const planCheck = await sql`
-      SELECT * FROM plan_limits WHERE plan_type = ${newPlan}
-    `
-
-    if (planCheck.length === 0) {
-      return NextResponse.json({ error: "Invalid plan type" }, { status: 400 })
-    }
-
-    console.log("✅ [UPDATE PLAN] Plan verified:", planCheck[0])
-
-    // Update the user's plan
-    const updateResult = await sql`
+    // Update user's plan
+    const result = await sql`
       UPDATE users 
-      SET 
-        plan_type = ${newPlan},
-        updated_at = NOW()
-      WHERE email = ${userEmail}
-      RETURNING id, email, plan_type, updated_at
+      SET plan_type = ${planType}
+      WHERE id = ${userId}
+      RETURNING id, email, first_name, last_name, plan_type
     `
 
-    if (updateResult.length === 0) {
+    if (result.length === 0) {
       return NextResponse.json({ error: "User not found" }, { status: 404 })
     }
 
-    console.log("✅ [UPDATE PLAN] User updated:", updateResult[0])
+    // Log admin action
+    await sql`
+      INSERT INTO admin_logs (admin_user_id, action, target_type, target_id, details)
+      VALUES (
+        ${user.id}, 
+        'update_user_plan', 
+        'user', 
+        ${userId}, 
+        ${JSON.stringify({ old_plan: null, new_plan: planType })}
+      )
+    `
 
     return NextResponse.json({
       success: true,
-      message: `User ${userEmail} updated to ${newPlan} plan`,
-      user: updateResult[0],
+      user: result[0],
+      message: "User plan updated successfully",
     })
   } catch (error) {
-    console.error("❌ [UPDATE PLAN] Error:", error)
+    console.error("Admin update user plan API error:", error)
     return NextResponse.json(
       {
         error: "Failed to update user plan",
