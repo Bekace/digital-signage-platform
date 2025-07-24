@@ -9,8 +9,15 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Not authenticated" }, { status: 401 })
     }
 
-    // Return user data with admin status determined from admin_users table
+    console.log("🔍 [PROFILE] User data:", {
+      id: user.id,
+      email: user.email,
+      is_admin: user.is_admin,
+      admin_role: user.admin_role,
+    })
+
     return NextResponse.json({
+      success: true,
       user: {
         id: user.id,
         email: user.email,
@@ -19,8 +26,8 @@ export async function GET(request: NextRequest) {
         company: user.company,
         plan: user.plan,
         createdAt: user.created_at,
-        isAdmin: user.is_admin, // This is now determined from admin_users table
-        is_admin: user.is_admin, // For backward compatibility
+        isAdmin: user.is_admin,
+        is_admin: user.is_admin,
         adminRole: user.admin_role,
         adminPermissions: user.admin_permissions,
       },

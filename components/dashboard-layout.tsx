@@ -1,7 +1,6 @@
 "use client"
 
 import type React from "react"
-
 import { useState, useEffect } from "react"
 import { Home, Monitor, ImageIcon, Play, Settings, Shield, Menu, DollarSign, Users, Tag, Bug } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -36,34 +35,53 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
   const pathname = usePathname()
   const [isAdmin, setIsAdmin] = useState(false)
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    // Check if user is admin - FIXED VERSION
     const checkAdminStatus = async () => {
       try {
+        // Get token from localStorage or cookies
+        const token =
+          localStorage.getItem("auth-token") ||
+          document.cookie
+            .split("; ")
+            .find((row) => row.startsWith("auth-token="))
+            ?.split("=")[1]
+
+        if (!token) {
+          console.log("🔍 [ADMIN CHECK] No token found")
+          setLoading(false)
+          return
+        }
+
         const response = await fetch("/api/user/profile", {
           headers: {
-            Authorization: `Bearer ${localStorage.getItem("auth-token")}`,
+            Authorization: `Bearer ${token}`,
             "Content-Type": "application/json",
           },
         })
+
         if (response.ok) {
           const data = await response.json()
-          console.log("🔍 [ADMIN CHECK] Profile data:", data)
+          console.log("🔍 [ADMIN CHECK] Profile response:", data)
 
-          // Check multiple ways to determine admin status
-          const userIsAdmin =
-            data.user?.is_admin ||
-            data.user?.admin_role === "super_admin" ||
-            data.user?.admin_role === "admin" ||
+          // Check for admin status in multiple ways
+          const userIsAdmin = Boolean(
             data.user?.isAdmin ||
-            false
+              data.user?.is_admin ||
+              data.user?.adminRole === "super_admin" ||
+              data.user?.adminRole === "admin",
+          )
 
           console.log("🔍 [ADMIN CHECK] Final admin status:", userIsAdmin)
           setIsAdmin(userIsAdmin)
+        } else {
+          console.log("🔍 [ADMIN CHECK] Profile request failed:", response.status)
         }
       } catch (error) {
-        console.error("Error checking admin status:", error)
+        console.error("❌ [ADMIN CHECK] Error:", error)
+      } finally {
+        setLoading(false)
       }
     }
 
@@ -72,6 +90,14 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
 
   const allNavigation = [...navigation, ...(isAdmin ? adminNavigation : [])]
 
+  if (loading) {
+    return (
+      <div className="flex h-screen bg-gray-100 items-center justify-center">
+        <div className="text-lg">Loading...</div>
+      </div>
+    )
+  }
+
   return (
     <div className="flex h-screen bg-gray-100">
       {/* Desktop Sidebar */}
@@ -79,6 +105,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
         <div className="flex flex-col flex-grow pt-5 overflow-y-auto bg-white border-r">
           <div className="flex items-center flex-shrink-0 px-4">
             <h1 className="text-xl font-semibold">Digital Signage</h1>
+            {isAdmin && <span className="ml-2 px-2 py-1 text-xs bg-red-100 text-red-800 rounded">ADMIN</span>}
           </div>
           <div className="mt-5 flex-grow flex flex-col">
             <nav className="flex-1 px-2 pb-4 space-y-1">
@@ -101,7 +128,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
               {isAdmin && (
                 <>
                   <Separator className="my-4" />
-                  <div className="px-2 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                  <div className="px-2 py-2 text-xs font-semibold text-red-600 uppercase tracking-wider">
                     Administration
                   </div>
                   {adminNavigation.map((item) => {
@@ -111,7 +138,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
                         key={item.name}
                         href={item.href}
                         className={`group flex items-center px-2 py-2 text-sm font-medium rounded-md ${
-                          isActive ? "bg-gray-100 text-gray-900" : "text-gray-600 hover:bg-gray-50 hover:text-gray-900"
+                          isActive ? "bg-red-100 text-red-900" : "text-red-600 hover:bg-red-50 hover:text-red-900"
                         }`}
                       >
                         <item.icon className="mr-3 h-5 w-5" />
@@ -137,18 +164,26 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
           <div className="flex flex-col h-full">
             <div className="flex items-center justify-between p-4">
               <h1 className="text-xl font-semibold">Digital Signage</h1>
+              {isAdmin && <span className="px-2 py-1 text-xs bg-red-100 text-red-800 rounded">ADMIN</span>}
             </div>
             <Separator />
             <nav className="flex-1 px-2 py-4 space-y-1">
               {allNavigation.map((item) => {
                 const isActive = pathname === item.href
+                const isAdminItem = adminNavigation.some((adminItem) => adminItem.href === item.href)
                 return (
                   <Link
                     key={item.name}
                     href={item.href}
                     onClick={() => setSidebarOpen(false)}
                     className={`group flex items-center px-2 py-2 text-sm font-medium rounded-md ${
-                      isActive ? "bg-gray-100 text-gray-900" : "text-gray-600 hover:bg-gray-50 hover:text-gray-900"
+                      isActive
+                        ? isAdminItem
+                          ? "bg-red-100 text-red-900"
+                          : "bg-gray-100 text-gray-900"
+                        : isAdminItem
+                          ? "text-red-600 hover:bg-red-50 hover:text-red-900"
+                          : "text-gray-600 hover:bg-gray-50 hover:text-gray-900"
                     }`}
                   >
                     <item.icon className="mr-3 h-5 w-5" />

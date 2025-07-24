@@ -4,8 +4,7 @@ import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { Separator } from "@/components/ui/separator"
-import { CheckCircle, XCircle, User, Shield, Calendar, Key } from "lucide-react"
+import { Shield, User, Mail, Calendar, CheckCircle, XCircle } from "lucide-react"
 
 interface SuperAdminResult {
   success: boolean
@@ -15,13 +14,12 @@ interface SuperAdminResult {
   user?: {
     id: number
     email: string
-    firstName: string
-    lastName: string
-    isAdminFlag: boolean
+    name: string
     adminRole: string
+    adminPermissions: any
     adminCreated: string
-    permissions: any
   }
+  action?: string
 }
 
 export default function MakeSuperAdminPage() {
@@ -54,12 +52,12 @@ export default function MakeSuperAdminPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
-      <div className="max-w-2xl mx-auto">
+    <div className="min-h-screen bg-gray-50 py-12">
+      <div className="max-w-2xl mx-auto px-4">
         <div className="text-center mb-8">
-          <Shield className="mx-auto h-12 w-12 text-blue-600" />
-          <h1 className="mt-4 text-3xl font-bold text-gray-900">Make Super Admin</h1>
-          <p className="mt-2 text-gray-600">Grant super admin privileges to bekace.multimedia@gmail.com</p>
+          <Shield className="mx-auto h-12 w-12 text-red-600 mb-4" />
+          <h1 className="text-3xl font-bold text-gray-900">Super Admin Setup</h1>
+          <p className="text-gray-600 mt-2">Grant super admin privileges to bekace.multimedia@gmail.com</p>
         </div>
 
         <Card className="mb-6">
@@ -68,121 +66,89 @@ export default function MakeSuperAdminPage() {
               <User className="h-5 w-5" />
               Target User
             </CardTitle>
-            <CardDescription>This will grant super admin privileges to the specified user</CardDescription>
+            <CardDescription>This will grant full administrative privileges to the specified user</CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="bg-gray-50 p-4 rounded-lg">
-              <p className="font-medium text-gray-900">bekace.multimedia@gmail.com</p>
-              <p className="text-sm text-gray-600 mt-1">
-                Will be granted full system access and administrative privileges
-              </p>
+            <div className="flex items-center gap-2 text-sm text-gray-600">
+              <Mail className="h-4 w-4" />
+              bekace.multimedia@gmail.com
             </div>
           </CardContent>
         </Card>
 
         <div className="text-center mb-6">
-          <Button onClick={handleMakeSuperAdmin} disabled={loading} size="lg" className="px-8">
-            {loading ? (
-              <>
-                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2" />
-                Processing...
-              </>
-            ) : (
-              <>
-                <Shield className="h-4 w-4 mr-2" />
-                Make Super Admin
-              </>
-            )}
+          <Button onClick={handleMakeSuperAdmin} disabled={loading} size="lg" className="bg-red-600 hover:bg-red-700">
+            {loading ? "Processing..." : "Make Super Admin"}
           </Button>
         </div>
 
         {result && (
-          <Card className={`border-2 ${result.success ? "border-green-200 bg-green-50" : "border-red-200 bg-red-50"}`}>
+          <Card className={`border-2 ${result.success ? "border-green-200" : "border-red-200"}`}>
             <CardHeader>
-              <CardTitle className={`flex items-center gap-2 ${result.success ? "text-green-800" : "text-red-800"}`}>
-                {result.success ? <CheckCircle className="h-5 w-5" /> : <XCircle className="h-5 w-5" />}
-                {result.success ? "Super Admin Created Successfully" : "Error Occurred"}
+              <CardTitle className="flex items-center gap-2">
+                {result.success ? (
+                  <CheckCircle className="h-5 w-5 text-green-600" />
+                ) : (
+                  <XCircle className="h-5 w-5 text-red-600" />
+                )}
+                {result.success ? "Success" : "Error"}
               </CardTitle>
             </CardHeader>
             <CardContent>
-              {result.success && result.user ? (
+              {result.success ? (
                 <div className="space-y-4">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                      <label className="text-sm font-medium text-gray-600">User ID</label>
-                      <p className="text-lg font-semibold">{result.user.id}</p>
-                    </div>
-                    <div>
-                      <label className="text-sm font-medium text-gray-600">Email</label>
-                      <p className="text-lg font-semibold">{result.user.email}</p>
-                    </div>
-                    <div>
-                      <label className="text-sm font-medium text-gray-600">Name</label>
-                      <p className="text-lg font-semibold">
-                        {result.user.firstName} {result.user.lastName}
-                      </p>
-                    </div>
-                    <div>
-                      <label className="text-sm font-medium text-gray-600">Admin Role</label>
-                      <Badge variant="secondary" className="mt-1">
-                        {result.user.adminRole}
-                      </Badge>
-                    </div>
-                  </div>
+                  <p className="text-green-700 font-medium">{result.message}</p>
 
-                  <Separator />
-
-                  <div>
-                    <label className="text-sm font-medium text-gray-600">Status Flags</label>
-                    <div className="mt-2 space-y-2">
-                      <div className="flex items-center justify-between">
-                        <span>is_admin:</span>
-                        <Badge variant={result.user.isAdminFlag ? "default" : "secondary"}>
-                          {result.user.isAdminFlag ? "true" : "false"}
-                        </Badge>
-                      </div>
-                      <div className="flex items-center justify-between">
-                        <span>admin_users:</span>
-                        <Badge variant="default">created</Badge>
-                      </div>
-                    </div>
-                  </div>
-
-                  <Separator />
-
-                  <div>
-                    <label className="text-sm font-medium text-gray-600 flex items-center gap-2">
-                      <Calendar className="h-4 w-4" />
-                      Admin Created
-                    </label>
-                    <p className="text-sm text-gray-800 mt-1">{new Date(result.user.adminCreated).toLocaleString()}</p>
-                  </div>
-
-                  {result.user.permissions && (
-                    <div>
-                      <label className="text-sm font-medium text-gray-600 flex items-center gap-2">
-                        <Key className="h-4 w-4" />
-                        Permissions Summary
-                      </label>
-                      <div className="mt-2 grid grid-cols-2 md:grid-cols-3 gap-2">
-                        {Object.keys(result.user.permissions).map((permission) => (
-                          <Badge key={permission} variant="outline" className="text-xs">
-                            {permission}
+                  {result.user && (
+                    <div className="bg-green-50 p-4 rounded-lg space-y-3">
+                      <div className="grid grid-cols-2 gap-4 text-sm">
+                        <div>
+                          <span className="font-medium">User ID:</span> {result.user.id}
+                        </div>
+                        <div>
+                          <span className="font-medium">Email:</span> {result.user.email}
+                        </div>
+                        <div>
+                          <span className="font-medium">Name:</span> {result.user.name}
+                        </div>
+                        <div>
+                          <span className="font-medium">Admin Role:</span>
+                          <Badge variant="destructive" className="ml-2">
+                            {result.user.adminRole}
                           </Badge>
-                        ))}
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2 text-sm">
+                        <Calendar className="h-4 w-4" />
+                        <span className="font-medium">Admin Created:</span>
+                        {new Date(result.user.adminCreated).toLocaleString()}
+                      </div>
+
+                      <div className="text-sm">
+                        <span className="font-medium">Action:</span>
+                        <Badge variant="outline" className="ml-2">
+                          {result.action}
+                        </Badge>
                       </div>
                     </div>
                   )}
                 </div>
               ) : (
                 <div className="space-y-2">
-                  <p className="text-red-800 font-medium">{result.error}</p>
-                  {result.details && <p className="text-red-600 text-sm">{result.details}</p>}
+                  <p className="text-red-700 font-medium">{result.error}</p>
+                  {result.details && <p className="text-red-600 text-sm bg-red-50 p-3 rounded">{result.details}</p>}
                 </div>
               )}
             </CardContent>
           </Card>
         )}
+
+        <div className="mt-8 text-center">
+          <Button variant="outline" onClick={() => (window.location.href = "/dashboard")}>
+            Return to Dashboard
+          </Button>
+        </div>
       </div>
     </div>
   )
