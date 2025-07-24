@@ -1,92 +1,97 @@
 import { NextResponse } from "next/server"
-import { getCurrentUser } from "@/lib/auth"
-import { getDb } from "@/lib/db"
+import { neon } from "@neondatabase/serverless"
+import { verifyAuth } from "@/lib/auth-utils"
 
-export async function GET() {
+const sql = neon(process.env.DATABASE_URL!)
+
+export async function GET(request: Request) {
   try {
-    console.log("Debug: Starting admin debug check")
+    console.log("🔍 [ADMIN DEBUG] Starting debug info fetch...")
 
-    const user = await getCurrentUser()
-    console.log("Debug: Current user:", user)
-
-    if (!user) {
-      return NextResponse.json({ success: false, message: "Not authenticated", step: "auth" }, { status: 401 })
+    // Verify admin authentication
+    const authResult = await verifyAuth(request)
+    if (!authResult.success || !authResult.isAdmin) {
+      console.log("🔍 [ADMIN DEBUG] Access denied - not admin")
+      return NextResponse.json({ error: "Access denied" }, { status: 403 })
     }
 
-    const sql = getDb()
-    console.log("Debug: Database connection established")
+    console.log("🔍 [ADMIN DEBUG] Admin verified, fetching debug info...")
 
-    // Check if admin_users table exists
-    try {
-      const tableInfo = await sql`
-        SELECT column_name, data_type 
-        FROM information_schema.columns 
-        WHERE table_name = 'admin_users'
-      `
-      console.log("Debug: admin_users table columns:", tableInfo)
-    } catch (err) {
-      console.log("Debug: Error checking admin_users table:", err)
-    }
+    // Get system statistics
+    const userCount = await sql`SELECT COUNT(*) as count FROM users`
+    const adminCount = await sql`SELECT COUNT(*) as count FROM admin_users`
+    const mediaCount = await sql`SELECT COUNT(*) as count FROM media`
+    const playlistCount = await sql`SELECT COUNT(*) as count FROM playlists`
+    const deviceCount = await sql`SELECT COUNT(*) as count FROM devices`
 
-    // Check if user is admin using admin_users table
-    try {
-      const adminCheck = await sql`
-        SELECT 
-          u.id, 
-          u.email, 
-          au.role as admin_role,
-          au.permissions as admin_permissions
-        FROM users u
-        LEFT JOIN admin_users au ON u.id = au.user_id
-        WHERE u.id = ${user.id}
-      `
-      console.log("Debug: User admin check:", adminCheck)
+    // Get recent activity
+    const recentUsers = await sql`
+      SELECT id, email, first_name, last_name, created_at
+      FROM users 
+      ORDER BY created_at DESC 
+      LIMIT 5
+    `
 
-      if (adminCheck.length === 0) {
-        return NextResponse.json({ success: false, message: "User not found", step: "user_lookup" }, { status: 404 })
-      }
+    // Get admin users
+    const adminUsers = await sql`
+      SELECT 
+        u.id,
+        u.email,
+        u.first_name,
+        u.last_name,
+        au.role,
+        au.created_at as admin_since
+      FROM users u
+      JOIN admin_users au ON u.id = au.user_id
+      ORDER BY au.created_at DESC
+    `
 
-      const userRecord = adminCheck[0]
-      const isAdmin = userRecord.admin_role !== null && userRecord.admin_role !== undefined
+    // Get table information
+    const tables = await sql`
+      SELECT table_name, table_type
+      FROM information_schema.tables 
+      WHERE table_schema = 'public'
+      ORDER BY table_name
+    `
 
-      if (!isAdmin) {
-        return NextResponse.json(
-          {
-            success: false,
-            message: "Access denied - not admin",
-            step: "admin_check",
-            user: userRecord,
-          },
-          { status: 403 },
-        )
-      }
+    console.log("🔍 [ADMIN DEBUG] Debug info compiled successfully")
 
-      return NextResponse.json({
-        success: true,
-        message: "Admin access confirmed",
-        user: userRecord,
-        step: "success",
-      })
-    } catch (err) {
-      console.log("Debug: Error in admin check:", err)
-      return NextResponse.json(
-        {
-          success: false,
-          message: "Database error in admin check",
-          error: err.message,
-          step: "admin_check_error",
-        },
-        { status: 500 },
-      )
-    }
+    return NextResponse.json({
+      success: true,
+      statistics: {
+        users: Number.parseInt(userCount[0].count),
+        admins: Number.parseInt(adminCount[0].count),
+        media: Number.parseInt(mediaCount[0].count),
+        playlists: Number.parseInt(playlistCount[0].count),
+        devices: Number.parseInt(deviceCount[0].count),
+      },
+      recentUsers: recentUsers.map((user) => ({
+        id: user.id,
+        email: user.email,
+        name: `${user.first_name} ${user.last_name}`,
+        createdAt: user.created_at,
+      })),
+      adminUsers: adminUsers.map((admin) => ({
+        id: admin.id,
+        email: admin.email,
+        name: `${admin.first_name} ${admin.last_name}`,
+        role: admin.role,
+        adminSince: admin.admin_since,
+      })),
+      tables: tables.map((table) => ({
+        name: table.table_name,
+        type: table.table_type,
+      })),
+      timestamp: new Date().toISOString(),
+    })
   } catch (error) {
-    console.error("Debug: General error:", error)
+    console.error("❌ [ADMIN DEBUG] Error:", error)
     return NextResponse.json(
       {
         success: false,
-        message: "Internal server error",
-        error: error.message,
-        step: "general_error",
+        message: "Database error in admin check",
+        error: error instanceof Error ? error.message : "Unknown error",
+        step: "admin_check_error",
       },
       { status: 500 },
     )

@@ -1,52 +1,57 @@
 import { NextResponse } from "next/server"
-import { getCurrentUser } from "@/lib/auth"
-import { getDb } from "@/lib/db"
+import { neon } from "@neondatabase/serverless"
+import { verifyAuth } from "@/lib/auth-utils"
 
-export const dynamic = "force-dynamic"
+const sql = neon(process.env.DATABASE_URL!)
 
 export async function PUT(request: Request, { params }: { params: { featureId: string } }) {
   try {
-    const user = await getCurrentUser()
-    if (!user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    console.log("🎛️ [ADMIN FEATURES] Updating feature:", params.featureId)
+
+    // Verify admin authentication
+    const authResult = await verifyAuth(request)
+    if (!authResult.success || !authResult.isAdmin) {
+      return NextResponse.json({ error: "Access denied" }, { status: 403 })
     }
 
-    const sql = getDb()
+    const { name, description, defaultValue } = await request.json()
 
-    // Check if user is admin
-    const adminCheck = await sql`
-      SELECT au.role 
-      FROM admin_users au 
-      WHERE au.user_id = ${user.id}
-    `
-
-    if (adminCheck.length === 0) {
-      return NextResponse.json({ error: "Admin access required" }, { status: 403 })
+    if (!name) {
+      return NextResponse.json({ error: "Name is required" }, { status: 400 })
     }
 
-    const { feature_value, is_enabled } = await request.json()
-    const featureId = params.featureId
-
-    const result = await sql`
+    // Update feature
+    const updatedFeature = await sql`
       UPDATE plan_features 
       SET 
-        feature_value = ${feature_value},
-        is_enabled = ${is_enabled},
+        name = ${name},
+        description = ${description || ""},
+        default_value = ${defaultValue || null},
         updated_at = NOW()
-      WHERE id = ${featureId}
-      RETURNING *
+      WHERE id = ${params.featureId}
+      RETURNING id, name, description, feature_key, feature_type, default_value, updated_at
     `
 
-    if (result.length === 0) {
+    if (updatedFeature.length === 0) {
       return NextResponse.json({ error: "Feature not found" }, { status: 404 })
     }
 
+    console.log("🎛️ [ADMIN FEATURES] Feature updated:", params.featureId)
+
     return NextResponse.json({
       success: true,
-      feature: result[0],
+      feature: {
+        id: updatedFeature[0].id,
+        name: updatedFeature[0].name,
+        description: updatedFeature[0].description,
+        key: updatedFeature[0].feature_key,
+        type: updatedFeature[0].feature_type,
+        defaultValue: updatedFeature[0].default_value,
+        updatedAt: updatedFeature[0].updated_at,
+      },
     })
   } catch (error) {
-    console.error("Admin update feature API error:", error)
+    console.error("❌ [ADMIN FEATURES] Update error:", error)
     return NextResponse.json(
       {
         error: "Failed to update feature",
@@ -59,42 +64,33 @@ export async function PUT(request: Request, { params }: { params: { featureId: s
 
 export async function DELETE(request: Request, { params }: { params: { featureId: string } }) {
   try {
-    const user = await getCurrentUser()
-    if (!user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    console.log("🎛️ [ADMIN FEATURES] Deleting feature:", params.featureId)
+
+    // Verify admin authentication
+    const authResult = await verifyAuth(request)
+    if (!authResult.success || !authResult.isAdmin) {
+      return NextResponse.json({ error: "Access denied" }, { status: 403 })
     }
 
-    const sql = getDb()
-
-    // Check if user is admin
-    const adminCheck = await sql`
-      SELECT au.role 
-      FROM admin_users au 
-      WHERE au.user_id = ${user.id}
-    `
-
-    if (adminCheck.length === 0) {
-      return NextResponse.json({ error: "Admin access required" }, { status: 403 })
-    }
-
-    const featureId = params.featureId
-
-    const result = await sql`
+    // Delete feature
+    const deletedFeature = await sql`
       DELETE FROM plan_features 
-      WHERE id = ${featureId}
-      RETURNING *
+      WHERE id = ${params.featureId}
+      RETURNING id, name
     `
 
-    if (result.length === 0) {
+    if (deletedFeature.length === 0) {
       return NextResponse.json({ error: "Feature not found" }, { status: 404 })
     }
 
+    console.log("🎛️ [ADMIN FEATURES] Feature deleted:", params.featureId)
+
     return NextResponse.json({
       success: true,
-      message: "Feature deleted successfully",
+      message: `Feature "${deletedFeature[0].name}" deleted successfully`,
     })
   } catch (error) {
-    console.error("Admin delete feature API error:", error)
+    console.error("❌ [ADMIN FEATURES] Delete error:", error)
     return NextResponse.json(
       {
         error: "Failed to delete feature",

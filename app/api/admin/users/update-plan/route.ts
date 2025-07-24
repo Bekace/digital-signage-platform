@@ -1,27 +1,17 @@
 import { NextResponse } from "next/server"
-import { getCurrentUser } from "@/lib/auth"
-import { getDb } from "@/lib/db"
+import { neon } from "@neondatabase/serverless"
+import { verifyAuth } from "@/lib/auth-utils"
 
-export const dynamic = "force-dynamic"
+const sql = neon(process.env.DATABASE_URL!)
 
 export async function POST(request: Request) {
   try {
-    const user = await getCurrentUser()
-    if (!user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-    }
+    console.log("👥 [ADMIN USERS] Updating user plan...")
 
-    const sql = getDb()
-
-    // Check if user is admin
-    const adminCheck = await sql`
-      SELECT au.role 
-      FROM admin_users au 
-      WHERE au.user_id = ${user.id}
-    `
-
-    if (adminCheck.length === 0) {
-      return NextResponse.json({ error: "Admin access required" }, { status: 403 })
+    // Verify admin authentication
+    const authResult = await verifyAuth(request)
+    if (!authResult.success || !authResult.isAdmin) {
+      return NextResponse.json({ error: "Access denied" }, { status: 403 })
     }
 
     const { userId, planType } = await request.json()
@@ -30,37 +20,42 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "User ID and plan type are required" }, { status: 400 })
     }
 
+    // Verify the plan exists
+    const planExists = await sql`
+      SELECT id FROM plans WHERE plan_type = ${planType}
+    `
+
+    if (planExists.length === 0) {
+      return NextResponse.json({ error: "Invalid plan type" }, { status: 400 })
+    }
+
     // Update user's plan
-    const result = await sql`
+    const updatedUser = await sql`
       UPDATE users 
-      SET plan_type = ${planType}
+      SET plan_type = ${planType}, updated_at = NOW()
       WHERE id = ${userId}
       RETURNING id, email, first_name, last_name, plan_type
     `
 
-    if (result.length === 0) {
+    if (updatedUser.length === 0) {
       return NextResponse.json({ error: "User not found" }, { status: 404 })
     }
 
-    // Log admin action
-    await sql`
-      INSERT INTO admin_logs (admin_user_id, action, target_type, target_id, details)
-      VALUES (
-        ${user.id}, 
-        'update_user_plan', 
-        'user', 
-        ${userId}, 
-        ${JSON.stringify({ old_plan: null, new_plan: planType })}
-      )
-    `
+    console.log("👥 [ADMIN USERS] User plan updated:", userId, "->", planType)
 
     return NextResponse.json({
       success: true,
-      user: result[0],
-      message: "User plan updated successfully",
+      message: `User plan updated to ${planType}`,
+      user: {
+        id: updatedUser[0].id,
+        email: updatedUser[0].email,
+        firstName: updatedUser[0].first_name,
+        lastName: updatedUser[0].last_name,
+        plan: updatedUser[0].plan_type,
+      },
     })
   } catch (error) {
-    console.error("Admin update user plan API error:", error)
+    console.error("❌ [ADMIN USERS] Update plan error:", error)
     return NextResponse.json(
       {
         error: "Failed to update user plan",
