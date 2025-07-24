@@ -1,37 +1,33 @@
-import { NextResponse } from "next/server"
-import { getDb } from "@/lib/db"
+import { type NextRequest, NextResponse } from "next/server"
+import { neon } from "@neondatabase/serverless"
+
+export const dynamic = "force-dynamic"
+
+const sql = neon(process.env.DATABASE_URL!)
 
 export async function GET() {
   try {
-    const sql = getDb()
+    console.log("📋 [DATABASE TEST] Fetching records...")
 
-    // Ensure test table exists
-    await sql`
-      CREATE TABLE IF NOT EXISTS test_records (
-        id SERIAL PRIMARY KEY,
-        name VARCHAR(255) NOT NULL,
-        email VARCHAR(255) NOT NULL,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      )
-    `
-
-    // Get all records
     const records = await sql`
-      SELECT id, name, email, created_at
-      FROM test_records
+      SELECT id, name, created_at 
+      FROM test_records 
       ORDER BY created_at DESC
     `
 
+    console.log(`✅ [DATABASE TEST] Found ${records.length} records`)
+
     return NextResponse.json({
       success: true,
-      records: records,
+      records,
       count: records.length,
     })
   } catch (error) {
-    console.error("❌ Error fetching test records:", error)
+    console.error("❌ [DATABASE TEST] Fetch failed:", error)
+
     return NextResponse.json(
       {
-        error: "Failed to fetch test records",
+        error: "Failed to fetch records",
         details: error instanceof Error ? error.message : "Unknown error",
       },
       { status: 500 },
@@ -39,32 +35,24 @@ export async function GET() {
   }
 }
 
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
   try {
-    const { name, email } = await request.json()
+    const { name } = await request.json()
 
-    if (!name || !email) {
-      return NextResponse.json({ error: "Name and email are required" }, { status: 400 })
+    if (!name || typeof name !== "string") {
+      return NextResponse.json({ error: "Name is required and must be a string" }, { status: 400 })
     }
 
-    const sql = getDb()
-
-    // Ensure test table exists
-    await sql`
-      CREATE TABLE IF NOT EXISTS test_records (
-        id SERIAL PRIMARY KEY,
-        name VARCHAR(255) NOT NULL,
-        email VARCHAR(255) NOT NULL,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      )
-    `
+    console.log(`➕ [DATABASE TEST] Creating record with name: ${name}`)
 
     // Insert new record
     const result = await sql`
-      INSERT INTO test_records (name, email)
-      VALUES (${name}, ${email})
-      RETURNING id, name, email, created_at
+      INSERT INTO test_records (name)
+      VALUES (${name})
+      RETURNING id, name, created_at
     `
+
+    console.log("✅ [DATABASE TEST] Record created successfully!")
 
     return NextResponse.json({
       success: true,
@@ -72,10 +60,11 @@ export async function POST(request: Request) {
       record: result[0],
     })
   } catch (error) {
-    console.error("❌ Error creating test record:", error)
+    console.error("❌ [DATABASE TEST] Create failed:", error)
+
     return NextResponse.json(
       {
-        error: "Failed to create test record",
+        error: "Failed to create record",
         details: error instanceof Error ? error.message : "Unknown error",
       },
       { status: 500 },

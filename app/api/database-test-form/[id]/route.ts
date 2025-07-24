@@ -13,28 +13,29 @@ export async function DELETE(request: NextRequest, { params }: { params: { id: s
       return NextResponse.json({ error: "Invalid ID" }, { status: 400 })
     }
 
-    console.log(`🗑️ [DELETE TEST RECORD] Deleting record ID: ${id}`)
+    console.log(`🗑️ [DATABASE TEST] Deleting record ID: ${id}`)
 
     // Delete the record
     const result = await sql`
-      DELETE FROM database_test_records 
+      DELETE FROM test_records 
       WHERE id = ${id}
-      RETURNING id, name, description
+      RETURNING id, name
     `
 
     if (result.length === 0) {
       return NextResponse.json({ error: "Record not found" }, { status: 404 })
     }
 
-    console.log(`✅ [DELETE TEST RECORD] Deleted record: ${result[0].name}`)
+    console.log("✅ [DATABASE TEST] Record deleted successfully!")
 
     return NextResponse.json({
       success: true,
       message: "Record deleted successfully",
-      deletedRecord: result[0],
+      deleted: result[0],
     })
   } catch (error) {
-    console.error("❌ [DELETE TEST RECORD] Error:", error)
+    console.error("❌ [DATABASE TEST] Delete failed:", error)
+
     return NextResponse.json(
       {
         error: "Failed to delete record",
@@ -48,36 +49,31 @@ export async function DELETE(request: NextRequest, { params }: { params: { id: s
 export async function PUT(request: NextRequest, { params }: { params: { id: string } }) {
   try {
     const id = Number.parseInt(params.id)
+    const { name } = await request.json()
 
     if (isNaN(id)) {
       return NextResponse.json({ error: "Invalid ID" }, { status: 400 })
     }
 
-    const { name, description, test_data } = await request.json()
-
-    if (!name?.trim()) {
+    if (!name || typeof name !== "string") {
       return NextResponse.json({ error: "Name is required" }, { status: 400 })
     }
 
-    console.log(`✏️ [UPDATE TEST RECORD] Updating record ID: ${id}`)
+    console.log(`✏️ [DATABASE TEST] Updating record ID: ${id} with name: ${name}`)
 
     // Update the record
     const result = await sql`
-      UPDATE database_test_records 
-      SET 
-        name = ${name.trim()},
-        description = ${description || null},
-        test_data = ${test_data || null},
-        updated_at = CURRENT_TIMESTAMP
+      UPDATE test_records 
+      SET name = ${name}
       WHERE id = ${id}
-      RETURNING id, name, description, test_data, created_at, updated_at
+      RETURNING id, name, created_at
     `
 
     if (result.length === 0) {
       return NextResponse.json({ error: "Record not found" }, { status: 404 })
     }
 
-    console.log(`✅ [UPDATE TEST RECORD] Updated record: ${result[0].name}`)
+    console.log("✅ [DATABASE TEST] Record updated successfully!")
 
     return NextResponse.json({
       success: true,
@@ -85,7 +81,8 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
       record: result[0],
     })
   } catch (error) {
-    console.error("❌ [UPDATE TEST RECORD] Error:", error)
+    console.error("❌ [DATABASE TEST] Update failed:", error)
+
     return NextResponse.json(
       {
         error: "Failed to update record",
