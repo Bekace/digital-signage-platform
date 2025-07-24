@@ -1,78 +1,82 @@
-import { NextResponse } from "next/server"
-import { getDb } from "@/lib/db"
+import { type NextRequest, NextResponse } from "next/server"
+import { neon } from "@neondatabase/serverless"
 
-export async function GET() {
+export const dynamic = "force-dynamic"
+
+const sql = neon(process.env.DATABASE_URL!)
+
+export async function GET(request: NextRequest) {
   try {
-    const sql = getDb()
+    console.log("🗺️ [DATABASE STRUCTURE] Fetching database structure...")
 
-    console.log("🔍 Fetching database structure...")
-
-    // Get table structure
-    const structure = await sql`
-      SELECT 
-        table_name,
-        column_name,
-        data_type,
-        is_nullable,
-        column_default
-      FROM information_schema.columns
-      WHERE table_schema = 'public'
-      ORDER BY table_name, ordinal_position
-    `
-
-    // Get table row counts
+    // Get all tables in the public schema
     const tables = await sql`
       SELECT table_name
-      FROM information_schema.tables
+      FROM information_schema.tables 
       WHERE table_schema = 'public'
-      AND table_type = 'BASE TABLE'
+      ORDER BY table_name
     `
 
-    const stats = []
+    console.log(`Found ${tables.length} tables`)
+
+    const tableDetails = []
+    let totalColumns = 0
+    let totalRows = 0
+
     for (const table of tables) {
-      try {
-        const result = await sql`
-          SELECT COUNT(*) as count
-          FROM ${sql(table.table_name)}
-        `
-        stats.push({
-          table_name: table.table_name,
-          row_count: Number.parseInt(result[0].count),
-        })
-      } catch (error) {
-        console.warn(`Could not get count for table ${table.table_name}:`, error)
-        stats.push({
-          table_name: table.table_name,
-          row_count: 0,
-        })
-      }
+      const tableName = table.table_name
+
+      // Get column information
+      const columns = await sql`
+        SELECT 
+          column_name,
+          data_type,
+          is_nullable,
+          column_default
+        FROM information_schema.columns
+        WHERE table_name = ${tableName}
+        ORDER BY ordinal_position
+      `
+
+      // Get row count
+      const rowCountResult = await sql`
+        SELECT COUNT(*) as count FROM ${sql(tableName)}
+      `
+      const rowCount = Number.parseInt(rowCountResult[0].count)
+
+      totalColumns += columns.length
+      totalRows += rowCount
+
+      tableDetails.push({
+        table_name: tableName,
+        column_count: columns.length,
+        row_count: rowCount,
+        columns: columns.map((col) => ({
+          column_name: col.column_name,
+          data_type: col.data_type,
+          is_nullable: col.is_nullable,
+          column_default: col.column_default,
+        })),
+      })
+
+      console.log(`✅ ${tableName}: ${columns.length} columns, ${rowCount} rows`)
     }
 
-    // Group structure by table
-    const groupedStructure = structure.reduce((acc, row) => {
-      if (!acc[row.table_name]) {
-        acc[row.table_name] = []
-      }
-      acc[row.table_name].push(row)
-      return acc
-    }, {})
-
-    console.log(`✅ Found ${Object.keys(groupedStructure).length} tables`)
+    console.log(`📊 Total: ${tables.length} tables, ${totalColumns} columns, ${totalRows} rows`)
 
     return NextResponse.json({
       success: true,
-      structure: groupedStructure,
-      stats: stats,
-      summary: {
-        totalTables: Object.keys(groupedStructure).length,
-        tablesWithData: stats.filter((s) => s.row_count > 0).length,
-        totalRecords: stats.reduce((sum, s) => sum + s.row_count, 0),
-      },
+      tables: tableDetails,
+      totalTables: tables.length,
+      totalColumns,
+      totalRows,
+      timestamp: new Date().toISOString(),
     })
   } catch (error) {
-    console.error("❌ Error fetching database structure:", error)
+    console.error("❌ [DATABASE STRUCTURE] Error:", error)
     return NextResponse.json(
       {
+        success: false,
         error: "Failed to fetch database structure",
         details: error instanceof Error ? error.message : "Unknown error",
       },

@@ -5,67 +5,71 @@ import type React from "react"
 import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
+import { Textarea } from "@/components/ui/textarea"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
-import { Loader2, Database, Plus, Trash2, Edit, CheckCircle, AlertCircle, Wifi, WifiOff } from "lucide-react"
+import { Loader2, Database, Plus, Trash2, Edit, CheckCircle, AlertCircle, RefreshCw, Wifi, WifiOff } from "lucide-react"
 
 interface TestRecord {
   id: number
   name: string
-  email: string
+  description: string | null
+  test_data: string | null
   created_at: string
+  updated_at?: string
 }
 
 interface ConnectionStatus {
-  connected: boolean
-  database: string
-  host: string
+  success: boolean
+  status: string
+  database?: string
+  user?: string
+  tableCount?: number
   timestamp: string
 }
 
 export default function DatabaseTestFormPage() {
-  const [loading, setLoading] = useState(false)
   const [records, setRecords] = useState<TestRecord[]>([])
+  const [loading, setLoading] = useState(true)
+  const [submitting, setSubmitting] = useState(false)
   const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
 
   // Form state
-  const [name, setName] = useState("")
-  const [email, setEmail] = useState("")
+  const [formData, setFormData] = useState({
+    name: "",
+    description: "",
+    test_data: "",
+  })
+
+  // Edit state
   const [editingId, setEditingId] = useState<number | null>(null)
 
-  useEffect(() => {
-    checkConnection()
-    fetchRecords()
-  }, [])
-
-  const checkConnection = async () => {
+  const fetchConnectionStatus = async () => {
     try {
       const response = await fetch("/api/database-test-form/connection")
       const data = await response.json()
       setConnectionStatus(data)
     } catch (err) {
-      console.error("Connection check failed:", err)
+      console.error("Connection test failed:", err)
       setConnectionStatus({
-        connected: false,
-        database: "Unknown",
-        host: "Unknown",
+        success: false,
+        status: "error",
         timestamp: new Date().toISOString(),
       })
     }
   }
 
   const fetchRecords = async () => {
-    setLoading(true)
     try {
       const response = await fetch("/api/database-test-form")
       const data = await response.json()
 
       if (response.ok) {
         setRecords(data.records || [])
+        setError(null)
       } else {
         setError(data.error || "Failed to fetch records")
       }
@@ -79,12 +83,13 @@ export default function DatabaseTestFormPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!name.trim() || !email.trim()) {
-      setError("Name and email are required")
+
+    if (!formData.name.trim()) {
+      setError("Name is required")
       return
     }
 
-    setLoading(true)
+    setSubmitting(true)
     setError(null)
     setSuccess(null)
 
@@ -98,15 +103,14 @@ export default function DatabaseTestFormPage() {
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ name, email }),
+        body: JSON.stringify(formData),
       })
 
       const data = await response.json()
 
       if (response.ok) {
-        setSuccess(editingId ? "Record updated successfully!" : "Record created successfully!")
-        setName("")
-        setEmail("")
+        setSuccess(data.message)
+        setFormData({ name: "", description: "", test_data: "" })
         setEditingId(null)
         fetchRecords()
       } else {
@@ -116,13 +120,16 @@ export default function DatabaseTestFormPage() {
       setError("Network error: Failed to save record")
       console.error("Error:", err)
     } finally {
-      setLoading(false)
+      setSubmitting(false)
     }
   }
 
   const handleEdit = (record: TestRecord) => {
-    setName(record.name)
-    setEmail(record.email)
+    setFormData({
+      name: record.name,
+      description: record.description || "",
+      test_data: record.test_data || "",
+    })
     setEditingId(record.id)
     setError(null)
     setSuccess(null)
@@ -130,10 +137,6 @@ export default function DatabaseTestFormPage() {
 
   const handleDelete = async (id: number) => {
     if (!confirm("Are you sure you want to delete this record?")) return
-
-    setLoading(true)
-    setError(null)
-    setSuccess(null)
 
     try {
       const response = await fetch(`/api/database-test-form/${id}`, {
@@ -143,7 +146,7 @@ export default function DatabaseTestFormPage() {
       const data = await response.json()
 
       if (response.ok) {
-        setSuccess("Record deleted successfully!")
+        setSuccess(data.message)
         fetchRecords()
       } else {
         setError(data.error || "Failed to delete record")
@@ -151,22 +154,25 @@ export default function DatabaseTestFormPage() {
     } catch (err) {
       setError("Network error: Failed to delete record")
       console.error("Error:", err)
-    } finally {
-      setLoading(false)
     }
   }
 
   const cancelEdit = () => {
-    setName("")
-    setEmail("")
     setEditingId(null)
+    setFormData({ name: "", description: "", test_data: "" })
     setError(null)
     setSuccess(null)
   }
 
+  useEffect(() => {
+    fetchConnectionStatus()
+    fetchRecords()
+  }, [])
+
   return (
     <div className="min-h-screen bg-gray-50 py-12">
       <div className="max-w-4xl mx-auto px-4">
+        {/* Header */}
         <div className="mb-8">
           <div className="flex items-center space-x-2 mb-4">
             <Database className="h-8 w-8 text-blue-600" />
@@ -176,203 +182,210 @@ export default function DatabaseTestFormPage() {
         </div>
 
         {/* Connection Status */}
-        <Card className="mb-8">
+        <Card className="mb-6">
           <CardHeader>
             <CardTitle className="flex items-center">
-              {connectionStatus?.connected ? (
+              {connectionStatus?.success ? (
                 <Wifi className="h-5 w-5 text-green-600 mr-2" />
               ) : (
                 <WifiOff className="h-5 w-5 text-red-600 mr-2" />
               )}
-              Database Connection Status
+              Database Connection
             </CardTitle>
           </CardHeader>
           <CardContent>
             {connectionStatus ? (
               <div className="space-y-2">
                 <div className="flex items-center space-x-2">
-                  <Badge variant={connectionStatus.connected ? "default" : "destructive"}>
-                    {connectionStatus.connected ? "Connected" : "Disconnected"}
+                  <Badge variant={connectionStatus.success ? "default" : "destructive"}>
+                    {connectionStatus.status}
                   </Badge>
-                  <span className="text-sm text-gray-600">
-                    Last checked: {new Date(connectionStatus.timestamp).toLocaleString()}
-                  </span>
+                  {connectionStatus.database && <Badge variant="outline">DB: {connectionStatus.database}</Badge>}
+                  {connectionStatus.tableCount && <Badge variant="outline">{connectionStatus.tableCount} tables</Badge>}
                 </div>
-                <div className="text-sm space-y-1">
-                  <p>
-                    <strong>Database:</strong> {connectionStatus.database}
-                  </p>
-                  <p>
-                    <strong>Host:</strong> {connectionStatus.host}
-                  </p>
-                </div>
+                <p className="text-sm text-gray-500">
+                  Last checked: {new Date(connectionStatus.timestamp).toLocaleString()}
+                </p>
               </div>
             ) : (
               <div className="flex items-center">
                 <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                Checking connection...
+                Testing connection...
               </div>
             )}
           </CardContent>
         </Card>
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-          {/* Form */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center">
-                <Plus className="h-5 w-5 mr-2" />
-                {editingId ? "Edit Record" : "Create New Record"}
-              </CardTitle>
-              <CardDescription>
-                {editingId ? "Update the existing test record" : "Add a new test record to the database"}
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <form onSubmit={handleSubmit} className="space-y-4">
-                <div>
-                  <Label htmlFor="name">Name</Label>
-                  <Input
-                    id="name"
-                    type="text"
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    placeholder="Enter name"
-                    required
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="email">Email</Label>
-                  <Input
-                    id="email"
-                    type="email"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    placeholder="Enter email"
-                    required
-                  />
-                </div>
-                <div className="flex space-x-2">
-                  <Button type="submit" disabled={loading} className="flex-1">
-                    {loading ? (
-                      <>
-                        <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                        {editingId ? "Updating..." : "Creating..."}
-                      </>
-                    ) : (
-                      <>
-                        {editingId ? <Edit className="h-4 w-4 mr-2" /> : <Plus className="h-4 w-4 mr-2" />}
-                        {editingId ? "Update Record" : "Create Record"}
-                      </>
-                    )}
-                  </Button>
-                  {editingId && (
-                    <Button type="button" variant="outline" onClick={cancelEdit}>
-                      Cancel
-                    </Button>
+        {/* Form */}
+        <Card className="mb-6">
+          <CardHeader>
+            <CardTitle className="flex items-center">
+              <Plus className="h-5 w-5 mr-2" />
+              {editingId ? "Edit Record" : "Create Test Record"}
+            </CardTitle>
+            <CardDescription>
+              {editingId ? "Update the existing record" : "Add a new test record to the database"}
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <form onSubmit={handleSubmit} className="space-y-4">
+              <div>
+                <label htmlFor="name" className="block text-sm font-medium mb-1">
+                  Name *
+                </label>
+                <Input
+                  id="name"
+                  value={formData.name}
+                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                  placeholder="Enter a name"
+                  required
+                />
+              </div>
+
+              <div>
+                <label htmlFor="description" className="block text-sm font-medium mb-1">
+                  Description
+                </label>
+                <Textarea
+                  id="description"
+                  value={formData.description}
+                  onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                  placeholder="Enter a description (optional)"
+                  rows={3}
+                />
+              </div>
+
+              <div>
+                <label htmlFor="test_data" className="block text-sm font-medium mb-1">
+                  Test Data
+                </label>
+                <Textarea
+                  id="test_data"
+                  value={formData.test_data}
+                  onChange={(e) => setFormData({ ...formData, test_data: e.target.value })}
+                  placeholder="Enter any test data (optional)"
+                  rows={3}
+                />
+              </div>
+
+              <div className="flex space-x-2">
+                <Button type="submit" disabled={submitting}>
+                  {submitting ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                      {editingId ? "Updating..." : "Creating..."}
+                    </>
+                  ) : (
+                    <>
+                      {editingId ? <Edit className="h-4 w-4 mr-2" /> : <Plus className="h-4 w-4 mr-2" />}
+                      {editingId ? "Update Record" : "Create Record"}
+                    </>
                   )}
-                </div>
-              </form>
+                </Button>
 
-              {error && (
-                <Alert variant="destructive" className="mt-4">
-                  <AlertCircle className="h-4 w-4" />
-                  <AlertDescription>{error}</AlertDescription>
-                </Alert>
-              )}
+                {editingId && (
+                  <Button type="button" variant="outline" onClick={cancelEdit}>
+                    Cancel
+                  </Button>
+                )}
 
-              {success && (
-                <Alert className="mt-4">
-                  <CheckCircle className="h-4 w-4" />
-                  <AlertDescription>{success}</AlertDescription>
-                </Alert>
-              )}
-            </CardContent>
-          </Card>
+                <Button type="button" variant="outline" onClick={fetchRecords}>
+                  <RefreshCw className="h-4 w-4 mr-2" />
+                  Refresh
+                </Button>
+              </div>
+            </form>
+          </CardContent>
+        </Card>
 
-          {/* Records List */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center justify-between">
-                <div className="flex items-center">
-                  <Database className="h-5 w-5 mr-2" />
-                  Test Records
-                </div>
-                <Badge variant="secondary">{records.length} records</Badge>
-              </CardTitle>
-              <CardDescription>All test records in the database</CardDescription>
-            </CardHeader>
-            <CardContent>
-              {loading && records.length === 0 ? (
-                <div className="flex items-center justify-center py-8">
-                  <Loader2 className="h-6 w-6 animate-spin mr-2" />
-                  Loading records...
-                </div>
-              ) : records.length === 0 ? (
-                <div className="text-center py-8 text-gray-500">No records found. Create your first test record!</div>
-              ) : (
-                <div className="space-y-3">
-                  {records.map((record) => (
-                    <div key={record.id} className="flex items-center justify-between p-3 border rounded-lg">
-                      <div>
-                        <div className="font-medium">{record.name}</div>
-                        <div className="text-sm text-gray-600">{record.email}</div>
-                        <div className="text-xs text-gray-400">
-                          ID: {record.id} • Created: {new Date(record.created_at).toLocaleString()}
+        {/* Alerts */}
+        {error && (
+          <Alert variant="destructive" className="mb-6">
+            <AlertCircle className="h-4 w-4" />
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
+        )}
+
+        {success && (
+          <Alert className="mb-6">
+            <CheckCircle className="h-4 w-4" />
+            <AlertDescription>{success}</AlertDescription>
+          </Alert>
+        )}
+
+        {/* Records List */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center justify-between">
+              <span>Test Records ({records.length})</span>
+              <Button variant="outline" size="sm" onClick={fetchRecords} disabled={loading}>
+                <RefreshCw className="h-4 w-4 mr-2" />
+                Refresh
+              </Button>
+            </CardTitle>
+            <CardDescription>All test records in the database</CardDescription>
+          </CardHeader>
+          <CardContent>
+            {loading ? (
+              <div className="flex items-center justify-center py-8">
+                <Loader2 className="h-6 w-6 animate-spin mr-2" />
+                Loading records...
+              </div>
+            ) : records.length === 0 ? (
+              <div className="text-center py-8 text-gray-500">
+                No test records found. Create one above to get started.
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {records.map((record) => (
+                  <div
+                    key={record.id}
+                    className={`p-4 border rounded-lg ${
+                      editingId === record.id ? "border-blue-300 bg-blue-50" : "border-gray-200"
+                    }`}
+                  >
+                    <div className="flex items-start justify-between">
+                      <div className="flex-1">
+                        <div className="flex items-center space-x-2 mb-2">
+                          <h3 className="font-medium">{record.name}</h3>
+                          <Badge variant="outline">ID: {record.id}</Badge>
+                        </div>
+
+                        {record.description && <p className="text-gray-600 mb-2">{record.description}</p>}
+
+                        {record.test_data && (
+                          <div className="mb-2">
+                            <label className="text-xs font-medium text-gray-500">Test Data:</label>
+                            <p className="text-sm bg-gray-100 p-2 rounded mt-1">{record.test_data}</p>
+                          </div>
+                        )}
+
+                        <div className="text-xs text-gray-500">
+                          Created: {new Date(record.created_at).toLocaleString()}
+                          {record.updated_at && record.updated_at !== record.created_at && (
+                            <span className="ml-4">Updated: {new Date(record.updated_at).toLocaleString()}</span>
+                          )}
                         </div>
                       </div>
-                      <div className="flex space-x-2">
-                        <Button size="sm" variant="outline" onClick={() => handleEdit(record)} disabled={loading}>
+
+                      <div className="flex space-x-2 ml-4">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleEdit(record)}
+                          disabled={editingId === record.id}
+                        >
                           <Edit className="h-4 w-4" />
                         </Button>
-                        <Button size="sm" variant="outline" onClick={() => handleDelete(record.id)} disabled={loading}>
+                        <Button variant="outline" size="sm" onClick={() => handleDelete(record.id)}>
                           <Trash2 className="h-4 w-4" />
                         </Button>
                       </div>
                     </div>
-                  ))}
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* Test Instructions */}
-        <Card className="mt-8">
-          <CardHeader>
-            <CardTitle>Test Instructions</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              <div className="p-4 bg-blue-50 rounded-lg">
-                <h4 className="font-medium text-blue-900 mb-2">What This Tests</h4>
-                <ul className="text-sm text-blue-800 space-y-1">
-                  <li>
-                    • <strong>Database Connection:</strong> Verifies your DATABASE_URL is working
-                  </li>
-                  <li>
-                    • <strong>Table Creation:</strong> Creates a test_records table if it doesn't exist
-                  </li>
-                  <li>
-                    • <strong>CRUD Operations:</strong> Create, Read, Update, Delete functionality
-                  </li>
-                  <li>
-                    • <strong>Real-time Updates:</strong> Form updates the list immediately
-                  </li>
-                </ul>
+                  </div>
+                ))}
               </div>
-
-              <div className="p-4 bg-green-50 rounded-lg">
-                <h4 className="font-medium text-green-900 mb-2">Success Indicators</h4>
-                <ul className="text-sm text-green-800 space-y-1">
-                  <li>• Connection status shows "Connected"</li>
-                  <li>• You can create new records</li>
-                  <li>• Records appear in the list immediately</li>
-                  <li>• You can edit and delete records</li>
-                  <li>• Check your Neon dashboard to see the test_records table</li>
-                </ul>
-              </div>
-            </div>
+            )}
           </CardContent>
         </Card>
       </div>

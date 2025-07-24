@@ -1,43 +1,43 @@
-import { NextResponse } from "next/server"
+import { type NextRequest, NextResponse } from "next/server"
 import { neon } from "@neondatabase/serverless"
 
-export async function PUT(request: Request, { params }: { params: { id: string } }) {
-  try {
-    const { name, email } = await request.json()
-    const id = Number.parseInt(params.id)
+export const dynamic = "force-dynamic"
 
-    if (!name || !email) {
-      return NextResponse.json({ error: "Name and email are required" }, { status: 400 })
-    }
+const sql = neon(process.env.DATABASE_URL!)
+
+export async function DELETE(request: NextRequest, { params }: { params: { id: string } }) {
+  try {
+    const id = Number.parseInt(params.id)
 
     if (isNaN(id)) {
       return NextResponse.json({ error: "Invalid ID" }, { status: 400 })
     }
 
-    const sql = neon(process.env.DATABASE_URL!)
+    console.log(`🗑️ [DELETE TEST RECORD] Deleting record ID: ${id}`)
 
-    // Update the record
+    // Delete the record
     const result = await sql`
-      UPDATE test_records 
-      SET name = ${name}, email = ${email}
+      DELETE FROM database_test_records 
       WHERE id = ${id}
-      RETURNING id, name, email, created_at
+      RETURNING id, name, description
     `
 
     if (result.length === 0) {
       return NextResponse.json({ error: "Record not found" }, { status: 404 })
     }
 
+    console.log(`✅ [DELETE TEST RECORD] Deleted record: ${result[0].name}`)
+
     return NextResponse.json({
       success: true,
-      message: "Record updated successfully",
-      record: result[0],
+      message: "Record deleted successfully",
+      deletedRecord: result[0],
     })
   } catch (error) {
-    console.error("❌ Error updating test record:", error)
+    console.error("❌ [DELETE TEST RECORD] Error:", error)
     return NextResponse.json(
       {
-        error: "Failed to update test record",
+        error: "Failed to delete record",
         details: error instanceof Error ? error.message : "Unknown error",
       },
       { status: 500 },
@@ -45,7 +45,7 @@ export async function PUT(request: Request, { params }: { params: { id: string }
   }
 }
 
-export async function DELETE(request: Request, { params }: { params: { id: string } }) {
+export async function PUT(request: NextRequest, { params }: { params: { id: string } }) {
   try {
     const id = Number.parseInt(params.id)
 
@@ -53,29 +53,42 @@ export async function DELETE(request: Request, { params }: { params: { id: strin
       return NextResponse.json({ error: "Invalid ID" }, { status: 400 })
     }
 
-    const sql = neon(process.env.DATABASE_URL!)
+    const { name, description, test_data } = await request.json()
 
-    // Delete the record
+    if (!name?.trim()) {
+      return NextResponse.json({ error: "Name is required" }, { status: 400 })
+    }
+
+    console.log(`✏️ [UPDATE TEST RECORD] Updating record ID: ${id}`)
+
+    // Update the record
     const result = await sql`
-      DELETE FROM test_records 
+      UPDATE database_test_records 
+      SET 
+        name = ${name.trim()},
+        description = ${description || null},
+        test_data = ${test_data || null},
+        updated_at = CURRENT_TIMESTAMP
       WHERE id = ${id}
-      RETURNING id, name, email
+      RETURNING id, name, description, test_data, created_at, updated_at
     `
 
     if (result.length === 0) {
       return NextResponse.json({ error: "Record not found" }, { status: 404 })
     }
 
+    console.log(`✅ [UPDATE TEST RECORD] Updated record: ${result[0].name}`)
+
     return NextResponse.json({
       success: true,
-      message: "Record deleted successfully",
+      message: "Record updated successfully",
       record: result[0],
     })
   } catch (error) {
-    console.error("❌ Error deleting test record:", error)
+    console.error("❌ [UPDATE TEST RECORD] Error:", error)
     return NextResponse.json(
       {
-        error: "Failed to delete test record",
+        error: "Failed to update record",
         details: error instanceof Error ? error.message : "Unknown error",
       },
       { status: 500 },
