@@ -12,7 +12,7 @@ export async function POST(request: NextRequest) {
     const email = "bekace.multimedia@gmail.com"
     console.log(`Looking for user: ${email}`)
 
-    // Get the user ID - EXACT same pattern as database-test-form
+    // Get the user ID - NO is_admin column reference
     const users = await sql`
       SELECT id, email, first_name, last_name 
       FROM users 
@@ -79,37 +79,13 @@ export async function POST(request: NextRequest) {
       console.log(`✨ Created new admin record for user ID: ${user.id}`)
     }
 
-    // Check if is_admin column exists and update it
-    try {
-      const columns = await sql`
-        SELECT column_name 
-        FROM information_schema.columns 
-        WHERE table_name = 'users' 
-        AND column_name = 'is_admin'
-      `
-
-      if (columns.length > 0) {
-        await sql`
-          UPDATE users 
-          SET is_admin = true 
-          WHERE id = ${user.id}
-        `
-        console.log(`🔄 Updated is_admin flag in users table for user ID: ${user.id}`)
-      } else {
-        console.log("ℹ️  is_admin column doesn't exist in users table")
-      }
-    } catch (error) {
-      console.log("ℹ️  Could not check/update is_admin column:", error)
-    }
-
-    // Verify the result
+    // Verify the result - NO is_admin column reference
     const verification = await sql`
       SELECT 
         u.id,
         u.email,
         u.first_name,
         u.last_name,
-        COALESCE(u.is_admin, false) as is_admin_flag,
         au.role,
         au.permissions,
         au.created_at as admin_created_at
@@ -119,6 +95,9 @@ export async function POST(request: NextRequest) {
     `
 
     const result = verification[0]
+
+    // Determine admin status from admin_users table
+    const isAdmin = result.role !== null && result.role !== undefined
 
     console.log("✅ [MAKE SUPER ADMIN] Success!")
 
@@ -130,7 +109,7 @@ export async function POST(request: NextRequest) {
         email: result.email,
         firstName: result.first_name,
         lastName: result.last_name,
-        isAdminFlag: result.is_admin_flag,
+        isAdminFlag: isAdmin,
         adminRole: result.role,
         adminCreated: result.admin_created_at,
         permissions: result.permissions,

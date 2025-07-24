@@ -68,7 +68,7 @@ export async function getCurrentUser(request?: NextRequest): Promise<User | null
       return null
     }
 
-    // Get user from database WITH admin information
+    // Get user from database WITH admin information - NO is_admin column reference
     const users = await sql`
       SELECT 
         u.id, 
@@ -78,7 +78,6 @@ export async function getCurrentUser(request?: NextRequest): Promise<User | null
         u.company, 
         u.plan, 
         u.created_at,
-        COALESCE(u.is_admin, false) as is_admin,
         au.role as admin_role,
         au.permissions as admin_permissions
       FROM users u
@@ -93,8 +92,8 @@ export async function getCurrentUser(request?: NextRequest): Promise<User | null
 
     const user = users[0]
 
-    // Set is_admin to true if user has admin_role
-    const isAdmin = user.is_admin || user.admin_role !== null
+    // Determine admin status from admin_users table only
+    const isAdmin = user.admin_role !== null && user.admin_role !== undefined
 
     return {
       ...user,
