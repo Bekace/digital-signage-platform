@@ -1,14 +1,15 @@
 import { NextResponse } from "next/server"
 import { neon } from "@neondatabase/serverless"
 
+const sql = neon(process.env.DATABASE_URL!)
+
 export async function POST() {
   try {
-    const sql = neon(process.env.DATABASE_URL!)
+    console.log("🔧 [SUPER ADMIN] Starting super admin creation...")
+
     const targetEmail = "bekace.multimedia@gmail.com"
 
-    console.log("🔍 [SUPER ADMIN] Starting process for:", targetEmail)
-
-    // Find the user
+    // Find the user by email
     const users = await sql`
       SELECT id, email, first_name, last_name 
       FROM users 
@@ -17,11 +18,8 @@ export async function POST() {
     `
 
     if (users.length === 0) {
-      return NextResponse.json({
-        success: false,
-        error: "User not found",
-        email: targetEmail,
-      })
+      console.log("❌ [SUPER ADMIN] User not found")
+      return NextResponse.json({ success: false, message: "User not found" }, { status: 404 })
     }
 
     const user = users[0]
@@ -35,55 +33,62 @@ export async function POST() {
       LIMIT 1
     `
 
-    const superAdminPermissions = {
-      users: { create: true, read: true, update: true, delete: true },
-      media: { create: true, read: true, update: true, delete: true },
-      playlists: { create: true, read: true, update: true, delete: true },
-      screens: { create: true, read: true, update: true, delete: true },
-      devices: { create: true, read: true, update: true, delete: true },
-      plans: { create: true, read: true, update: true, delete: true },
-      features: { create: true, read: true, update: true, delete: true },
-      admin: { create: true, read: true, update: true, delete: true },
-      system: { database: true, debug: true, maintenance: true },
-    }
-
     let adminResult
     if (existingAdmin.length > 0) {
       // Update existing admin record
+      console.log("🔄 [SUPER ADMIN] Updating existing admin record...")
       adminResult = await sql`
         UPDATE admin_users 
         SET 
           role = 'super_admin',
-          permissions = ${JSON.stringify(superAdminPermissions)}
+          permissions = ${JSON.stringify({
+            users: { create: true, read: true, update: true, delete: true },
+            plans: { create: true, read: true, update: true, delete: true },
+            features: { create: true, read: true, update: true, delete: true },
+            media: { create: true, read: true, update: true, delete: true },
+            playlists: { create: true, read: true, update: true, delete: true },
+            devices: { create: true, read: true, update: true, delete: true },
+            system: { database: true, debug: true, maintenance: true },
+          })}
         WHERE user_id = ${user.id}
-        RETURNING id, role, permissions, created_at
+        RETURNING id, role, permissions
       `
-      console.log("✅ [SUPER ADMIN] Updated existing admin record")
     } else {
       // Create new admin record
+      console.log("➕ [SUPER ADMIN] Creating new admin record...")
       adminResult = await sql`
         INSERT INTO admin_users (user_id, role, permissions)
-        VALUES (${user.id}, 'super_admin', ${JSON.stringify(superAdminPermissions)})
-        RETURNING id, role, permissions, created_at
+        VALUES (
+          ${user.id},
+          'super_admin',
+          ${JSON.stringify({
+            users: { create: true, read: true, update: true, delete: true },
+            plans: { create: true, read: true, update: true, delete: true },
+            features: { create: true, read: true, update: true, delete: true },
+            media: { create: true, read: true, update: true, delete: true },
+            playlists: { create: true, read: true, update: true, delete: true },
+            devices: { create: true, read: true, update: true, delete: true },
+            system: { database: true, debug: true, maintenance: true },
+          })}
+        )
+        RETURNING id, role, permissions
       `
-      console.log("✅ [SUPER ADMIN] Created new admin record")
     }
 
-    // Verify the setup
-    const verification = await sql`
+    console.log("✅ [SUPER ADMIN] Admin record result:", adminResult)
+
+    // Verify the admin was created/updated
+    const verifyAdmin = await sql`
       SELECT 
-        u.id,
-        u.email,
-        u.first_name,
-        u.last_name,
-        au.role as admin_role,
-        au.permissions as admin_permissions,
-        au.created_at as admin_created_at
+        u.id, u.email, u.first_name, u.last_name,
+        au.role, au.permissions, au.created_at
       FROM users u
       JOIN admin_users au ON u.id = au.user_id
       WHERE u.id = ${user.id}
       LIMIT 1
     `
+
+    console.log("🔍 [SUPER ADMIN] Verification result:", verifyAdmin)
 
     return NextResponse.json({
       success: true,
@@ -92,18 +97,13 @@ export async function POST() {
         id: user.id,
         email: user.email,
         name: `${user.first_name} ${user.last_name}`,
-        adminRole: verification[0].admin_role,
-        adminPermissions: verification[0].admin_permissions,
-        adminCreated: verification[0].admin_created_at,
+        adminRole: verifyAdmin[0]?.role,
+        adminCreated: verifyAdmin[0]?.created_at,
+        permissions: verifyAdmin[0]?.permissions,
       },
-      action: existingAdmin.length > 0 ? "updated" : "created",
     })
   } catch (error) {
     console.error("❌ [SUPER ADMIN] Error:", error)
-    return NextResponse.json({
-      success: false,
-      error: "Failed to make user super admin",
-      details: error instanceof Error ? error.message : "Unknown error",
-    })
+    return NextResponse.json({ success: false, message: `Failed to make user super admin: ${error}` }, { status: 500 })
   }
 }

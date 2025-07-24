@@ -1,6 +1,7 @@
 "use client"
 
 import type React from "react"
+
 import { useState, useEffect } from "react"
 import { Home, Monitor, ImageIcon, Play, Settings, Shield, Menu, DollarSign, Users, Tag, Bug } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -36,50 +37,80 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
   const [isAdmin, setIsAdmin] = useState(false)
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [loading, setLoading] = useState(true)
+  const [userInfo, setUserInfo] = useState<any>(null)
 
   useEffect(() => {
+    // Check if user is admin - ENHANCED VERSION
     const checkAdminStatus = async () => {
       try {
-        // Get token from localStorage or cookies
-        const token =
-          localStorage.getItem("auth-token") ||
-          document.cookie
+        console.log("🔍 [DASHBOARD] Checking admin status...")
+
+        // Get token from multiple sources
+        let token = null
+
+        // Try localStorage first
+        if (typeof window !== "undefined") {
+          token = localStorage.getItem("auth-token")
+        }
+
+        // Try cookies as fallback
+        if (!token && typeof document !== "undefined") {
+          const cookieValue = document.cookie
             .split("; ")
             .find((row) => row.startsWith("auth-token="))
             ?.split("=")[1]
+          token = cookieValue
+        }
+
+        console.log("🔍 [DASHBOARD] Token found:", !!token)
 
         if (!token) {
-          console.log("🔍 [ADMIN CHECK] No token found")
+          console.log("🔍 [DASHBOARD] No token found, user not authenticated")
           setLoading(false)
           return
         }
 
         const response = await fetch("/api/user/profile", {
+          method: "GET",
           headers: {
             Authorization: `Bearer ${token}`,
             "Content-Type": "application/json",
           },
+          credentials: "include",
         })
+
+        console.log("🔍 [DASHBOARD] Profile response status:", response.status)
 
         if (response.ok) {
           const data = await response.json()
-          console.log("🔍 [ADMIN CHECK] Profile response:", data)
+          console.log("🔍 [DASHBOARD] Profile data received:", data)
 
-          // Check for admin status in multiple ways
+          setUserInfo(data.user)
+
+          // Check multiple ways to determine admin status
           const userIsAdmin = Boolean(
             data.user?.isAdmin ||
               data.user?.is_admin ||
               data.user?.adminRole === "super_admin" ||
-              data.user?.adminRole === "admin",
+              data.user?.admin_role === "super_admin" ||
+              data.user?.adminRole === "admin" ||
+              data.user?.admin_role === "admin",
           )
 
-          console.log("🔍 [ADMIN CHECK] Final admin status:", userIsAdmin)
+          console.log("🔍 [DASHBOARD] Admin status checks:", {
+            isAdmin: data.user?.isAdmin,
+            is_admin: data.user?.is_admin,
+            adminRole: data.user?.adminRole,
+            admin_role: data.user?.admin_role,
+            finalResult: userIsAdmin,
+          })
+
           setIsAdmin(userIsAdmin)
         } else {
-          console.log("🔍 [ADMIN CHECK] Profile request failed:", response.status)
+          console.error("🔍 [DASHBOARD] Profile request failed:", response.status, await response.text())
         }
       } catch (error) {
-        console.error("❌ [ADMIN CHECK] Error:", error)
+        console.error("❌ [DASHBOARD] Error checking admin status:", error)
       } finally {
         setLoading(false)
       }
@@ -93,7 +124,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
   if (loading) {
     return (
       <div className="flex h-screen bg-gray-100 items-center justify-center">
-        <div className="text-lg">Loading...</div>
+        <div className="text-lg">Loading dashboard...</div>
       </div>
     )
   }
@@ -105,8 +136,18 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
         <div className="flex flex-col flex-grow pt-5 overflow-y-auto bg-white border-r">
           <div className="flex items-center flex-shrink-0 px-4">
             <h1 className="text-xl font-semibold">Digital Signage</h1>
-            {isAdmin && <span className="ml-2 px-2 py-1 text-xs bg-red-100 text-red-800 rounded">ADMIN</span>}
+            {isAdmin && (
+              <span className="ml-2 px-2 py-1 text-xs bg-red-100 text-red-800 rounded font-semibold">ADMIN</span>
+            )}
           </div>
+
+          {/* Debug info - remove in production */}
+          {process.env.NODE_ENV === "development" && (
+            <div className="px-4 py-2 text-xs text-gray-500 border-b">
+              Admin: {isAdmin ? "YES" : "NO"} | Role: {userInfo?.admin_role || "none"}
+            </div>
+          )}
+
           <div className="mt-5 flex-grow flex flex-col">
             <nav className="flex-1 px-2 pb-4 space-y-1">
               {navigation.map((item) => {
@@ -164,7 +205,9 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
           <div className="flex flex-col h-full">
             <div className="flex items-center justify-between p-4">
               <h1 className="text-xl font-semibold">Digital Signage</h1>
-              {isAdmin && <span className="px-2 py-1 text-xs bg-red-100 text-red-800 rounded">ADMIN</span>}
+              {isAdmin && (
+                <span className="px-2 py-1 text-xs bg-red-100 text-red-800 rounded font-semibold">ADMIN</span>
+              )}
             </div>
             <Separator />
             <nav className="flex-1 px-2 py-4 space-y-1">
