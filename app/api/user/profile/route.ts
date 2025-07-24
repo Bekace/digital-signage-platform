@@ -1,50 +1,39 @@
-import { NextResponse } from "next/server"
+import { type NextRequest, NextResponse } from "next/server"
 import { getCurrentUser } from "@/lib/auth"
-import { getDb } from "@/lib/db"
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
-    const user = await getCurrentUser()
+    const user = await getCurrentUser(request)
 
     if (!user) {
-      return NextResponse.json({ success: false, message: "Not authenticated" }, { status: 401 })
+      return NextResponse.json({ error: "Not authenticated" }, { status: 401 })
     }
 
-    const sql = getDb()
-
-    // Get complete user profile including company info and admin status
-    const users = await sql`
-      SELECT 
-        id, email, first_name, last_name, company, 
-        company_address, company_phone, plan, created_at, is_admin
-      FROM users 
-      WHERE id = ${user.id}
-      LIMIT 1
-    `
-
-    if (users.length === 0) {
-      return NextResponse.json({ success: false, message: "User not found" }, { status: 404 })
-    }
-
-    const userData = users[0]
+    console.log("🔍 [PROFILE] User data:", {
+      id: user.id,
+      email: user.email,
+      is_admin: user.is_admin,
+      admin_role: user.admin_role,
+      admin_permissions: user.admin_permissions,
+    })
 
     return NextResponse.json({
-      success: true,
       user: {
-        id: userData.id,
-        email: userData.email,
-        firstName: userData.first_name,
-        lastName: userData.last_name,
-        company: userData.company,
-        companyAddress: userData.company_address,
-        companyPhone: userData.company_phone,
-        plan: userData.plan,
-        createdAt: userData.created_at,
-        isAdmin: userData.is_admin || false,
+        id: user.id,
+        email: user.email,
+        firstName: user.first_name,
+        lastName: user.last_name,
+        company: user.company,
+        plan: user.plan,
+        isAdmin: user.is_admin, // This is the key field!
+        is_admin: user.is_admin, // Also provide this format
+        admin_role: user.admin_role,
+        admin_permissions: user.admin_permissions,
+        createdAt: user.created_at,
       },
     })
   } catch (error) {
-    console.error("Profile fetch error:", error)
-    return NextResponse.json({ success: false, message: "Internal server error" }, { status: 500 })
+    console.error("❌ [PROFILE] Error:", error)
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 })
   }
 }

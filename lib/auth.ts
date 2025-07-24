@@ -21,6 +21,8 @@ export interface User {
   plan: string
   created_at: string
   is_admin?: boolean
+  admin_role?: string
+  admin_permissions?: any
 }
 
 export function verifyToken(token: string): DecodedToken | null {
@@ -66,11 +68,22 @@ export async function getCurrentUser(request?: NextRequest): Promise<User | null
       return null
     }
 
-    // Get user from database
+    // Get user from database WITH admin information
     const users = await sql`
-      SELECT id, email, first_name, last_name, company, plan, created_at, is_admin
-      FROM users 
-      WHERE id = ${decoded.userId}
+      SELECT 
+        u.id, 
+        u.email, 
+        u.first_name, 
+        u.last_name, 
+        u.company, 
+        u.plan, 
+        u.created_at,
+        COALESCE(u.is_admin, false) as is_admin,
+        au.role as admin_role,
+        au.permissions as admin_permissions
+      FROM users u
+      LEFT JOIN admin_users au ON u.id = au.user_id
+      WHERE u.id = ${decoded.userId}
       LIMIT 1
     `
 
@@ -78,7 +91,15 @@ export async function getCurrentUser(request?: NextRequest): Promise<User | null
       return null
     }
 
-    return users[0] as User
+    const user = users[0]
+
+    // Set is_admin to true if user has admin_role
+    const isAdmin = user.is_admin || user.admin_role !== null
+
+    return {
+      ...user,
+      is_admin: isAdmin,
+    } as User
   } catch (error) {
     console.error("❌ [AUTH] Error in getCurrentUser:", error)
     return null

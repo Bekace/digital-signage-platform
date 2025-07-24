@@ -38,13 +38,29 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false)
 
   useEffect(() => {
-    // Check if user is admin
+    // Check if user is admin - FIXED VERSION
     const checkAdminStatus = async () => {
       try {
-        const response = await fetch("/api/user/profile")
+        const response = await fetch("/api/user/profile", {
+          headers: {
+            Authorization: `Bearer ${localStorage.getItem("auth-token")}`,
+            "Content-Type": "application/json",
+          },
+        })
         if (response.ok) {
           const data = await response.json()
-          setIsAdmin(data.user?.isAdmin || false)
+          console.log("🔍 [ADMIN CHECK] Profile data:", data)
+
+          // Check multiple ways to determine admin status
+          const userIsAdmin =
+            data.user?.is_admin ||
+            data.user?.admin_role === "super_admin" ||
+            data.user?.admin_role === "admin" ||
+            data.user?.isAdmin ||
+            false
+
+          console.log("🔍 [ADMIN CHECK] Final admin status:", userIsAdmin)
+          setIsAdmin(userIsAdmin)
         }
       } catch (error) {
         console.error("Error checking admin status:", error)
