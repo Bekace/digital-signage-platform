@@ -1,6 +1,7 @@
 import jwt from "jsonwebtoken"
 import { neon } from "@neondatabase/serverless"
 import type { NextRequest } from "next/server"
+import type { HeadersInit } from "next/dist/server/web/spec-extension/adapters"
 
 const sql = neon(process.env.DATABASE_URL!)
 
@@ -30,37 +31,19 @@ interface AuthResult {
   error?: string
 }
 
-export async function verifyAuth(request: Request): Promise<AuthResult> {
+export interface DecodedToken {
+  userId: number
+  email: string
+  iat?: number
+  exp?: number
+}
+
+export async function verifyAuth(request: NextRequest): Promise<AuthResult> {
   try {
     console.log("🔐 [AUTH UTILS] Starting auth verification...")
 
     // Get token from Authorization header or cookie
-    const authHeader = request.headers.get("authorization")
-    const cookieHeader = request.headers.get("cookie")
-
-    let token: string | null = null
-
-    // Try Authorization header first
-    if (authHeader && authHeader.startsWith("Bearer ")) {
-      token = authHeader.substring(7)
-      console.log("🔐 [AUTH UTILS] Token found in Authorization header")
-    }
-    // Try cookie as fallback
-    else if (cookieHeader) {
-      const cookies = cookieHeader.split(";").reduce(
-        (acc, cookie) => {
-          const [key, value] = cookie.trim().split("=")
-          acc[key] = value
-          return acc
-        },
-        {} as Record<string, string>,
-      )
-
-      token = cookies["auth-token"]
-      if (token) {
-        console.log("🔐 [AUTH UTILS] Token found in cookie")
-      }
-    }
+    const token = extractTokenFromRequest(request)
 
     if (!token) {
       console.log("🔐 [AUTH UTILS] No token found")
@@ -160,36 +143,13 @@ function getStoredToken(): string | null {
  * Get authentication headers for API requests
  * Validates token before returning headers
  */
-export function getAuthHeaders(): AuthHeaders | null {
-  try {
-    if (typeof window === "undefined") {
-      console.log("🔐 [AUTH UTILS] Server-side context, no token available")
-      return null
-    }
-
-    const token = getStoredToken()
-    if (!token) {
-      console.log("🔐 [AUTH UTILS] No token found in any storage location")
-      return null
-    }
-
-    // Validate token format and expiration
-    const tokenInfo = getTokenInfo(token)
-    if (!tokenInfo.valid) {
-      console.log("🔐 [AUTH UTILS] Invalid token detected:", tokenInfo.error)
-      clearAuthToken()
-      return null
-    }
-
-    console.log("🔐 [AUTH UTILS] Valid token found, creating auth headers")
-    return {
-      Authorization: `Bearer ${token}`,
-      "Content-Type": "application/json",
-    }
-  } catch (error) {
-    console.error("🔐 [AUTH UTILS] Error getting auth headers:", error)
-    clearAuthToken()
-    return null
+export function getAuthHeaders(token?: string): HeadersInit {
+  if (!token) {
+    return {}
+  }
+  return {
+    Authorization: `Bearer ${token}`,
+    "Content-Type": "application/json",
   }
 }
 
@@ -210,8 +170,8 @@ export function isTokenValid(): boolean {
     }
 
     const tokenInfo = getTokenInfo(token)
-    console.log("🔐 [AUTH UTILS] Token validation result:", tokenInfo.valid, tokenInfo.error || "OK")
-    return tokenInfo.valid
+    console.log("🔐 [AUTH UTILS] Token validation result:", tokenInfo?.valid, tokenInfo?.error || "OK")
+    return tokenInfo?.valid || false
   } catch (error) {
     console.error("🔐 [AUTH UTILS] Error checking token validity:", error)
     return false
@@ -243,76 +203,20 @@ export function clearAuthToken(): void {
 /**
  * Get detailed information about a token
  */
-export function getTokenInfo(token?: string): TokenInfo {
+export function getTokenInfo(token?: string): DecodedToken | null {
   try {
     const actualToken = token || getStoredToken()
 
     if (!actualToken) {
-      return {
-        valid: false,
-        exists: false,
-        length: 0,
-        parts: 0,
-        error: "No token provided",
-      }
+      console.log("🔐 [AUTH UTILS] No token provided")
+      return null
     }
 
-    const parts = actualToken.split(".")
-    const info: TokenInfo = {
-      valid: false,
-      exists: true,
-      length: actualToken.length,
-      parts: parts.length,
-    }
-
-    // Check if token has correct JWT format (3 parts)
-    if (parts.length !== 3) {
-      info.error = `Token format is invalid (${parts.length} parts instead of 3)`
-      return info
-    }
-
-    // Try to decode the token
-    try {
-      const decoded = jwt.decode(actualToken) as any
-      if (decoded && typeof decoded === "object") {
-        info.userId = decoded.userId
-        info.email = decoded.email
-        info.expires = decoded.exp
-
-        // Check if token is expired
-        const now = Math.floor(Date.now() / 1000)
-        if (decoded.exp && decoded.exp < now) {
-          info.error = "Token is expired"
-          return info
-        }
-
-        // Calculate time until expiry
-        if (decoded.exp) {
-          const timeLeft = decoded.exp - now
-          if (timeLeft > 0) {
-            const hours = Math.floor(timeLeft / 3600)
-            const minutes = Math.floor((timeLeft % 3600) / 60)
-            info.timeUntilExpiry = `${hours}h ${minutes}m`
-          }
-        }
-
-        info.valid = true
-      } else {
-        info.error = "Token payload is invalid"
-      }
-    } catch (decodeError) {
-      info.error = `Token decode failed: ${decodeError instanceof Error ? decodeError.message : "Unknown error"}`
-    }
-
-    return info
+    const decoded = jwt.verify(actualToken, process.env.JWT_SECRET!) as DecodedToken
+    return decoded
   } catch (error) {
-    return {
-      valid: false,
-      exists: false,
-      length: 0,
-      parts: 0,
-      error: `Analysis failed: ${error instanceof Error ? error.message : "Unknown error"}`,
-    }
+    console.error("🔐 [AUTH-UTILS] Token verification failed:", error)
+    return null
   }
 }
 
@@ -330,16 +234,15 @@ export function redirectToLogin(): void {
  * Extract token from request headers (server-side)
  */
 export function extractTokenFromRequest(request: NextRequest): string | null {
-  try {
-    const authHeader = request.headers.get("authorization")
-    if (!authHeader || !authHeader.startsWith("Bearer ")) {
-      return null
-    }
-    return authHeader.substring(7) // Remove 'Bearer ' prefix
-  } catch (error) {
-    console.error("🔐 [AUTH UTILS] Error extracting token from request:", error)
-    return null
+  // Check Authorization header first
+  const authHeader = request.headers.get("authorization")
+  if (authHeader?.startsWith("Bearer ")) {
+    return authHeader.substring(7)
   }
+
+  // Fallback to cookies
+  const cookieToken = request.cookies.get("auth-token")?.value
+  return cookieToken || null
 }
 
 /**
@@ -382,4 +285,11 @@ export function getTokenFromRequest(request: Request): string | null {
   }
 
   return null
+}
+
+/**
+ * Generate a JWT token
+ */
+export function generateToken(payload: { userId: number; email: string }): string {
+  return jwt.sign(payload, process.env.JWT_SECRET!, { expiresIn: "7d" })
 }

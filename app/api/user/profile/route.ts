@@ -1,24 +1,20 @@
-import { NextResponse } from "next/server"
+import { type NextRequest, NextResponse } from "next/server"
+import { getCurrentUser } from "@/lib/auth"
 import { neon } from "@neondatabase/serverless"
-import { verifyAuth } from "@/lib/auth-utils"
 
 const sql = neon(process.env.DATABASE_URL!)
 
-export async function GET(request: Request) {
+export async function GET(request: NextRequest) {
   try {
-    console.log("👤 [USER PROFILE] Starting profile fetch...")
+    console.log("👤 [USER PROFILE] GET request received")
 
-    // Verify authentication
-    const authResult = await verifyAuth(request)
-    if (!authResult.success) {
-      console.log("👤 [USER PROFILE] Authentication failed")
+    const currentUser = await getCurrentUser(request)
+    if (!currentUser) {
       return NextResponse.json({ error: "Authentication required" }, { status: 401 })
     }
 
-    console.log("👤 [USER PROFILE] User authenticated:", authResult.userId)
-
-    // Get user profile with admin status
-    const userProfile = await sql`
+    // Get user profile with admin status from admin_users table
+    const users = await sql`
       SELECT 
         u.id,
         u.email,
@@ -27,59 +23,72 @@ export async function GET(request: Request) {
         u.company,
         u.plan_type as plan,
         u.created_at,
-        u.updated_at,
-        CASE 
-          WHEN au.user_id IS NOT NULL THEN true 
-          ELSE false 
-        END as is_admin,
-        au.role as admin_role
+        au.role as admin_role,
+        au.permissions as admin_permissions,
+        CASE WHEN au.user_id IS NOT NULL THEN true ELSE false END as is_admin
       FROM users u
       LEFT JOIN admin_users au ON u.id = au.user_id
-      WHERE u.id = ${authResult.userId}
+      WHERE u.id = ${currentUser.id}
       LIMIT 1
     `
 
-    if (userProfile.length === 0) {
-      console.log("👤 [USER PROFILE] User not found:", authResult.userId)
+    if (users.length === 0) {
       return NextResponse.json({ error: "User not found" }, { status: 404 })
     }
 
-    const user = userProfile[0]
-    const isAdmin = user.is_admin || false
-    const adminRole = user.admin_role || null
+    const user = users[0]
 
-    console.log("👤 [USER PROFILE] Profile loaded:", {
-      userId: user.id,
-      email: user.email,
-      isAdmin,
-      adminRole,
-    })
+    console.log("👤 [USER PROFILE] Profile retrieved for:", user.email)
 
     return NextResponse.json({
       success: true,
       user: {
-        id: user.id,
-        email: user.email,
-        firstName: user.first_name,
-        lastName: user.last_name,
-        company: user.company,
-        plan: user.plan,
-        isAdmin: isAdmin,
-        is_admin: isAdmin, // For compatibility
-        adminRole: adminRole,
-        admin_role: adminRole, // For compatibility
-        createdAt: user.created_at,
-        updatedAt: user.updated_at,
+        ...user,
+        is_admin: Boolean(user.is_admin),
       },
     })
   } catch (error) {
     console.error("❌ [USER PROFILE] Error:", error)
-    return NextResponse.json(
-      {
-        error: "Failed to fetch profile",
-        details: error instanceof Error ? error.message : "Unknown error",
-      },
-      { status: 500 },
-    )
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 })
+  }
+}
+
+export async function PUT(request: NextRequest) {
+  try {
+    console.log("👤 [USER PROFILE] PUT request received")
+
+    const currentUser = await getCurrentUser(request)
+    if (!currentUser) {
+      return NextResponse.json({ error: "Authentication required" }, { status: 401 })
+    }
+
+    const { firstName, lastName, company } = await request.json()
+
+    // Update user profile
+    const result = await sql`
+      UPDATE users 
+      SET 
+        first_name = ${firstName || currentUser.first_name},
+        last_name = ${lastName || currentUser.last_name},
+        company = ${company || currentUser.company || ""},
+        updated_at = CURRENT_TIMESTAMP
+      WHERE id = ${currentUser.id}
+      RETURNING id, email, first_name, last_name, company, plan_type as plan, created_at
+    `
+
+    if (result.length === 0) {
+      return NextResponse.json({ error: "User not found" }, { status: 404 })
+    }
+
+    console.log("👤 [USER PROFILE] Profile updated for:", result[0].email)
+
+    return NextResponse.json({
+      success: true,
+      user: result[0],
+      message: "Profile updated successfully",
+    })
+  } catch (error) {
+    console.error("❌ [USER PROFILE] Update error:", error)
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 })
   }
 }

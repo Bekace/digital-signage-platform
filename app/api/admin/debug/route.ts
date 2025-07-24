@@ -1,75 +1,58 @@
-import { NextResponse } from "next/server"
+import { type NextRequest, NextResponse } from "next/server"
+import { getCurrentUser } from "@/lib/auth"
 import { neon } from "@neondatabase/serverless"
-import { verifyAuth } from "@/lib/auth-utils"
 
 const sql = neon(process.env.DATABASE_URL!)
 
-export async function GET(request: Request) {
+export async function GET(request: NextRequest) {
   try {
-    console.log("🐛 [ADMIN DEBUG] Starting debug info fetch...")
+    console.log("🔍 [ADMIN DEBUG] GET request received")
 
-    // Verify admin authentication
-    const authResult = await verifyAuth(request)
-    if (!authResult.success) {
-      console.log("🐛 [ADMIN DEBUG] Authentication failed")
-      return NextResponse.json({ error: "Authentication required" }, { status: 401 })
-    }
-
-    if (!authResult.isAdmin) {
-      console.log("🐛 [ADMIN DEBUG] User is not admin:", authResult.userId)
+    const currentUser = await getCurrentUser(request)
+    if (!currentUser?.is_admin) {
       return NextResponse.json({ error: "Admin access required" }, { status: 403 })
     }
 
-    console.log("🐛 [ADMIN DEBUG] Admin verified:", authResult.userId)
+    // Get system information
+    const [userCount, deviceCount, playlistCount, mediaCount] = await Promise.all([
+      sql`SELECT COUNT(*) as count FROM users`,
+      sql`SELECT COUNT(*) as count FROM devices`,
+      sql`SELECT COUNT(*) as count FROM playlists`,
+      sql`SELECT COUNT(*) as count FROM media`,
+    ])
 
-    // Get system debug information
+    // Get recent activity
+    const recentUsers = await sql`
+      SELECT email, created_at FROM users 
+      ORDER BY created_at DESC 
+      LIMIT 5
+    `
+
+    const recentDevices = await sql`
+      SELECT name, created_at FROM devices 
+      ORDER BY created_at DESC 
+      LIMIT 5
+    `
+
     const debugInfo = {
-      timestamp: new Date().toISOString(),
-      requestingUser: {
-        id: authResult.userId,
-        email: authResult.email,
-        isAdmin: authResult.isAdmin,
-        adminRole: authResult.adminRole,
+      system: {
+        users: Number.parseInt(userCount[0].count),
+        devices: Number.parseInt(deviceCount[0].count),
+        playlists: Number.parseInt(playlistCount[0].count),
+        media: Number.parseInt(mediaCount[0].count),
+      },
+      recent: {
+        users: recentUsers,
+        devices: recentDevices,
+      },
+      environment: {
+        nodeEnv: process.env.NODE_ENV,
+        hasJwtSecret: !!process.env.JWT_SECRET,
+        hasDatabaseUrl: !!process.env.DATABASE_URL,
       },
     }
 
-    // Get table counts
-    try {
-      const userCount = await sql`SELECT COUNT(*) as count FROM users`
-      const adminCount = await sql`SELECT COUNT(*) as count FROM admin_users`
-      const mediaCount = await sql`SELECT COUNT(*) as count FROM media`
-      const playlistCount = await sql`SELECT COUNT(*) as count FROM playlists`
-      const deviceCount = await sql`SELECT COUNT(*) as count FROM devices`
-
-      debugInfo.tableCounts = {
-        users: userCount[0].count,
-        admins: adminCount[0].count,
-        media: mediaCount[0].count,
-        playlists: playlistCount[0].count,
-        devices: deviceCount[0].count,
-      }
-    } catch (error) {
-      debugInfo.tableCounts = { error: error instanceof Error ? error.message : "Unknown error" }
-    }
-
-    // Get recent admin users
-    try {
-      const recentAdmins = await sql`
-        SELECT 
-          u.email,
-          au.role,
-          au.created_at
-        FROM admin_users au
-        JOIN users u ON au.user_id = u.id
-        ORDER BY au.created_at DESC
-        LIMIT 5
-      `
-      debugInfo.recentAdmins = recentAdmins
-    } catch (error) {
-      debugInfo.recentAdmins = { error: error instanceof Error ? error.message : "Unknown error" }
-    }
-
-    console.log("🐛 [ADMIN DEBUG] Debug info compiled")
+    console.log("🔍 [ADMIN DEBUG] Debug info compiled")
 
     return NextResponse.json({
       success: true,
@@ -77,14 +60,6 @@ export async function GET(request: Request) {
     })
   } catch (error) {
     console.error("❌ [ADMIN DEBUG] Error:", error)
-    return NextResponse.json(
-      {
-        success: false,
-        message: "Database error in admin check",
-        error: error instanceof Error ? error.message : "Unknown error",
-        step: "admin_check_error",
-      },
-      { status: 500 },
-    )
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 })
   }
 }

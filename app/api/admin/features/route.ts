@@ -1,100 +1,77 @@
-import { NextResponse } from "next/server"
+import { type NextRequest, NextResponse } from "next/server"
+import { getCurrentUser } from "@/lib/auth"
 import { neon } from "@neondatabase/serverless"
-import { verifyAuth } from "@/lib/auth-utils"
 
 const sql = neon(process.env.DATABASE_URL!)
 
-export async function GET(request: Request) {
+export async function GET(request: NextRequest) {
   try {
-    console.log("🎯 [ADMIN FEATURES] Starting features fetch...")
+    console.log("🎛️ [ADMIN FEATURES] GET request received")
 
-    // Verify admin authentication
-    const authResult = await verifyAuth(request)
-    if (!authResult.success || !authResult.isAdmin) {
+    const currentUser = await getCurrentUser(request)
+    if (!currentUser?.is_admin) {
       return NextResponse.json({ error: "Admin access required" }, { status: 403 })
     }
 
     // Get all plan features
     const features = await sql`
       SELECT 
-        id,
-        name,
-        description,
-        feature_key,
-        is_active,
-        created_at,
-        updated_at
-      FROM plan_features
-      ORDER BY name ASC
+        pf.id,
+        pf.plan_type,
+        pf.feature_name,
+        pf.feature_value,
+        pf.created_at,
+        pf.updated_at
+      FROM plan_features pf
+      ORDER BY pf.plan_type, pf.feature_name
     `
 
-    console.log("🎯 [ADMIN FEATURES] Found features:", features.length)
+    console.log("🎛️ [ADMIN FEATURES] Found features:", features.length)
 
     return NextResponse.json({
       success: true,
-      features: features.map((feature) => ({
-        id: feature.id,
-        name: feature.name,
-        description: feature.description,
-        featureKey: feature.feature_key,
-        isActive: feature.is_active,
-        createdAt: feature.created_at,
-        updatedAt: feature.updated_at,
-      })),
+      features,
     })
   } catch (error) {
     console.error("❌ [ADMIN FEATURES] Error:", error)
-    return NextResponse.json(
-      {
-        error: "Failed to fetch features",
-        details: error instanceof Error ? error.message : "Unknown error",
-      },
-      { status: 500 },
-    )
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 })
   }
 }
 
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
   try {
-    console.log("🎯 [ADMIN FEATURES] Creating new feature...")
+    console.log("🎛️ [ADMIN FEATURES] POST request received")
 
-    // Verify admin authentication
-    const authResult = await verifyAuth(request)
-    if (!authResult.success || !authResult.isAdmin) {
+    const currentUser = await getCurrentUser(request)
+    if (!currentUser?.is_admin) {
       return NextResponse.json({ error: "Admin access required" }, { status: 403 })
     }
 
-    const body = await request.json()
-    const { name, description, featureKey, isActive = true } = body
+    const { planType, featureName, featureValue } = await request.json()
 
-    // Create new feature
-    const newFeature = await sql`
-      INSERT INTO plan_features (name, description, feature_key, is_active)
-      VALUES (${name}, ${description}, ${featureKey}, ${isActive})
-      RETURNING id, name, description, feature_key, is_active, created_at
+    if (!planType || !featureName || featureValue === undefined) {
+      return NextResponse.json({ error: "Missing required fields" }, { status: 400 })
+    }
+
+    // Insert or update feature
+    const features = await sql`
+      INSERT INTO plan_features (plan_type, feature_name, feature_value)
+      VALUES (${planType}, ${featureName}, ${featureValue})
+      ON CONFLICT (plan_type, feature_name) 
+      DO UPDATE SET 
+        feature_value = EXCLUDED.feature_value,
+        updated_at = CURRENT_TIMESTAMP
+      RETURNING *
     `
 
-    console.log("🎯 [ADMIN FEATURES] Feature created:", newFeature[0].id)
+    console.log("🎛️ [ADMIN FEATURES] Feature updated:", featureName)
 
     return NextResponse.json({
       success: true,
-      feature: {
-        id: newFeature[0].id,
-        name: newFeature[0].name,
-        description: newFeature[0].description,
-        featureKey: newFeature[0].feature_key,
-        isActive: newFeature[0].is_active,
-        createdAt: newFeature[0].created_at,
-      },
+      feature: features[0],
     })
   } catch (error) {
-    console.error("❌ [ADMIN FEATURES] Create error:", error)
-    return NextResponse.json(
-      {
-        error: "Failed to create feature",
-        details: error instanceof Error ? error.message : "Unknown error",
-      },
-      { status: 500 },
-    )
+    console.error("❌ [ADMIN FEATURES] Create/Update error:", error)
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 })
   }
 }
