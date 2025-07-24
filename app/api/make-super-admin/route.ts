@@ -1,109 +1,75 @@
-import { NextResponse } from "next/server"
+import { type NextRequest, NextResponse } from "next/server"
 import { neon } from "@neondatabase/serverless"
 
 const sql = neon(process.env.DATABASE_URL!)
 
-export async function POST() {
+export async function POST(request: NextRequest) {
   try {
-    console.log("🔧 [SUPER ADMIN] Starting super admin creation...")
+    const { email } = await request.json()
 
-    const targetEmail = "bekace.multimedia@gmail.com"
+    console.log("🔧 [MAKE SUPER ADMIN] Request for email:", email)
 
-    // Find the user by email
+    if (!email) {
+      return NextResponse.json({ error: "Email is required" }, { status: 400 })
+    }
+
+    // First, check if user exists
     const users = await sql`
       SELECT id, email, first_name, last_name 
       FROM users 
-      WHERE email = ${targetEmail}
-      LIMIT 1
+      WHERE email = ${email.toLowerCase()}
     `
 
     if (users.length === 0) {
-      console.log("❌ [SUPER ADMIN] User not found")
-      return NextResponse.json({ success: false, message: "User not found" }, { status: 404 })
+      console.log("🔧 [MAKE SUPER ADMIN] User not found:", email)
+      return NextResponse.json({ error: "User not found" }, { status: 404 })
     }
 
     const user = users[0]
-    console.log("✅ [SUPER ADMIN] User found:", user)
+    console.log("🔧 [MAKE SUPER ADMIN] User found:", user.id, user.email)
 
-    // Check if admin record already exists
+    // Check if user is already an admin
     const existingAdmin = await sql`
-      SELECT id, role, permissions 
-      FROM admin_users 
-      WHERE user_id = ${user.id}
-      LIMIT 1
+      SELECT * FROM admin_users WHERE user_id = ${user.id}
     `
 
-    let adminResult
     if (existingAdmin.length > 0) {
-      // Update existing admin record
-      console.log("🔄 [SUPER ADMIN] Updating existing admin record...")
-      adminResult = await sql`
-        UPDATE admin_users 
-        SET 
-          role = 'super_admin',
-          permissions = ${JSON.stringify({
-            users: { create: true, read: true, update: true, delete: true },
-            plans: { create: true, read: true, update: true, delete: true },
-            features: { create: true, read: true, update: true, delete: true },
-            media: { create: true, read: true, update: true, delete: true },
-            playlists: { create: true, read: true, update: true, delete: true },
-            devices: { create: true, read: true, update: true, delete: true },
-            system: { database: true, debug: true, maintenance: true },
-          })}
-        WHERE user_id = ${user.id}
-        RETURNING id, role, permissions
-      `
-    } else {
-      // Create new admin record
-      console.log("➕ [SUPER ADMIN] Creating new admin record...")
-      adminResult = await sql`
-        INSERT INTO admin_users (user_id, role, permissions)
-        VALUES (
-          ${user.id},
-          'super_admin',
-          ${JSON.stringify({
-            users: { create: true, read: true, update: true, delete: true },
-            plans: { create: true, read: true, update: true, delete: true },
-            features: { create: true, read: true, update: true, delete: true },
-            media: { create: true, read: true, update: true, delete: true },
-            playlists: { create: true, read: true, update: true, delete: true },
-            devices: { create: true, read: true, update: true, delete: true },
-            system: { database: true, debug: true, maintenance: true },
-          })}
-        )
-        RETURNING id, role, permissions
-      `
+      console.log("🔧 [MAKE SUPER ADMIN] User is already an admin")
+      return NextResponse.json({
+        success: true,
+        message: "User is already a super admin",
+        user: {
+          id: user.id,
+          email: user.email,
+          role: existingAdmin[0].role,
+        },
+      })
     }
 
-    console.log("✅ [SUPER ADMIN] Admin record result:", adminResult)
-
-    // Verify the admin was created/updated
-    const verifyAdmin = await sql`
-      SELECT 
-        u.id, u.email, u.first_name, u.last_name,
-        au.role, au.permissions, au.created_at
-      FROM users u
-      JOIN admin_users au ON u.id = au.user_id
-      WHERE u.id = ${user.id}
-      LIMIT 1
+    // Make user a super admin
+    await sql`
+      INSERT INTO admin_users (user_id, role, permissions, created_at)
+      VALUES (
+        ${user.id}, 
+        'super_admin', 
+        '{"all": true, "users": true, "plans": true, "features": true, "debug": true}',
+        NOW()
+      )
     `
 
-    console.log("🔍 [SUPER ADMIN] Verification result:", verifyAdmin)
+    console.log("🔧 [MAKE SUPER ADMIN] Super admin created successfully")
 
     return NextResponse.json({
       success: true,
-      message: "Super Admin Created Successfully",
+      message: "User has been made a super admin",
       user: {
         id: user.id,
         email: user.email,
-        name: `${user.first_name} ${user.last_name}`,
-        adminRole: verifyAdmin[0]?.role,
-        adminCreated: verifyAdmin[0]?.created_at,
-        permissions: verifyAdmin[0]?.permissions,
+        role: "super_admin",
       },
     })
   } catch (error) {
-    console.error("❌ [SUPER ADMIN] Error:", error)
-    return NextResponse.json({ success: false, message: `Failed to make user super admin: ${error}` }, { status: 500 })
+    console.error("🔧 [MAKE SUPER ADMIN] Error:", error)
+    return NextResponse.json({ error: "Failed to make user super admin" }, { status: 500 })
   }
 }

@@ -24,13 +24,15 @@ export interface TokenInfo {
 function getStoredToken(): string | null {
   if (typeof window === "undefined") return null
 
+  console.log("🔐 [AUTH UTILS] Checking for stored token...")
+
   // Try multiple possible storage locations
   const possibleKeys = ["auth-token", "token", "authToken"]
 
   for (const key of possibleKeys) {
     const token = localStorage.getItem(key)
     if (token) {
-      console.log(`🔐 [AUTH] Found token in localStorage["${key}"]`)
+      console.log(`🔐 [AUTH UTILS] Found token in localStorage["${key}"]`)
       return token
     }
   }
@@ -41,14 +43,15 @@ function getStoredToken(): string | null {
     for (const cookie of cookies) {
       const [name, value] = cookie.trim().split("=")
       if (name === "auth-token" && value) {
-        console.log("🔐 [AUTH] Found token in cookies")
+        console.log("🔐 [AUTH UTILS] Found token in cookies")
         return decodeURIComponent(value)
       }
     }
   } catch (error) {
-    console.log("🔐 [AUTH] Could not read cookies:", error)
+    console.log("🔐 [AUTH UTILS] Could not read cookies:", error)
   }
 
+  console.log("🔐 [AUTH UTILS] No token found in any location")
   return null
 }
 
@@ -59,31 +62,31 @@ function getStoredToken(): string | null {
 export function getAuthHeaders(): AuthHeaders | null {
   try {
     if (typeof window === "undefined") {
-      console.log("🔐 [AUTH] Server-side context, no token available")
+      console.log("🔐 [AUTH UTILS] Server-side context, no token available")
       return null
     }
 
     const token = getStoredToken()
     if (!token) {
-      console.log("🔐 [AUTH] No token found in any storage location")
+      console.log("🔐 [AUTH UTILS] No token found in any storage location")
       return null
     }
 
     // Validate token format and expiration
     const tokenInfo = getTokenInfo(token)
     if (!tokenInfo.valid) {
-      console.log("🔐 [AUTH] Invalid token detected:", tokenInfo.error)
+      console.log("🔐 [AUTH UTILS] Invalid token detected:", tokenInfo.error)
       clearAuthToken()
       return null
     }
 
-    console.log("🔐 [AUTH] Valid token found, creating auth headers")
+    console.log("🔐 [AUTH UTILS] Valid token found, creating auth headers")
     return {
       Authorization: `Bearer ${token}`,
       "Content-Type": "application/json",
     }
   } catch (error) {
-    console.error("🔐 [AUTH] Error getting auth headers:", error)
+    console.error("🔐 [AUTH UTILS] Error getting auth headers:", error)
     clearAuthToken()
     return null
   }
@@ -95,21 +98,21 @@ export function getAuthHeaders(): AuthHeaders | null {
 export function isTokenValid(): boolean {
   try {
     if (typeof window === "undefined") {
-      console.log("🔐 [AUTH] Server-side context, cannot validate token")
+      console.log("🔐 [AUTH UTILS] Server-side context, cannot validate token")
       return false
     }
 
     const token = getStoredToken()
     if (!token) {
-      console.log("🔐 [AUTH] No token found for validation")
+      console.log("🔐 [AUTH UTILS] No token found for validation")
       return false
     }
 
     const tokenInfo = getTokenInfo(token)
-    console.log("🔐 [AUTH] Token validation result:", tokenInfo.valid, tokenInfo.error || "OK")
+    console.log("🔐 [AUTH UTILS] Token validation result:", tokenInfo.valid, tokenInfo.error || "OK")
     return tokenInfo.valid
   } catch (error) {
-    console.error("🔐 [AUTH] Error checking token validity:", error)
+    console.error("🔐 [AUTH UTILS] Error checking token validity:", error)
     return false
   }
 }
@@ -129,10 +132,10 @@ export function clearAuthToken(): void {
       // Clear from cookies
       document.cookie = "auth-token=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;"
 
-      console.log("🔐 [AUTH] Token cleared from all storage locations")
+      console.log("🔐 [AUTH UTILS] Token cleared from all storage locations")
     }
   } catch (error) {
-    console.error("🔐 [AUTH] Error clearing token:", error)
+    console.error("🔐 [AUTH UTILS] Error clearing token:", error)
   }
 }
 
@@ -233,7 +236,7 @@ export function extractTokenFromRequest(request: NextRequest): string | null {
     }
     return authHeader.substring(7) // Remove 'Bearer ' prefix
   } catch (error) {
-    console.error("🔐 [AUTH] Error extracting token from request:", error)
+    console.error("🔐 [AUTH UTILS] Error extracting token from request:", error)
     return null
   }
 }
@@ -244,13 +247,13 @@ export function extractTokenFromRequest(request: NextRequest): string | null {
 export function verifyToken(token: string): any {
   try {
     if (!process.env.JWT_SECRET) {
-      console.error("🔐 [AUTH] JWT_SECRET not available in client")
+      console.error("🔐 [AUTH UTILS] JWT_SECRET not available in client")
       return null
     }
     const decoded = jwt.verify(token, process.env.JWT_SECRET)
     return decoded
   } catch (error) {
-    console.error("🔐 [AUTH] Token verification failed:", error)
+    console.error("🔐 [AUTH UTILS] Token verification failed:", error)
     return null
   }
 }

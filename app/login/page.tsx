@@ -28,6 +28,8 @@ export default function LoginPage() {
     setLoading(true)
     setError("")
 
+    console.log("🔐 [LOGIN PAGE] Starting login process...")
+
     try {
       const response = await fetch("/api/auth/login", {
         method: "POST",
@@ -35,21 +37,36 @@ export default function LoginPage() {
           "Content-Type": "application/json",
         },
         body: JSON.stringify(formData),
+        credentials: "include", // Important for cookies
       })
 
       const data = await response.json()
+      console.log("🔐 [LOGIN PAGE] Login response:", data)
 
       if (data.success) {
-        // Store token in localStorage (in production, consider httpOnly cookies)
-        localStorage.setItem("token", data.token)
-        localStorage.setItem("user", JSON.stringify(data.user))
+        console.log("🔐 [LOGIN PAGE] Login successful, storing token...")
 
+        // Store token in localStorage for client-side access
+        if (data.token) {
+          localStorage.setItem("auth-token", data.token)
+          console.log("🔐 [LOGIN PAGE] Token stored in localStorage")
+        }
+
+        // Store user data
+        if (data.user) {
+          localStorage.setItem("user", JSON.stringify(data.user))
+          console.log("🔐 [LOGIN PAGE] User data stored")
+        }
+
+        console.log("🔐 [LOGIN PAGE] Redirecting to dashboard...")
         // Redirect to dashboard
         router.push("/dashboard")
       } else {
+        console.error("🔐 [LOGIN PAGE] Login failed:", data.message)
         setError(data.message || "Login failed")
       }
     } catch (error) {
+      console.error("🔐 [LOGIN PAGE] Network error:", error)
       setError("Network error. Please try again.")
     } finally {
       setLoading(false)

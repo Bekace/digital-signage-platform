@@ -40,34 +40,58 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
   const [userInfo, setUserInfo] = useState<any>(null)
 
   useEffect(() => {
-    // Check if user is admin - ENHANCED VERSION
+    // Check if user is admin - ENHANCED VERSION WITH BETTER TOKEN DETECTION
     const checkAdminStatus = async () => {
       try {
         console.log("🔍 [DASHBOARD] Checking admin status...")
 
-        // Get token from multiple sources
+        // Get token from multiple sources with detailed logging
         let token = null
 
         // Try localStorage first
         if (typeof window !== "undefined") {
           token = localStorage.getItem("auth-token")
+          console.log("🔍 [DASHBOARD] localStorage auth-token:", !!token)
+
+          if (!token) {
+            // Try alternative keys
+            token = localStorage.getItem("token")
+            console.log("🔍 [DASHBOARD] localStorage token:", !!token)
+          }
+
+          if (!token) {
+            token = localStorage.getItem("authToken")
+            console.log("🔍 [DASHBOARD] localStorage authToken:", !!token)
+          }
         }
 
         // Try cookies as fallback
         if (!token && typeof document !== "undefined") {
+          console.log("🔍 [DASHBOARD] Checking cookies...")
+          console.log("🔍 [DASHBOARD] All cookies:", document.cookie)
+
           const cookieValue = document.cookie
             .split("; ")
             .find((row) => row.startsWith("auth-token="))
             ?.split("=")[1]
           token = cookieValue
+          console.log("🔍 [DASHBOARD] Cookie auth-token:", !!token)
         }
 
-        console.log("🔍 [DASHBOARD] Token found:", !!token)
+        console.log("🔍 [DASHBOARD] Final token found:", !!token)
 
         if (!token) {
-          console.log("🔍 [DASHBOARD] No token found, user not authenticated")
+          console.log("🔍 [DASHBOARD] No token found anywhere, user not authenticated")
           setLoading(false)
           return
+        }
+
+        // Log token details (first/last few chars for security)
+        if (token.length > 10) {
+          console.log(
+            "🔍 [DASHBOARD] Token preview:",
+            token.substring(0, 10) + "..." + token.substring(token.length - 10),
+          )
         }
 
         const response = await fetch("/api/user/profile", {
@@ -107,7 +131,8 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
 
           setIsAdmin(userIsAdmin)
         } else {
-          console.error("🔍 [DASHBOARD] Profile request failed:", response.status, await response.text())
+          const errorText = await response.text()
+          console.error("🔍 [DASHBOARD] Profile request failed:", response.status, errorText)
         }
       } catch (error) {
         console.error("❌ [DASHBOARD] Error checking admin status:", error)

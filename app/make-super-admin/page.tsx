@@ -1,30 +1,22 @@
 "use client"
 
+import type React from "react"
+
 import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { Badge } from "@/components/ui/badge"
-import { Shield, User, CheckCircle, XCircle } from "lucide-react"
-
-interface SuperAdminResult {
-  success: boolean
-  message: string
-  user?: {
-    id: number
-    email: string
-    name: string
-    adminRole: string
-    adminCreated: string
-    permissions: any
-  }
-}
+import { Shield, CheckCircle, AlertCircle } from "lucide-react"
 
 export default function MakeSuperAdminPage() {
+  const [email, setEmail] = useState("demo@signagecloud.com")
   const [loading, setLoading] = useState(false)
-  const [result, setResult] = useState<SuperAdminResult | null>(null)
+  const [result, setResult] = useState<{ success: boolean; message: string } | null>(null)
 
-  const handleMakeSuperAdmin = async () => {
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
     setLoading(true)
     setResult(null)
 
@@ -34,122 +26,78 @@ export default function MakeSuperAdminPage() {
         headers: {
           "Content-Type": "application/json",
         },
+        body: JSON.stringify({ email }),
       })
 
       const data = await response.json()
-      setResult(data)
+
+      if (response.ok) {
+        setResult({ success: true, message: data.message })
+      } else {
+        setResult({ success: false, message: data.error || "Failed to make super admin" })
+      }
     } catch (error) {
-      setResult({
-        success: false,
-        message: `Error: ${error}`,
-      })
+      setResult({ success: false, message: "Network error occurred" })
     } finally {
       setLoading(false)
     }
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
-      <div className="max-w-2xl mx-auto">
-        <div className="text-center mb-8">
-          <Shield className="mx-auto h-12 w-12 text-red-600" />
-          <h1 className="mt-4 text-3xl font-bold text-gray-900">Super Admin Setup</h1>
-          <p className="mt-2 text-gray-600">Create super admin privileges for bekace.multimedia@gmail.com</p>
-        </div>
-
+    <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4">
+      <div className="max-w-md w-full">
         <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <User className="h-5 w-5" />
-              Super Admin Creation
-            </CardTitle>
-            <CardDescription>
-              This will grant full administrative privileges to the specified user account.
-            </CardDescription>
+          <CardHeader className="text-center">
+            <div className="mx-auto w-12 h-12 bg-red-100 rounded-full flex items-center justify-center mb-4">
+              <Shield className="w-6 h-6 text-red-600" />
+            </div>
+            <CardTitle className="text-2xl">Make Super Admin</CardTitle>
+            <CardDescription>Grant super admin privileges to a user account</CardDescription>
           </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="bg-gray-50 p-4 rounded-lg">
-              <h3 className="font-semibold text-gray-900 mb-2">Target User:</h3>
-              <p className="text-gray-700">bekace.multimedia@gmail.com</p>
-            </div>
-
-            <div className="bg-blue-50 p-4 rounded-lg">
-              <h3 className="font-semibold text-blue-900 mb-2">Permissions to be granted:</h3>
-              <div className="grid grid-cols-2 gap-2 text-sm text-blue-800">
-                <div>• User Management</div>
-                <div>• Plan Management</div>
-                <div>• Feature Management</div>
-                <div>• Media Management</div>
-                <div>• Playlist Management</div>
-                <div>• Device Management</div>
-                <div>• System Access</div>
-                <div>• Debug Tools</div>
-              </div>
-            </div>
-
-            <Button onClick={handleMakeSuperAdmin} disabled={loading} className="w-full" size="lg">
-              {loading ? "Creating Super Admin..." : "Make Super Admin"}
-            </Button>
-
+          <CardContent>
             {result && (
-              <Alert className={result.success ? "border-green-200 bg-green-50" : "border-red-200 bg-red-50"}>
-                <div className="flex items-center gap-2">
-                  {result.success ? (
-                    <CheckCircle className="h-4 w-4 text-green-600" />
-                  ) : (
-                    <XCircle className="h-4 w-4 text-red-600" />
-                  )}
-                  <AlertDescription className={result.success ? "text-green-800" : "text-red-800"}>
-                    {result.message}
-                  </AlertDescription>
-                </div>
+              <Alert
+                className={`mb-4 ${result.success ? "border-green-200 bg-green-50" : ""}`}
+                variant={result.success ? "default" : "destructive"}
+              >
+                {result.success ? (
+                  <CheckCircle className="h-4 w-4 text-green-600" />
+                ) : (
+                  <AlertCircle className="h-4 w-4" />
+                )}
+                <AlertDescription className={result.success ? "text-green-800" : ""}>{result.message}</AlertDescription>
               </Alert>
             )}
 
-            {result?.success && result.user && (
-              <Card className="border-green-200 bg-green-50">
-                <CardHeader>
-                  <CardTitle className="text-green-800 flex items-center gap-2">
-                    <CheckCircle className="h-5 w-5" />
-                    Super Admin Created Successfully
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  <div className="grid grid-cols-1 gap-3">
-                    <div>
-                      <span className="font-semibold text-green-800">User ID:</span>
-                      <span className="ml-2 text-green-700">{result.user.id}</span>
-                    </div>
-                    <div>
-                      <span className="font-semibold text-green-800">Email:</span>
-                      <span className="ml-2 text-green-700">{result.user.email}</span>
-                    </div>
-                    <div>
-                      <span className="font-semibold text-green-800">Name:</span>
-                      <span className="ml-2 text-green-700">{result.user.name}</span>
-                    </div>
-                    <div>
-                      <span className="font-semibold text-green-800">Admin Role:</span>
-                      <Badge variant="destructive" className="ml-2">
-                        {result.user.adminRole}
-                      </Badge>
-                    </div>
-                    <div>
-                      <span className="font-semibold text-green-800">Created:</span>
-                      <span className="ml-2 text-green-700">{new Date(result.user.adminCreated).toLocaleString()}</span>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            )}
+            <form onSubmit={handleSubmit} className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="email">User Email</Label>
+                <Input
+                  id="email"
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="user@example.com"
+                  required
+                />
+              </div>
+
+              <Button type="submit" className="w-full" disabled={loading}>
+                {loading ? "Processing..." : "Make Super Admin"}
+              </Button>
+            </form>
+
+            <div className="mt-6 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+              <h4 className="font-semibold text-yellow-800 mb-2">⚠️ Important Notes:</h4>
+              <ul className="text-sm text-yellow-700 space-y-1">
+                <li>• Super admins have full access to all system features</li>
+                <li>• This action cannot be undone through the UI</li>
+                <li>• Use this feature responsibly</li>
+                <li>• Default demo email is pre-filled</li>
+              </ul>
+            </div>
           </CardContent>
         </Card>
-
-        <div className="mt-8 text-center">
-          <p className="text-sm text-gray-500">
-            After creating super admin, refresh your dashboard to see admin navigation links.
-          </p>
-        </div>
       </div>
     </div>
   )

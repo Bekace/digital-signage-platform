@@ -8,6 +8,8 @@ export async function POST(request: NextRequest) {
   try {
     const { email, password } = await request.json()
 
+    console.log("🔐 [LOGIN] Login attempt for:", email)
+
     if (!email || !password) {
       return NextResponse.json(
         {
@@ -26,6 +28,7 @@ export async function POST(request: NextRequest) {
     `
 
     if (result.length === 0) {
+      console.log("🔐 [LOGIN] User not found:", email)
       return NextResponse.json(
         {
           success: false,
@@ -39,6 +42,7 @@ export async function POST(request: NextRequest) {
 
     // Simple password check (for demo - in production you'd use bcrypt)
     if (user.password_hash !== password) {
+      console.log("🔐 [LOGIN] Invalid password for:", email)
       return NextResponse.json(
         {
           success: false,
@@ -49,12 +53,22 @@ export async function POST(request: NextRequest) {
     }
 
     // Create JWT token
-    const token = jwt.sign({ userId: user.id, email: user.email }, process.env.JWT_SECRET!, { expiresIn: "7d" })
+    const token = jwt.sign(
+      {
+        userId: user.id,
+        email: user.email,
+      },
+      process.env.JWT_SECRET!,
+      { expiresIn: "7d" },
+    )
+
+    console.log("🔐 [LOGIN] Token created for user:", user.id)
 
     // Create response
     const response = NextResponse.json({
       success: true,
       message: "Login successful",
+      token: token, // Include token in response for localStorage
       user: {
         id: user.id,
         email: user.email,
@@ -74,9 +88,11 @@ export async function POST(request: NextRequest) {
       path: "/",
     })
 
+    console.log("🔐 [LOGIN] Cookie set and response ready")
+
     return response
   } catch (error) {
-    console.error("Login error:", error)
+    console.error("🔐 [LOGIN] Login error:", error)
     return NextResponse.json(
       {
         success: false,
