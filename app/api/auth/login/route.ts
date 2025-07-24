@@ -1,7 +1,9 @@
 import { NextResponse } from "next/server"
 import bcrypt from "bcryptjs"
 import jwt from "jsonwebtoken"
-import { getDb } from "@/lib/db"
+import { neon } from "@neondatabase/serverless"
+
+const sql = neon(process.env.DATABASE_URL!)
 
 export async function POST(request: Request) {
   try {
@@ -13,11 +15,9 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Email and password are required" }, { status: 400 })
     }
 
-    const sql = getDb()
-
-    // Get user from database
+    // Get user from database - using the correct column names
     const users = await sql`
-      SELECT id, email, password_hash, first_name, last_name, company, plan_type as plan, created_at
+      SELECT id, email, password_hash, first_name, last_name, company, plan, created_at
       FROM users 
       WHERE email = ${email}
       LIMIT 1
@@ -29,6 +29,11 @@ export async function POST(request: Request) {
     }
 
     const user = users[0]
+    console.log("🔐 [LOGIN] User found in database:", {
+      id: user.id,
+      email: user.email,
+      hasPassword: !!user.password_hash,
+    })
 
     // Verify password
     const isValidPassword = await bcrypt.compare(password, user.password_hash)

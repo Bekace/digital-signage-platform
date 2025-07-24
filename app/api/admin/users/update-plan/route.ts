@@ -1,45 +1,60 @@
-import { type NextRequest, NextResponse } from "next/server"
-import { getCurrentUser } from "@/lib/auth"
+import { NextResponse } from "next/server"
 import { neon } from "@neondatabase/serverless"
+import { verifyAuth } from "@/lib/auth-utils"
 
 const sql = neon(process.env.DATABASE_URL!)
 
-export async function POST(request: NextRequest) {
+export async function POST(request: Request) {
   try {
-    console.log("📋 [ADMIN UPDATE PLAN] POST request received")
+    console.log("👥 [ADMIN UPDATE PLAN] Starting plan update...")
 
-    const currentUser = await getCurrentUser(request)
-    if (!currentUser?.is_admin) {
+    // Verify admin authentication
+    const authResult = await verifyAuth(request)
+    if (!authResult.success || !authResult.isAdmin) {
       return NextResponse.json({ error: "Admin access required" }, { status: 403 })
     }
 
-    const { userId, planType } = await request.json()
+    const body = await request.json()
+    const { userId, planType } = body
 
     if (!userId || !planType) {
-      return NextResponse.json({ error: "Missing userId or planType" }, { status: 400 })
+      return NextResponse.json({ error: "User ID and plan type are required" }, { status: 400 })
     }
 
-    // Update user plan
-    const result = await sql`
+    // Update user's plan
+    const updatedUser = await sql`
       UPDATE users 
-      SET plan_type = ${planType}, updated_at = CURRENT_TIMESTAMP
+      SET 
+        plan_type = ${planType},
+        updated_at = NOW()
       WHERE id = ${userId}
-      RETURNING id, email, first_name, last_name, plan_type as plan
+      RETURNING id, email, plan_type, updated_at
     `
 
-    if (result.length === 0) {
+    if (updatedUser.length === 0) {
       return NextResponse.json({ error: "User not found" }, { status: 404 })
     }
 
-    console.log("📋 [ADMIN UPDATE PLAN] Plan updated for user:", result[0].email)
+    console.log("👥 [ADMIN UPDATE PLAN] Plan updated for user:", userId, "to", planType)
 
     return NextResponse.json({
       success: true,
-      user: result[0],
-      message: `Plan updated to ${planType}`,
+      message: "User plan updated successfully",
+      user: {
+        id: updatedUser[0].id,
+        email: updatedUser[0].email,
+        plan: updatedUser[0].plan_type,
+        updatedAt: updatedUser[0].updated_at,
+      },
     })
   } catch (error) {
     console.error("❌ [ADMIN UPDATE PLAN] Error:", error)
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 })
+    return NextResponse.json(
+      {
+        error: "Failed to update user plan",
+        details: error instanceof Error ? error.message : "Unknown error",
+      },
+      { status: 500 },
+    )
   }
 }
