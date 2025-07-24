@@ -1,17 +1,14 @@
 const { neon } = require("@neondatabase/serverless")
 
-// Make sure to set your DATABASE_URL environment variable
-if (!process.env.DATABASE_URL) {
-  console.error("❌ DATABASE_URL environment variable is required")
-  process.exit(1)
-}
-
-const sql = neon(process.env.DATABASE_URL)
-
 async function makeSuperAdmin() {
-  const email = "bekace.multimedia@gmail.com"
-
   try {
+    if (!process.env.DATABASE_URL) {
+      throw new Error("DATABASE_URL environment variable is not set")
+    }
+
+    const sql = neon(process.env.DATABASE_URL)
+    const email = "bekace.multimedia@gmail.com"
+
     console.log(`🔍 Looking for user: ${email}`)
 
     // Get the user ID
@@ -22,8 +19,7 @@ async function makeSuperAdmin() {
     `
 
     if (users.length === 0) {
-      console.error(`❌ User with email ${email} not found`)
-      return
+      throw new Error(`User with email ${email} not found`)
     }
 
     const user = users[0]
@@ -48,6 +44,8 @@ async function makeSuperAdmin() {
       system: { database: true, debug: true, maintenance: true },
     }
 
+    let action = ""
+
     if (existingAdmin.length > 0) {
       // Update existing admin record
       await sql`
@@ -57,6 +55,7 @@ async function makeSuperAdmin() {
           permissions = ${JSON.stringify(permissions)}
         WHERE user_id = ${user.id}
       `
+      action = "updated"
       console.log(`🔄 Updated existing admin record for user ID: ${user.id}`)
     } else {
       // Create new admin record
@@ -64,6 +63,7 @@ async function makeSuperAdmin() {
         INSERT INTO admin_users (user_id, role, permissions)
         VALUES (${user.id}, 'super_admin', ${JSON.stringify(permissions)})
       `
+      action = "created"
       console.log(`✨ Created new admin record for user ID: ${user.id}`)
     }
 
@@ -89,7 +89,6 @@ async function makeSuperAdmin() {
     }
 
     // Verify the result
-    console.log("\n📋 Verification:")
     const verification = await sql`
       SELECT 
         u.id,
@@ -105,23 +104,22 @@ async function makeSuperAdmin() {
       WHERE u.email = ${email}
     `
 
-    if (verification.length > 0) {
-      const result = verification[0]
-      console.log(`✅ User: ${result.first_name} ${result.last_name}`)
-      console.log(`✅ Email: ${result.email}`)
-      console.log(`✅ User ID: ${result.id}`)
-      console.log(`✅ Admin Role: ${result.role || "Not set"}`)
-      console.log(`✅ Is Admin Flag: ${result.is_admin_flag}`)
-      console.log(`✅ Admin Created: ${result.admin_created_at || "Not set"}`)
-      console.log(`✅ Permissions: ${JSON.stringify(result.permissions, null, 2)}`)
-    }
+    const result = verification[0]
 
-    console.log("\n🎉 Super admin setup completed successfully!")
+    console.log("\n🎉 SUCCESS! Super admin", action, "successfully")
+    console.log("📋 User Details:")
+    console.log(`   • ID: ${result.id}`)
+    console.log(`   • Email: ${result.email}`)
+    console.log(`   • Name: ${result.first_name} ${result.last_name}`)
+    console.log(`   • Admin Role: ${result.role}`)
+    console.log(`   • Is Admin Flag: ${result.is_admin_flag}`)
+    console.log(`   • Admin Created: ${result.admin_created_at}`)
+    console.log("\n🔑 Permissions granted:")
+    console.log(JSON.stringify(result.permissions, null, 2))
   } catch (error) {
     console.error("❌ Error making user super admin:", error)
     process.exit(1)
   }
 }
 
-// Run the script
 makeSuperAdmin()

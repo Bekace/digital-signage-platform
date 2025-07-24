@@ -1,9 +1,8 @@
-import { type NextRequest, NextResponse } from "next/server"
+import { NextResponse } from "next/server"
 import { getDb } from "@/lib/db"
 
-export async function PUT(request: NextRequest, { params }: { params: { id: string } }) {
+export async function PUT(request: Request, { params }: { params: { id: string } }) {
   try {
-    const sql = getDb()
     const { name, email } = await request.json()
     const id = Number.parseInt(params.id)
 
@@ -15,7 +14,9 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
       return NextResponse.json({ error: "Invalid ID" }, { status: 400 })
     }
 
-    // Update the record
+    const sql = getDb()
+
+    // Update record
     const result = await sql`
       UPDATE test_records 
       SET name = ${name}, email = ${email}
@@ -44,16 +45,17 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
   }
 }
 
-export async function DELETE(request: NextRequest, { params }: { params: { id: string } }) {
+export async function DELETE(request: Request, { params }: { params: { id: string } }) {
   try {
-    const sql = getDb()
     const id = Number.parseInt(params.id)
 
     if (isNaN(id)) {
       return NextResponse.json({ error: "Invalid ID" }, { status: 400 })
     }
 
-    // Delete the record
+    const sql = getDb()
+
+    // Delete record
     const result = await sql`
       DELETE FROM test_records 
       WHERE id = ${id}

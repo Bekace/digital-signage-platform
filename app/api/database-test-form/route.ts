@@ -1,11 +1,11 @@
-import { type NextRequest, NextResponse } from "next/server"
+import { NextResponse } from "next/server"
 import { getDb } from "@/lib/db"
 
 export async function GET() {
   try {
     const sql = getDb()
 
-    // Ensure the test table exists
+    // Ensure test table exists
     await sql`
       CREATE TABLE IF NOT EXISTS test_records (
         id SERIAL PRIMARY KEY,
@@ -15,16 +15,17 @@ export async function GET() {
       )
     `
 
-    // Fetch all records
+    // Get all records
     const records = await sql`
-      SELECT id, name, email, created_at 
-      FROM test_records 
+      SELECT id, name, email, created_at
+      FROM test_records
       ORDER BY created_at DESC
     `
 
     return NextResponse.json({
       success: true,
-      records,
+      records: records,
+      count: records.length,
     })
   } catch (error) {
     console.error("❌ Error fetching test records:", error)
@@ -38,16 +39,17 @@ export async function GET() {
   }
 }
 
-export async function POST(request: NextRequest) {
+export async function POST(request: Request) {
   try {
-    const sql = getDb()
     const { name, email } = await request.json()
 
     if (!name || !email) {
       return NextResponse.json({ error: "Name and email are required" }, { status: 400 })
     }
 
-    // Ensure the test table exists
+    const sql = getDb()
+
+    // Ensure test table exists
     await sql`
       CREATE TABLE IF NOT EXISTS test_records (
         id SERIAL PRIMARY KEY,

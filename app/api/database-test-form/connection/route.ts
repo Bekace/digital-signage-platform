@@ -5,25 +5,31 @@ export async function GET() {
   try {
     const sql = getDb()
 
-    // Test the database connection
-    const result = await sql`SELECT 1 as test, NOW() as timestamp`
+    // Test the connection
+    const result = await sql`
+      SELECT 
+        current_database() as database,
+        inet_server_addr() as host,
+        NOW() as timestamp
+    `
+
+    const connectionInfo = result[0]
 
     return NextResponse.json({
-      success: true,
+      connected: true,
+      database: connectionInfo.database,
+      host: connectionInfo.host || "localhost",
+      timestamp: connectionInfo.timestamp,
       message: "Database connection successful",
-      test: result[0].test,
-      timestamp: result[0].timestamp,
-      status: "connected",
     })
   } catch (error) {
     console.error("❌ Database connection test failed:", error)
-    return NextResponse.json(
-      {
-        error: "Database connection failed",
-        details: error instanceof Error ? error.message : "Unknown error",
-        status: "error",
-      },
-      { status: 500 },
-    )
+    return NextResponse.json({
+      connected: false,
+      database: "Unknown",
+      host: "Unknown",
+      timestamp: new Date().toISOString(),
+      error: error instanceof Error ? error.message : "Unknown error",
+    })
   }
 }
