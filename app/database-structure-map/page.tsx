@@ -1,434 +1,329 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { toast } from "sonner"
-import { Database, Table, Users, Monitor, PlayCircle, Settings, Activity, Folder, Shield } from "lucide-react"
+import { Loader2, Database, Table, Key, Hash, RefreshCw, AlertCircle, CheckCircle } from "lucide-react"
 
 interface TableInfo {
   table_name: string
-  column_count: number
-  row_count: number
-  columns: Array<{
-    column_name: string
-    data_type: string
-    is_nullable: string
-    column_default: string
-  }>
+  column_name: string
+  data_type: string
+  is_nullable: string
+  column_default: string | null
+  is_primary_key: boolean
+  foreign_key_table: string | null
+  foreign_key_column: string | null
 }
 
-interface DatabaseStructure {
-  tables: TableInfo[]
-  relationships: Array<{
-    table: string
-    column: string
-    referenced_table: string
-    referenced_column: string
-  }>
+interface TableStructure {
+  name: string
+  columns: TableInfo[]
+  rowCount: number
+  category: string
 }
 
 export default function DatabaseStructureMapPage() {
-  const [structure, setStructure] = useState<DatabaseStructure | null>(null)
   const [loading, setLoading] = useState(false)
-  const [error, setError] = useState("")
+  const [tables, setTables] = useState<TableStructure[]>([])
+  const [error, setError] = useState<string | null>(null)
+  const [connectionStatus, setConnectionStatus] = useState<string>("unknown")
 
-  const loadDatabaseStructure = async () => {
+  const fetchDatabaseStructure = async () => {
     setLoading(true)
-    setError("")
+    setError(null)
 
     try {
-      const response = await fetch("/api/database-structure-map", {
-        method: "GET",
-        credentials: "include",
-      })
-
+      const response = await fetch("/api/database-structure-map")
       const data = await response.json()
 
-      if (data.success) {
-        setStructure(data.structure)
-        toast.success("Database structure loaded successfully")
+      if (response.ok) {
+        setTables(data.tables)
+        setConnectionStatus(data.connectionStatus)
       } else {
-        setError(data.error || "Failed to load database structure")
-        toast.error("Failed to load database structure")
+        setError(data.error || "Failed to fetch database structure")
+        setConnectionStatus("error")
       }
     } catch (err) {
-      console.error("Error loading database structure:", err)
-      setError("Failed to connect to database")
-      toast.error("Failed to connect to database")
+      setError("Network error: Failed to fetch database structure")
+      setConnectionStatus("error")
+      console.error("Error:", err)
     } finally {
       setLoading(false)
     }
   }
 
   useEffect(() => {
-    loadDatabaseStructure()
+    fetchDatabaseStructure()
   }, [])
 
-  const getTableIcon = (tableName: string) => {
-    if (tableName.includes("user") || tableName.includes("admin")) return <Users className="h-4 w-4" />
-    if (tableName.includes("device") || tableName === "screens") return <Monitor className="h-4 w-4" />
-    if (tableName.includes("playlist") || tableName.includes("media")) return <PlayCircle className="h-4 w-4" />
-    if (tableName.includes("plan") || tableName.includes("feature")) return <Settings className="h-4 w-4" />
-    if (tableName.includes("session") || tableName.includes("audit")) return <Activity className="h-4 w-4" />
-    if (tableName.includes("folder")) return <Folder className="h-4 w-4" />
-    return <Table className="h-4 w-4" />
-  }
-
-  const getTableCategory = (tableName: string) => {
-    if (tableName.includes("user") || tableName.includes("admin") || tableName.includes("password"))
+  const categorizeTable = (tableName: string): string => {
+    if (tableName.includes("user") || tableName.includes("admin") || tableName.includes("password")) {
       return "Authentication & Users"
-    if (tableName.includes("device") || tableName === "screens") return "Screens & Devices"
-    if (tableName.includes("playlist") || tableName.includes("media")) return "Content Management"
-    if (tableName.includes("plan") || tableName.includes("feature") || tableName.includes("subscription"))
-      return "Subscription System"
-    if (tableName.includes("audit") || tableName.includes("log")) return "Audit & Logging"
-    if (tableName.includes("folder")) return "File Organization"
-    return "Other"
+    }
+    if (tableName.includes("device") || tableName.includes("screen")) {
+      return "Devices & Screens"
+    }
+    if (tableName.includes("media") || tableName.includes("playlist")) {
+      return "Content Management"
+    }
+    if (tableName.includes("plan") || tableName.includes("subscription") || tableName.includes("feature")) {
+      return "Subscription & Plans"
+    }
+    return "System & Other"
   }
 
-  const getRowCountBadge = (count: number) => {
-    if (count === 0) return <Badge variant="destructive">Empty</Badge>
-    if (count < 10) return <Badge variant="secondary">{count} rows</Badge>
-    if (count < 100) return <Badge variant="default">{count} rows</Badge>
-    return <Badge variant="outline">{count} rows</Badge>
+  const getTablesByCategory = () => {
+    const categories: { [key: string]: TableStructure[] } = {}
+    tables.forEach((table) => {
+      const category = categorizeTable(table.name)
+      if (!categories[category]) {
+        categories[category] = []
+      }
+      categories[category].push(table)
+    })
+    return categories
   }
 
-  const categorizedTables =
-    structure?.tables.reduce(
-      (acc, table) => {
-        const category = getTableCategory(table.table_name)
-        if (!acc[category]) acc[category] = []
-        acc[category].push(table)
-        return acc
-      },
-      {} as Record<string, TableInfo[]>,
-    ) || {}
+  const getColumnTypeColor = (dataType: string): string => {
+    if (dataType.includes("varchar") || dataType.includes("text")) return "bg-blue-100 text-blue-800"
+    if (dataType.includes("integer") || dataType.includes("bigint")) return "bg-green-100 text-green-800"
+    if (dataType.includes("timestamp") || dataType.includes("date")) return "bg-purple-100 text-purple-800"
+    if (dataType.includes("boolean")) return "bg-yellow-100 text-yellow-800"
+    if (dataType.includes("jsonb") || dataType.includes("json")) return "bg-orange-100 text-orange-800"
+    return "bg-gray-100 text-gray-800"
+  }
 
   return (
-    <div className="min-h-screen bg-gray-50 p-4">
-      <div className="max-w-7xl mx-auto space-y-6">
-        {/* Header */}
-        <div className="text-center">
-          <h1 className="text-3xl font-bold flex items-center justify-center gap-2">
-            <Database className="h-8 w-8" />
-            Database Structure Map
-          </h1>
-          <p className="text-gray-600 mt-2">Complete analysis of your digital signage database structure</p>
+    <div className="min-h-screen bg-gray-50 py-8">
+      <div className="max-w-7xl mx-auto px-4">
+        <div className="mb-8">
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="text-3xl font-bold text-gray-900 flex items-center">
+                <Database className="h-8 w-8 mr-3 text-blue-600" />
+                Database Structure Map
+              </h1>
+              <p className="text-gray-600 mt-2">Complete analysis of your digital signage database schema</p>
+            </div>
+            <div className="flex items-center space-x-4">
+              <div className="flex items-center space-x-2">
+                {connectionStatus === "connected" ? (
+                  <CheckCircle className="h-5 w-5 text-green-600" />
+                ) : connectionStatus === "error" ? (
+                  <AlertCircle className="h-5 w-5 text-red-600" />
+                ) : (
+                  <Database className="h-5 w-5 text-gray-400" />
+                )}
+                <span className="text-sm font-medium">
+                  Status:{" "}
+                  {connectionStatus === "connected" ? "Connected" : connectionStatus === "error" ? "Error" : "Unknown"}
+                </span>
+              </div>
+              <Button onClick={fetchDatabaseStructure} disabled={loading} variant="outline">
+                {loading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <RefreshCw className="h-4 w-4 mr-2" />}
+                Refresh
+              </Button>
+            </div>
+          </div>
         </div>
 
         {/* Database Schema Image */}
-        <Card>
+        <Card className="mb-8">
           <CardHeader>
-            <CardTitle>Current Database Schema</CardTitle>
+            <CardTitle>Database Schema Overview</CardTitle>
             <CardDescription>Visual representation of your database tables</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="flex justify-center">
               <img
                 src="/database-schema.png"
-                alt="Database Schema showing tables: admin_users, device_codes, device_heartbeats, device_pairing_codes, devices, features, media_files, password_reset_tokens, plan_features, plan_limits, plan_templates, playlist_assignments, playlist_items, playlists, subscription_plans, users"
-                className="max-w-full h-auto border rounded-lg shadow-sm"
+                alt="Database Schema"
+                className="max-w-full h-auto rounded-lg border shadow-sm"
               />
             </div>
           </CardContent>
         </Card>
 
-        {/* Controls */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Database Analysis</CardTitle>
-            <CardDescription>Load and analyze the complete database structure</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <Button onClick={loadDatabaseStructure} disabled={loading} className="w-full">
-              {loading ? "Loading Database Structure..." : "Refresh Database Structure"}
-            </Button>
-          </CardContent>
-        </Card>
-
-        {/* Error Display */}
         {error && (
-          <Alert variant="destructive">
+          <Alert variant="destructive" className="mb-6">
+            <AlertCircle className="h-4 w-4" />
             <AlertDescription>{error}</AlertDescription>
           </Alert>
         )}
 
-        {/* Database Structure Display */}
-        {structure && (
-          <Tabs defaultValue="overview" className="space-y-6">
-            <TabsList className="grid w-full grid-cols-4">
-              <TabsTrigger value="overview">Overview</TabsTrigger>
-              <TabsTrigger value="tables">Tables Detail</TabsTrigger>
-              <TabsTrigger value="relationships">Relationships</TabsTrigger>
-              <TabsTrigger value="analysis">Analysis</TabsTrigger>
-            </TabsList>
+        {loading && (
+          <div className="flex items-center justify-center py-12">
+            <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
+            <span className="ml-2 text-lg">Analyzing database structure...</span>
+          </div>
+        )}
 
-            {/* Overview Tab */}
-            <TabsContent value="overview" className="space-y-6">
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <Card>
-                  <CardHeader className="pb-3">
-                    <CardTitle className="text-lg">Total Tables</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="text-3xl font-bold">{structure.tables.length}</div>
-                  </CardContent>
-                </Card>
-                <Card>
-                  <CardHeader className="pb-3">
-                    <CardTitle className="text-lg">Total Rows</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="text-3xl font-bold">
-                      {structure.tables.reduce((sum, table) => sum + table.row_count, 0)}
+        {!loading && tables.length > 0 && (
+          <div className="space-y-8">
+            {/* Summary Stats */}
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+              <Card>
+                <CardContent className="p-4">
+                  <div className="flex items-center">
+                    <Table className="h-8 w-8 text-blue-600" />
+                    <div className="ml-3">
+                      <p className="text-sm font-medium text-gray-600">Total Tables</p>
+                      <p className="text-2xl font-bold">{tables.length}</p>
                     </div>
-                  </CardContent>
-                </Card>
-                <Card>
-                  <CardHeader className="pb-3">
-                    <CardTitle className="text-lg">Relationships</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="text-3xl font-bold">{structure.relationships.length}</div>
-                  </CardContent>
-                </Card>
-              </div>
+                  </div>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardContent className="p-4">
+                  <div className="flex items-center">
+                    <Hash className="h-8 w-8 text-green-600" />
+                    <div className="ml-3">
+                      <p className="text-sm font-medium text-gray-600">Total Columns</p>
+                      <p className="text-2xl font-bold">
+                        {tables.reduce((sum, table) => sum + table.columns.length, 0)}
+                      </p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardContent className="p-4">
+                  <div className="flex items-center">
+                    <Database className="h-8 w-8 text-purple-600" />
+                    <div className="ml-3">
+                      <p className="text-sm font-medium text-gray-600">Tables with Data</p>
+                      <p className="text-2xl font-bold">{tables.filter((table) => table.rowCount > 0).length}</p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardContent className="p-4">
+                  <div className="flex items-center">
+                    <Key className="h-8 w-8 text-orange-600" />
+                    <div className="ml-3">
+                      <p className="text-sm font-medium text-gray-600">Foreign Keys</p>
+                      <p className="text-2xl font-bold">
+                        {tables.reduce(
+                          (sum, table) => sum + table.columns.filter((col) => col.foreign_key_table).length,
+                          0,
+                        )}
+                      </p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
 
-              {/* Tables by Category */}
-              <div className="space-y-6">
-                {Object.entries(categorizedTables).map(([category, tables]) => (
-                  <Card key={category}>
-                    <CardHeader>
-                      <CardTitle className="flex items-center gap-2">
-                        {category === "Authentication & Users" && <Shield className="h-5 w-5" />}
-                        {category === "Screens & Devices" && <Monitor className="h-5 w-5" />}
-                        {category === "Content Management" && <PlayCircle className="h-5 w-5" />}
-                        {category === "Subscription System" && <Settings className="h-5 w-5" />}
-                        {category === "Audit & Logging" && <Activity className="h-5 w-5" />}
-                        {category === "File Organization" && <Folder className="h-5 w-5" />}
-                        {category}
-                      </CardTitle>
-                      <CardDescription>{tables.length} tables in this category</CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                        {tables.map((table) => (
-                          <div
-                            key={table.table_name}
-                            className="flex items-center justify-between p-3 bg-gray-50 rounded-lg"
-                          >
-                            <div className="flex items-center gap-2">
-                              {getTableIcon(table.table_name)}
-                              <span className="font-medium">{table.table_name}</span>
-                            </div>
-                            {getRowCountBadge(table.row_count)}
+            {/* Tables by Category */}
+            {Object.entries(getTablesByCategory()).map(([category, categoryTables]) => (
+              <div key={category}>
+                <h2 className="text-2xl font-bold text-gray-900 mb-4">{category}</h2>
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  {categoryTables.map((table) => (
+                    <Card key={table.name}>
+                      <CardHeader>
+                        <div className="flex items-center justify-between">
+                          <CardTitle className="flex items-center">
+                            <Table className="h-5 w-5 mr-2 text-blue-600" />
+                            {table.name}
+                          </CardTitle>
+                          <div className="flex items-center space-x-2">
+                            <Badge variant={table.rowCount > 0 ? "default" : "secondary"}>{table.rowCount} rows</Badge>
+                            <Badge variant="outline">{table.columns.length} columns</Badge>
                           </div>
-                        ))}
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))}
-              </div>
-            </TabsContent>
-
-            {/* Tables Detail Tab */}
-            <TabsContent value="tables" className="space-y-4">
-              {structure.tables.map((table) => (
-                <Card key={table.table_name}>
-                  <CardHeader>
-                    <CardTitle className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        {getTableIcon(table.table_name)}
-                        {table.table_name}
-                      </div>
-                      <div className="flex items-center gap-2">
-                        {getRowCountBadge(table.row_count)}
-                        <Badge variant="outline">{table.column_count} columns</Badge>
-                      </div>
-                    </CardTitle>
-                    <CardDescription>Category: {getTableCategory(table.table_name)}</CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="overflow-x-auto">
-                      <table className="w-full text-sm">
-                        <thead>
-                          <tr className="border-b">
-                            <th className="text-left p-2">Column</th>
-                            <th className="text-left p-2">Type</th>
-                            <th className="text-left p-2">Nullable</th>
-                            <th className="text-left p-2">Default</th>
-                          </tr>
-                        </thead>
-                        <tbody>
+                        </div>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="space-y-2">
                           {table.columns.map((column) => (
-                            <tr key={column.column_name} className="border-b">
-                              <td className="p-2 font-medium">{column.column_name}</td>
-                              <td className="p-2">
-                                <Badge variant="secondary" className="text-xs">
+                            <div key={column.column_name} className="flex items-center justify-between py-2 border-b">
+                              <div className="flex items-center space-x-2">
+                                {column.is_primary_key && <Key className="h-4 w-4 text-yellow-600" />}
+                                <span className="font-medium">{column.column_name}</span>
+                                {column.foreign_key_table && (
+                                  <Badge variant="outline" className="text-xs">
+                                    FK → {column.foreign_key_table}
+                                  </Badge>
+                                )}
+                              </div>
+                              <div className="flex items-center space-x-2">
+                                <Badge className={getColumnTypeColor(column.data_type)} variant="secondary">
                                   {column.data_type}
                                 </Badge>
-                              </td>
-                              <td className="p-2">
-                                {column.is_nullable === "YES" ? (
-                                  <Badge variant="outline" className="text-xs">
-                                    Nullable
-                                  </Badge>
-                                ) : (
+                                {column.is_nullable === "NO" && (
                                   <Badge variant="destructive" className="text-xs">
                                     Required
                                   </Badge>
                                 )}
-                              </td>
-                              <td className="p-2 text-gray-600 text-xs">{column.column_default || "None"}</td>
-                            </tr>
+                              </div>
+                            </div>
                           ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
-            </TabsContent>
-
-            {/* Relationships Tab */}
-            <TabsContent value="relationships" className="space-y-4">
-              <Card>
-                <CardHeader>
-                  <CardTitle>Foreign Key Relationships</CardTitle>
-                  <CardDescription>Database table relationships and constraints</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  {structure.relationships.length > 0 ? (
-                    <div className="space-y-3">
-                      {structure.relationships.map((rel, index) => (
-                        <div key={index} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                          <div className="flex items-center gap-4">
-                            <div className="text-sm">
-                              <span className="font-medium">{rel.table}</span>
-                              <span className="text-gray-500">.{rel.column}</span>
-                            </div>
-                            <span className="text-gray-400">→</span>
-                            <div className="text-sm">
-                              <span className="font-medium">{rel.referenced_table}</span>
-                              <span className="text-gray-500">.{rel.referenced_column}</span>
-                            </div>
-                          </div>
                         </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="text-center py-8 text-gray-500">No foreign key relationships found</div>
-                  )}
-                </CardContent>
-              </Card>
-            </TabsContent>
-
-            {/* Analysis Tab */}
-            <TabsContent value="analysis" className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {/* Empty Tables */}
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="text-red-600">Empty Tables</CardTitle>
-                    <CardDescription>Tables with no data</CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="space-y-2">
-                      {structure.tables
-                        .filter((table) => table.row_count === 0)
-                        .map((table) => (
-                          <div key={table.table_name} className="flex items-center gap-2 p-2 bg-red-50 rounded">
-                            {getTableIcon(table.table_name)}
-                            <span className="font-medium">{table.table_name}</span>
-                          </div>
-                        ))}
-                    </div>
-                  </CardContent>
-                </Card>
-
-                {/* Populated Tables */}
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="text-green-600">Populated Tables</CardTitle>
-                    <CardDescription>Tables with data</CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="space-y-2">
-                      {structure.tables
-                        .filter((table) => table.row_count > 0)
-                        .sort((a, b) => b.row_count - a.row_count)
-                        .map((table) => (
-                          <div
-                            key={table.table_name}
-                            className="flex items-center justify-between p-2 bg-green-50 rounded"
-                          >
-                            <div className="flex items-center gap-2">
-                              {getTableIcon(table.table_name)}
-                              <span className="font-medium">{table.table_name}</span>
-                            </div>
-                            <Badge variant="default">{table.row_count} rows</Badge>
-                          </div>
-                        ))}
-                    </div>
-                  </CardContent>
-                </Card>
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
               </div>
+            ))}
 
-              {/* Key Insights */}
-              <Card>
-                <CardHeader>
-                  <CardTitle>Key Insights & Architecture Notes</CardTitle>
-                  <CardDescription>Important observations about your database structure</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-4">
-                    <Alert>
-                      <AlertDescription>
-                        <strong>Screens vs Devices Architecture:</strong> Based on your schema, I can see you have a
-                        "devices" table (for device players) but I don't see a "screens" table in the current structure.
-                        This suggests we may need to create the screens table or clarify the relationship between
-                        physical screens and device players.
-                      </AlertDescription>
-                    </Alert>
-
-                    <Alert>
-                      <AlertDescription>
-                        <strong>Content Management System:</strong> You have a robust content system with media_files,
-                        playlists, playlist_items, and playlist_assignments tables. This shows a well-structured content
-                        management architecture.
-                      </AlertDescription>
-                    </Alert>
-
-                    <Alert>
-                      <AlertDescription>
-                        <strong>Subscription System:</strong> Your subscription system includes subscription_plans,
-                        plan_features, plan_limits, and plan_templates - indicating a sophisticated multi-tier
-                        subscription model.
-                      </AlertDescription>
-                    </Alert>
-
-                    <Alert>
-                      <AlertDescription>
-                        <strong>Device Management:</strong> You have device_codes, device_heartbeats, and
-                        device_pairing_codes tables, showing a comprehensive device management and monitoring system.
-                      </AlertDescription>
-                    </Alert>
-
-                    <Alert>
-                      <AlertDescription>
-                        <strong>Next Steps:</strong> We should test database connectivity with the test form, then
-                        clarify the screens vs devices architecture before proceeding with cleanup.
-                      </AlertDescription>
-                    </Alert>
+            {/* Key Insights */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Key Insights</CardTitle>
+                <CardDescription>Important observations about your database structure</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
+                  <div className="p-4 bg-blue-50 rounded-lg">
+                    <h4 className="font-medium text-blue-900 mb-2">Architecture Overview</h4>
+                    <ul className="text-sm text-blue-800 space-y-1">
+                      <li>
+                        • You have a <strong>devices</strong> table for device players
+                      </li>
+                      <li>
+                        • No separate <strong>screens</strong> table found - may need clarification
+                      </li>
+                      <li>• Rich content management with media_files, playlists, and playlist_items</li>
+                      <li>• Sophisticated subscription system with multiple plan-related tables</li>
+                    </ul>
                   </div>
-                </CardContent>
-              </Card>
-            </TabsContent>
-          </Tabs>
+                  <div className="p-4 bg-green-50 rounded-lg">
+                    <h4 className="font-medium text-green-900 mb-2">Data Status</h4>
+                    <ul className="text-sm text-green-800 space-y-1">
+                      <li>
+                        • Tables with data:{" "}
+                        {tables
+                          .filter((t) => t.rowCount > 0)
+                          .map((t) => t.name)
+                          .join(", ")}
+                      </li>
+                      <li>
+                        • Empty tables:{" "}
+                        {tables
+                          .filter((t) => t.rowCount === 0)
+                          .map((t) => t.name)
+                          .join(", ")}
+                      </li>
+                    </ul>
+                  </div>
+                  <div className="p-4 bg-yellow-50 rounded-lg">
+                    <h4 className="font-medium text-yellow-900 mb-2">Recommendations</h4>
+                    <ul className="text-sm text-yellow-800 space-y-1">
+                      <li>
+                        • Consider creating a separate <strong>screens</strong> table if needed
+                      </li>
+                      <li>• Clean up any unused tables to simplify the schema</li>
+                      <li>• Verify foreign key relationships are properly established</li>
+                    </ul>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
         )}
       </div>
     </div>

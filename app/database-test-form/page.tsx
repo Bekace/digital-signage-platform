@@ -4,81 +4,77 @@ import type React from "react"
 
 import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Textarea } from "@/components/ui/textarea"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
-import { toast } from "sonner"
-import { Database, Plus, Trash2, Edit, CheckCircle, XCircle } from "lucide-react"
+import { Loader2, Database, Plus, Trash2, Edit, CheckCircle, AlertCircle, RefreshCw } from "lucide-react"
 
 interface TestRecord {
-  id: string
+  id: number
   name: string
-  description: string
-  test_data: string
+  email: string
   created_at: string
 }
 
 export default function DatabaseTestFormPage() {
-  const [records, setRecords] = useState<TestRecord[]>([])
   const [loading, setLoading] = useState(false)
+  const [connectionLoading, setConnectionLoading] = useState(false)
+  const [records, setRecords] = useState<TestRecord[]>([])
+  const [error, setError] = useState<string | null>(null)
+  const [success, setSuccess] = useState<string | null>(null)
+  const [connectionStatus, setConnectionStatus] = useState<string>("unknown")
+  const [connectionDetails, setConnectionDetails] = useState<any>(null)
+
+  // Form state
   const [formData, setFormData] = useState({
     name: "",
-    description: "",
-    test_data: "",
+    email: "",
   })
-  const [editingId, setEditingId] = useState<string | null>(null)
-  const [connectionStatus, setConnectionStatus] = useState<"unknown" | "connected" | "error">("unknown")
-
-  // Test database connection on load
-  useEffect(() => {
-    testConnection()
-    loadRecords()
-  }, [])
+  const [editingId, setEditingId] = useState<number | null>(null)
 
   const testConnection = async () => {
-    try {
-      const response = await fetch("/api/database-test-form/connection", {
-        method: "GET",
-        credentials: "include",
-      })
+    setConnectionLoading(true)
+    setError(null)
 
+    try {
+      const response = await fetch("/api/database-test-form/connection")
       const data = await response.json()
 
-      if (data.success) {
+      if (response.ok) {
         setConnectionStatus("connected")
-        console.log("✅ Database connection test successful")
+        setConnectionDetails(data)
+        setSuccess("Database connection successful!")
       } else {
         setConnectionStatus("error")
-        console.error("❌ Database connection test failed:", data.error)
+        setError(data.error || "Connection test failed")
       }
-    } catch (error) {
+    } catch (err) {
       setConnectionStatus("error")
-      console.error("❌ Database connection test error:", error)
+      setError("Network error: Failed to test connection")
+      console.error("Error:", err)
+    } finally {
+      setConnectionLoading(false)
     }
   }
 
-  const loadRecords = async () => {
+  const fetchRecords = async () => {
     setLoading(true)
-    try {
-      const response = await fetch("/api/database-test-form", {
-        method: "GET",
-        credentials: "include",
-      })
+    setError(null)
 
+    try {
+      const response = await fetch("/api/database-test-form")
       const data = await response.json()
 
-      if (data.success) {
+      if (response.ok) {
         setRecords(data.records)
-        console.log("📋 Loaded records:", data.records.length)
       } else {
-        toast.error(data.error || "Failed to load records")
+        setError(data.error || "Failed to fetch records")
       }
-    } catch (error) {
-      console.error("Error loading records:", error)
-      toast.error("Failed to load records")
+    } catch (err) {
+      setError("Network error: Failed to fetch records")
+      console.error("Error:", err)
     } finally {
       setLoading(false)
     }
@@ -86,17 +82,12 @@ export default function DatabaseTestFormPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-
-    if (!formData.name.trim()) {
-      toast.error("Name is required")
-      return
-    }
-
     setLoading(true)
+    setError(null)
+    setSuccess(null)
 
     try {
       const url = editingId ? `/api/database-test-form/${editingId}` : "/api/database-test-form"
-
       const method = editingId ? "PUT" : "POST"
 
       const response = await fetch(url, {
@@ -104,23 +95,22 @@ export default function DatabaseTestFormPage() {
         headers: {
           "Content-Type": "application/json",
         },
-        credentials: "include",
         body: JSON.stringify(formData),
       })
 
       const data = await response.json()
 
-      if (data.success) {
-        toast.success(editingId ? "Record updated successfully" : "Record created successfully")
-        setFormData({ name: "", description: "", test_data: "" })
+      if (response.ok) {
+        setSuccess(editingId ? "Record updated successfully!" : "Record created successfully!")
+        setFormData({ name: "", email: "" })
         setEditingId(null)
-        loadRecords()
+        fetchRecords()
       } else {
-        toast.error(data.error || "Failed to save record")
+        setError(data.error || "Failed to save record")
       }
-    } catch (error) {
-      console.error("Error saving record:", error)
-      toast.error("Failed to save record")
+    } catch (err) {
+      setError("Network error: Failed to save record")
+      console.error("Error:", err)
     } finally {
       setLoading(false)
     }
@@ -129,206 +119,234 @@ export default function DatabaseTestFormPage() {
   const handleEdit = (record: TestRecord) => {
     setFormData({
       name: record.name,
-      description: record.description || "",
-      test_data: record.test_data || "",
+      email: record.email,
     })
     setEditingId(record.id)
+    setError(null)
+    setSuccess(null)
   }
 
-  const handleDelete = async (id: string, name: string) => {
-    if (!confirm(`Are you sure you want to delete "${name}"?`)) {
-      return
-    }
+  const handleDelete = async (id: number) => {
+    if (!confirm("Are you sure you want to delete this record?")) return
+
+    setLoading(true)
+    setError(null)
 
     try {
       const response = await fetch(`/api/database-test-form/${id}`, {
         method: "DELETE",
-        credentials: "include",
       })
 
       const data = await response.json()
 
-      if (data.success) {
-        toast.success("Record deleted successfully")
-        loadRecords()
+      if (response.ok) {
+        setSuccess("Record deleted successfully!")
+        fetchRecords()
       } else {
-        toast.error(data.error || "Failed to delete record")
+        setError(data.error || "Failed to delete record")
       }
-    } catch (error) {
-      console.error("Error deleting record:", error)
-      toast.error("Failed to delete record")
+    } catch (err) {
+      setError("Network error: Failed to delete record")
+      console.error("Error:", err)
+    } finally {
+      setLoading(false)
     }
   }
 
   const cancelEdit = () => {
-    setFormData({ name: "", description: "", test_data: "" })
+    setFormData({ name: "", email: "" })
     setEditingId(null)
+    setError(null)
+    setSuccess(null)
   }
 
+  useEffect(() => {
+    testConnection()
+    fetchRecords()
+  }, [])
+
   return (
-    <div className="min-h-screen bg-gray-50 p-4">
-      <div className="max-w-4xl mx-auto space-y-6">
-        {/* Header */}
-        <div className="text-center">
-          <h1 className="text-3xl font-bold flex items-center justify-center gap-2">
-            <Database className="h-8 w-8" />
+    <div className="min-h-screen bg-gray-50 py-8">
+      <div className="max-w-4xl mx-auto px-4">
+        <div className="mb-8">
+          <h1 className="text-3xl font-bold text-gray-900 flex items-center">
+            <Database className="h-8 w-8 mr-3 text-blue-600" />
             Database Test Form
           </h1>
-          <p className="text-gray-600 mt-2">Test database connectivity with a simple CRUD form</p>
+          <p className="text-gray-600 mt-2">Test database connectivity and CRUD operations</p>
         </div>
 
         {/* Connection Status */}
-        <Card>
+        <Card className="mb-6">
           <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              {connectionStatus === "connected" && <CheckCircle className="h-5 w-5 text-green-500" />}
-              {connectionStatus === "error" && <XCircle className="h-5 w-5 text-red-500" />}
-              Database Connection Status
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
             <div className="flex items-center justify-between">
-              <span>Connection Status:</span>
-              <Badge
-                variant={
-                  connectionStatus === "connected"
-                    ? "default"
-                    : connectionStatus === "error"
-                      ? "destructive"
-                      : "secondary"
-                }
-              >
-                {connectionStatus === "connected" ? "Connected" : connectionStatus === "error" ? "Error" : "Testing..."}
-              </Badge>
-            </div>
-            <Button onClick={testConnection} variant="outline" size="sm" className="mt-3 bg-transparent">
-              Test Connection Again
-            </Button>
-          </CardContent>
-        </Card>
-
-        {/* Form */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Plus className="h-5 w-5" />
-              {editingId ? "Edit Test Record" : "Add Test Record"}
-            </CardTitle>
-            <CardDescription>
-              {editingId ? "Update the existing record" : "Create a new test record in the database"}
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="name">Name *</Label>
-                <Input
-                  id="name"
-                  type="text"
-                  placeholder="Enter a name"
-                  value={formData.name}
-                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                  required
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="description">Description</Label>
-                <Input
-                  id="description"
-                  type="text"
-                  placeholder="Enter a description"
-                  value={formData.description}
-                  onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="test_data">Test Data</Label>
-                <Textarea
-                  id="test_data"
-                  placeholder="Enter some test data"
-                  value={formData.test_data}
-                  onChange={(e) => setFormData({ ...formData, test_data: e.target.value })}
-                  rows={3}
-                />
-              </div>
-
-              <div className="flex gap-2">
-                <Button type="submit" disabled={loading}>
-                  {loading ? "Saving..." : editingId ? "Update Record" : "Create Record"}
-                </Button>
-                {editingId && (
-                  <Button type="button" variant="outline" onClick={cancelEdit}>
-                    Cancel Edit
-                  </Button>
+              <CardTitle className="flex items-center">
+                <Database className="h-5 w-5 mr-2" />
+                Connection Status
+              </CardTitle>
+              <Button onClick={testConnection} disabled={connectionLoading} variant="outline" size="sm">
+                {connectionLoading ? (
+                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                ) : (
+                  <RefreshCw className="h-4 w-4 mr-2" />
                 )}
+                Test Connection
+              </Button>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="flex items-center space-x-4">
+              <div className="flex items-center space-x-2">
+                {connectionStatus === "connected" ? (
+                  <CheckCircle className="h-5 w-5 text-green-600" />
+                ) : connectionStatus === "error" ? (
+                  <AlertCircle className="h-5 w-5 text-red-600" />
+                ) : (
+                  <Database className="h-5 w-5 text-gray-400" />
+                )}
+                <Badge
+                  variant={
+                    connectionStatus === "connected"
+                      ? "default"
+                      : connectionStatus === "error"
+                        ? "destructive"
+                        : "secondary"
+                  }
+                >
+                  {connectionStatus === "connected" ? "Connected" : connectionStatus === "error" ? "Error" : "Unknown"}
+                </Badge>
               </div>
-            </form>
+              {connectionDetails && (
+                <div className="text-sm text-gray-600">
+                  <span>Test query executed at: {new Date(connectionDetails.timestamp).toLocaleString()}</span>
+                </div>
+              )}
+            </div>
           </CardContent>
         </Card>
 
-        {/* Records List */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Test Records</CardTitle>
-            <CardDescription>Records stored in the database ({records.length} total)</CardDescription>
-          </CardHeader>
-          <CardContent>
-            {loading && records.length === 0 ? (
-              <div className="text-center py-8">Loading records...</div>
-            ) : records.length === 0 ? (
-              <div className="text-center py-8 text-gray-500">
-                No records found. Create your first test record above.
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* Form */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center">
+                {editingId ? <Edit className="h-5 w-5 mr-2" /> : <Plus className="h-5 w-5 mr-2" />}
+                {editingId ? "Edit Record" : "Create New Record"}
+              </CardTitle>
+              <CardDescription>
+                {editingId ? "Update the existing test record" : "Add a new test record to the database"}
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <form onSubmit={handleSubmit} className="space-y-4">
+                <div>
+                  <Label htmlFor="name">Name</Label>
+                  <Input
+                    id="name"
+                    type="text"
+                    value={formData.name}
+                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                    placeholder="Enter name"
+                    required
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="email">Email</Label>
+                  <Input
+                    id="email"
+                    type="email"
+                    value={formData.email}
+                    onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                    placeholder="Enter email"
+                    required
+                  />
+                </div>
+                <div className="flex space-x-2">
+                  <Button type="submit" disabled={loading} className="flex-1">
+                    {loading ? (
+                      <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                    ) : editingId ? (
+                      <Edit className="h-4 w-4 mr-2" />
+                    ) : (
+                      <Plus className="h-4 w-4 mr-2" />
+                    )}
+                    {editingId ? "Update Record" : "Create Record"}
+                  </Button>
+                  {editingId && (
+                    <Button type="button" onClick={cancelEdit} variant="outline">
+                      Cancel
+                    </Button>
+                  )}
+                </div>
+              </form>
+            </CardContent>
+          </Card>
+
+          {/* Records List */}
+          <Card>
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <CardTitle className="flex items-center">
+                  <Database className="h-5 w-5 mr-2" />
+                  Test Records
+                </CardTitle>
+                <Button onClick={fetchRecords} disabled={loading} variant="outline" size="sm">
+                  {loading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <RefreshCw className="h-4 w-4 mr-2" />}
+                  Refresh
+                </Button>
               </div>
-            ) : (
-              <div className="space-y-3">
-                {records.map((record) => (
-                  <div key={record.id} className="border rounded-lg p-4 bg-white">
-                    <div className="flex items-start justify-between">
-                      <div className="flex-1">
-                        <h3 className="font-semibold text-lg">{record.name}</h3>
-                        {record.description && <p className="text-gray-600 mt-1">{record.description}</p>}
-                        {record.test_data && (
-                          <div className="mt-2">
-                            <span className="text-sm font-medium text-gray-500">Test Data:</span>
-                            <p className="text-sm bg-gray-50 p-2 rounded mt-1">{record.test_data}</p>
-                          </div>
-                        )}
-                        <div className="flex items-center gap-4 mt-3 text-xs text-gray-500">
-                          <span>ID: {record.id}</span>
-                          <span>Created: {new Date(record.created_at).toLocaleString()}</span>
-                        </div>
+              <CardDescription>Records stored in the test_records table</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {loading && records.length === 0 ? (
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 className="h-6 w-6 animate-spin text-blue-600" />
+                  <span className="ml-2">Loading records...</span>
+                </div>
+              ) : records.length === 0 ? (
+                <div className="text-center py-8 text-gray-500">
+                  <Database className="h-12 w-12 mx-auto mb-4 text-gray-300" />
+                  <p>No records found. Create your first test record!</p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {records.map((record) => (
+                    <div key={record.id} className="flex items-center justify-between p-3 border rounded-lg">
+                      <div>
+                        <p className="font-medium">{record.name}</p>
+                        <p className="text-sm text-gray-600">{record.email}</p>
+                        <p className="text-xs text-gray-400">Created: {new Date(record.created_at).toLocaleString()}</p>
                       </div>
-                      <div className="flex gap-2 ml-4">
-                        <Button onClick={() => handleEdit(record)} variant="outline" size="sm">
+                      <div className="flex space-x-2">
+                        <Button onClick={() => handleEdit(record)} size="sm" variant="outline">
                           <Edit className="h-4 w-4" />
                         </Button>
-                        <Button
-                          onClick={() => handleDelete(record.id, record.name)}
-                          variant="outline"
-                          size="sm"
-                          className="text-red-600 hover:text-red-700"
-                        >
+                        <Button onClick={() => handleDelete(record.id)} size="sm" variant="destructive">
                           <Trash2 className="h-4 w-4" />
                         </Button>
                       </div>
                     </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </CardContent>
-        </Card>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </div>
 
-        {/* Instructions */}
-        <Alert>
-          <AlertDescription>
-            <strong>Purpose:</strong> This page tests basic database connectivity by creating a simple test table and
-            performing CRUD operations. If this works, we know the database connection is solid and we can proceed with
-            the environment variable cleanup and structure fixes.
-          </AlertDescription>
-        </Alert>
+        {/* Status Messages */}
+        {error && (
+          <Alert variant="destructive" className="mt-6">
+            <AlertCircle className="h-4 w-4" />
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
+        )}
+
+        {success && (
+          <Alert className="mt-6">
+            <CheckCircle className="h-4 w-4" />
+            <AlertDescription>{success}</AlertDescription>
+          </Alert>
+        )}
       </div>
     </div>
   )
