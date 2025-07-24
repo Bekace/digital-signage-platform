@@ -6,72 +6,62 @@ const sql = neon(process.env.DATABASE_URL!)
 
 export async function GET(request: Request) {
   try {
-    console.log("📋 [ADMIN PLANS] Starting plans fetch...")
+    console.log("💰 [ADMIN PLANS] Starting plans fetch...")
 
     // Verify admin authentication
     const authResult = await verifyAuth(request)
     if (!authResult.success || !authResult.isAdmin) {
-      console.log("📋 [ADMIN PLANS] Access denied - not admin")
-      return NextResponse.json({ error: "Access denied" }, { status: 403 })
+      return NextResponse.json({ error: "Admin access required" }, { status: 403 })
     }
 
-    console.log("📋 [ADMIN PLANS] Admin verified, fetching plans...")
-
-    // Get all plans with their limits
+    // Get all plans with their features
     const plans = await sql`
       SELECT 
-        id,
-        name,
-        plan_type,
-        price_monthly,
-        price_yearly,
-        description,
-        features,
-        limits,
-        is_active,
-        created_at,
-        updated_at
-      FROM plans
-      ORDER BY 
-        CASE plan_type 
-          WHEN 'free' THEN 1
-          WHEN 'basic' THEN 2
-          WHEN 'pro' THEN 3
-          WHEN 'enterprise' THEN 4
-          ELSE 5
-        END
+        p.id,
+        p.name,
+        p.description,
+        p.price,
+        p.billing_cycle,
+        p.max_screens,
+        p.max_media_storage_gb,
+        p.is_active,
+        p.created_at,
+        p.updated_at,
+        COALESCE(
+          JSON_AGG(
+            CASE 
+              WHEN pf.id IS NOT NULL THEN 
+                JSON_BUILD_OBJECT(
+                  'id', pf.id,
+                  'name', pf.name,
+                  'featureKey', pf.feature_key
+                )
+              ELSE NULL
+            END
+          ) FILTER (WHERE pf.id IS NOT NULL), 
+          '[]'::json
+        ) as features
+      FROM plans p
+      LEFT JOIN plan_plan_features ppf ON p.id = ppf.plan_id
+      LEFT JOIN plan_features pf ON ppf.feature_id = pf.id
+      GROUP BY p.id, p.name, p.description, p.price, p.billing_cycle, p.max_screens, p.max_media_storage_gb, p.is_active, p.created_at, p.updated_at
+      ORDER BY p.price ASC
     `
 
-    // Get user counts per plan
-    const userCounts = await sql`
-      SELECT plan_type, COUNT(*) as user_count
-      FROM users
-      GROUP BY plan_type
-    `
-
-    const userCountMap = userCounts.reduce(
-      (acc, row) => {
-        acc[row.plan_type] = Number.parseInt(row.user_count)
-        return acc
-      },
-      {} as Record<string, number>,
-    )
-
-    console.log("📋 [ADMIN PLANS] Found plans:", plans.length)
+    console.log("💰 [ADMIN PLANS] Found plans:", plans.length)
 
     return NextResponse.json({
       success: true,
       plans: plans.map((plan) => ({
         id: plan.id,
         name: plan.name,
-        type: plan.plan_type,
-        priceMonthly: plan.price_monthly,
-        priceYearly: plan.price_yearly,
         description: plan.description,
-        features: plan.features,
-        limits: plan.limits,
+        price: plan.price,
+        billingCycle: plan.billing_cycle,
+        maxScreens: plan.max_screens,
+        maxMediaStorageGb: plan.max_media_storage_gb,
         isActive: plan.is_active,
-        userCount: userCountMap[plan.plan_type] || 0,
+        features: plan.features || [],
         createdAt: plan.created_at,
         updatedAt: plan.updated_at,
       })),
@@ -90,58 +80,58 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    console.log("📋 [ADMIN PLANS] Creating new plan...")
+    console.log("💰 [ADMIN PLANS] Creating new plan...")
 
     // Verify admin authentication
     const authResult = await verifyAuth(request)
     if (!authResult.success || !authResult.isAdmin) {
-      return NextResponse.json({ error: "Access denied" }, { status: 403 })
+      return NextResponse.json({ error: "Admin access required" }, { status: 403 })
     }
 
-    const { name, type, priceMonthly, priceYearly, description, features, limits } = await request.json()
-
-    if (!name || !type) {
-      return NextResponse.json({ error: "Name and type are required" }, { status: 400 })
-    }
-
-    // Check if plan type already exists
-    const existingPlan = await sql`
-      SELECT id FROM plans WHERE plan_type = ${type}
-    `
-
-    if (existingPlan.length > 0) {
-      return NextResponse.json({ error: "Plan type already exists" }, { status: 409 })
-    }
+    const body = await request.json()
+    const {
+      name,
+      description,
+      price,
+      billingCycle,
+      maxScreens,
+      maxMediaStorageGb,
+      isActive = true,
+      featureIds = [],
+    } = body
 
     // Create new plan
     const newPlan = await sql`
-      INSERT INTO plans (name, plan_type, price_monthly, price_yearly, description, features, limits, is_active)
-      VALUES (
-        ${name}, 
-        ${type}, 
-        ${priceMonthly || 0}, 
-        ${priceYearly || 0}, 
-        ${description || ""}, 
-        ${JSON.stringify(features || {})}, 
-        ${JSON.stringify(limits || {})}, 
-        true
-      )
-      RETURNING id, name, plan_type, price_monthly, price_yearly, description, features, limits, created_at
+      INSERT INTO plans (name, description, price, billing_cycle, max_screens, max_media_storage_gb, is_active)
+      VALUES (${name}, ${description}, ${price}, ${billingCycle}, ${maxScreens}, ${maxMediaStorageGb}, ${isActive})
+      RETURNING id, name, description, price, billing_cycle, max_screens, max_media_storage_gb, is_active, created_at
     `
 
-    console.log("📋 [ADMIN PLANS] Plan created:", newPlan[0].id)
+    const planId = newPlan[0].id
+
+    // Add features to plan
+    if (featureIds.length > 0) {
+      for (const featureId of featureIds) {
+        await sql`
+          INSERT INTO plan_plan_features (plan_id, feature_id)
+          VALUES (${planId}, ${featureId})
+        `
+      }
+    }
+
+    console.log("💰 [ADMIN PLANS] Plan created:", planId)
 
     return NextResponse.json({
       success: true,
       plan: {
         id: newPlan[0].id,
         name: newPlan[0].name,
-        type: newPlan[0].plan_type,
-        priceMonthly: newPlan[0].price_monthly,
-        priceYearly: newPlan[0].price_yearly,
         description: newPlan[0].description,
-        features: newPlan[0].features,
-        limits: newPlan[0].limits,
+        price: newPlan[0].price,
+        billingCycle: newPlan[0].billing_cycle,
+        maxScreens: newPlan[0].max_screens,
+        maxMediaStorageGb: newPlan[0].max_media_storage_gb,
+        isActive: newPlan[0].is_active,
         createdAt: newPlan[0].created_at,
       },
     })

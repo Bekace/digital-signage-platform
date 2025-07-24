@@ -6,16 +6,13 @@ const sql = neon(process.env.DATABASE_URL!)
 
 export async function GET(request: Request) {
   try {
-    console.log("🎛️ [ADMIN FEATURES] Starting features fetch...")
+    console.log("🎯 [ADMIN FEATURES] Starting features fetch...")
 
     // Verify admin authentication
     const authResult = await verifyAuth(request)
     if (!authResult.success || !authResult.isAdmin) {
-      console.log("🎛️ [ADMIN FEATURES] Access denied - not admin")
-      return NextResponse.json({ error: "Access denied" }, { status: 403 })
+      return NextResponse.json({ error: "Admin access required" }, { status: 403 })
     }
-
-    console.log("🎛️ [ADMIN FEATURES] Admin verified, fetching features...")
 
     // Get all plan features
     const features = await sql`
@@ -24,15 +21,14 @@ export async function GET(request: Request) {
         name,
         description,
         feature_key,
-        feature_type,
-        default_value,
+        is_active,
         created_at,
         updated_at
       FROM plan_features
       ORDER BY name ASC
     `
 
-    console.log("🎛️ [ADMIN FEATURES] Found features:", features.length)
+    console.log("🎯 [ADMIN FEATURES] Found features:", features.length)
 
     return NextResponse.json({
       success: true,
@@ -40,9 +36,8 @@ export async function GET(request: Request) {
         id: feature.id,
         name: feature.name,
         description: feature.description,
-        key: feature.feature_key,
-        type: feature.feature_type,
-        defaultValue: feature.default_value,
+        featureKey: feature.feature_key,
+        isActive: feature.is_active,
         createdAt: feature.created_at,
         updatedAt: feature.updated_at,
       })),
@@ -61,37 +56,25 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    console.log("🎛️ [ADMIN FEATURES] Creating new feature...")
+    console.log("🎯 [ADMIN FEATURES] Creating new feature...")
 
     // Verify admin authentication
     const authResult = await verifyAuth(request)
     if (!authResult.success || !authResult.isAdmin) {
-      return NextResponse.json({ error: "Access denied" }, { status: 403 })
+      return NextResponse.json({ error: "Admin access required" }, { status: 403 })
     }
 
-    const { name, description, key, type, defaultValue } = await request.json()
-
-    if (!name || !key || !type) {
-      return NextResponse.json({ error: "Missing required fields" }, { status: 400 })
-    }
-
-    // Check if feature key already exists
-    const existingFeature = await sql`
-      SELECT id FROM plan_features WHERE feature_key = ${key}
-    `
-
-    if (existingFeature.length > 0) {
-      return NextResponse.json({ error: "Feature key already exists" }, { status: 409 })
-    }
+    const body = await request.json()
+    const { name, description, featureKey, isActive = true } = body
 
     // Create new feature
     const newFeature = await sql`
-      INSERT INTO plan_features (name, description, feature_key, feature_type, default_value)
-      VALUES (${name}, ${description || ""}, ${key}, ${type}, ${defaultValue || null})
-      RETURNING id, name, description, feature_key, feature_type, default_value, created_at
+      INSERT INTO plan_features (name, description, feature_key, is_active)
+      VALUES (${name}, ${description}, ${featureKey}, ${isActive})
+      RETURNING id, name, description, feature_key, is_active, created_at
     `
 
-    console.log("🎛️ [ADMIN FEATURES] Feature created:", newFeature[0].id)
+    console.log("🎯 [ADMIN FEATURES] Feature created:", newFeature[0].id)
 
     return NextResponse.json({
       success: true,
@@ -99,9 +82,8 @@ export async function POST(request: Request) {
         id: newFeature[0].id,
         name: newFeature[0].name,
         description: newFeature[0].description,
-        key: newFeature[0].feature_key,
-        type: newFeature[0].feature_type,
-        defaultValue: newFeature[0].default_value,
+        featureKey: newFeature[0].feature_key,
+        isActive: newFeature[0].is_active,
         createdAt: newFeature[0].created_at,
       },
     })

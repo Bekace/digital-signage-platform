@@ -6,37 +6,35 @@ const sql = neon(process.env.DATABASE_URL!)
 
 export async function PUT(request: Request, { params }: { params: { featureId: string } }) {
   try {
-    console.log("🎛️ [ADMIN FEATURES] Updating feature:", params.featureId)
+    console.log("🎯 [ADMIN FEATURES] Updating feature:", params.featureId)
 
     // Verify admin authentication
     const authResult = await verifyAuth(request)
     if (!authResult.success || !authResult.isAdmin) {
-      return NextResponse.json({ error: "Access denied" }, { status: 403 })
+      return NextResponse.json({ error: "Admin access required" }, { status: 403 })
     }
 
-    const { name, description, defaultValue } = await request.json()
-
-    if (!name) {
-      return NextResponse.json({ error: "Name is required" }, { status: 400 })
-    }
+    const body = await request.json()
+    const { name, description, featureKey, isActive } = body
 
     // Update feature
     const updatedFeature = await sql`
       UPDATE plan_features 
       SET 
         name = ${name},
-        description = ${description || ""},
-        default_value = ${defaultValue || null},
+        description = ${description},
+        feature_key = ${featureKey},
+        is_active = ${isActive},
         updated_at = NOW()
       WHERE id = ${params.featureId}
-      RETURNING id, name, description, feature_key, feature_type, default_value, updated_at
+      RETURNING id, name, description, feature_key, is_active, updated_at
     `
 
     if (updatedFeature.length === 0) {
       return NextResponse.json({ error: "Feature not found" }, { status: 404 })
     }
 
-    console.log("🎛️ [ADMIN FEATURES] Feature updated:", params.featureId)
+    console.log("🎯 [ADMIN FEATURES] Feature updated:", updatedFeature[0].id)
 
     return NextResponse.json({
       success: true,
@@ -44,9 +42,8 @@ export async function PUT(request: Request, { params }: { params: { featureId: s
         id: updatedFeature[0].id,
         name: updatedFeature[0].name,
         description: updatedFeature[0].description,
-        key: updatedFeature[0].feature_key,
-        type: updatedFeature[0].feature_type,
-        defaultValue: updatedFeature[0].default_value,
+        featureKey: updatedFeature[0].feature_key,
+        isActive: updatedFeature[0].is_active,
         updatedAt: updatedFeature[0].updated_at,
       },
     })
@@ -64,30 +61,30 @@ export async function PUT(request: Request, { params }: { params: { featureId: s
 
 export async function DELETE(request: Request, { params }: { params: { featureId: string } }) {
   try {
-    console.log("🎛️ [ADMIN FEATURES] Deleting feature:", params.featureId)
+    console.log("🎯 [ADMIN FEATURES] Deleting feature:", params.featureId)
 
     // Verify admin authentication
     const authResult = await verifyAuth(request)
     if (!authResult.success || !authResult.isAdmin) {
-      return NextResponse.json({ error: "Access denied" }, { status: 403 })
+      return NextResponse.json({ error: "Admin access required" }, { status: 403 })
     }
 
     // Delete feature
     const deletedFeature = await sql`
       DELETE FROM plan_features 
       WHERE id = ${params.featureId}
-      RETURNING id, name
+      RETURNING id
     `
 
     if (deletedFeature.length === 0) {
       return NextResponse.json({ error: "Feature not found" }, { status: 404 })
     }
 
-    console.log("🎛️ [ADMIN FEATURES] Feature deleted:", params.featureId)
+    console.log("🎯 [ADMIN FEATURES] Feature deleted:", deletedFeature[0].id)
 
     return NextResponse.json({
       success: true,
-      message: `Feature "${deletedFeature[0].name}" deleted successfully`,
+      message: "Feature deleted successfully",
     })
   } catch (error) {
     console.error("❌ [ADMIN FEATURES] Delete error:", error)

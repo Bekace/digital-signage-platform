@@ -10,14 +10,19 @@ export async function GET(request: Request) {
 
     // Verify admin authentication
     const authResult = await verifyAuth(request)
-    if (!authResult.success || !authResult.isAdmin) {
-      console.log("👥 [ADMIN USERS] Access denied - not admin")
-      return NextResponse.json({ error: "Access denied" }, { status: 403 })
+    if (!authResult.success) {
+      console.log("👥 [ADMIN USERS] Authentication failed")
+      return NextResponse.json({ error: "Authentication required" }, { status: 401 })
     }
 
-    console.log("👥 [ADMIN USERS] Admin verified, fetching users...")
+    if (!authResult.isAdmin) {
+      console.log("👥 [ADMIN USERS] User is not admin:", authResult.userId)
+      return NextResponse.json({ error: "Admin access required" }, { status: 403 })
+    }
 
-    // Get all users with admin status from admin_users table
+    console.log("👥 [ADMIN USERS] Admin verified:", authResult.userId)
+
+    // Get all users with admin status
     const users = await sql`
       SELECT 
         u.id,
@@ -27,11 +32,13 @@ export async function GET(request: Request) {
         u.company,
         u.plan_type as plan,
         u.created_at,
+        u.updated_at,
         CASE 
           WHEN au.user_id IS NOT NULL THEN true 
           ELSE false 
         END as is_admin,
-        au.role as admin_role
+        au.role as admin_role,
+        au.permissions as admin_permissions
       FROM users u
       LEFT JOIN admin_users au ON u.id = au.user_id
       ORDER BY u.created_at DESC
@@ -48,9 +55,11 @@ export async function GET(request: Request) {
         lastName: user.last_name,
         company: user.company,
         plan: user.plan,
-        isAdmin: user.is_admin,
+        isAdmin: user.is_admin || false,
         adminRole: user.admin_role,
+        adminPermissions: user.admin_permissions,
         createdAt: user.created_at,
+        updatedAt: user.updated_at,
       })),
     })
   } catch (error) {
@@ -72,28 +81,16 @@ export async function POST(request: Request) {
     // Verify admin authentication
     const authResult = await verifyAuth(request)
     if (!authResult.success || !authResult.isAdmin) {
-      return NextResponse.json({ error: "Access denied" }, { status: 403 })
+      return NextResponse.json({ error: "Admin access required" }, { status: 403 })
     }
 
-    const { email, firstName, lastName, company, plan } = await request.json()
-
-    if (!email || !firstName || !lastName) {
-      return NextResponse.json({ error: "Missing required fields" }, { status: 400 })
-    }
-
-    // Check if user already exists
-    const existingUser = await sql`
-      SELECT id FROM users WHERE email = ${email}
-    `
-
-    if (existingUser.length > 0) {
-      return NextResponse.json({ error: "User already exists" }, { status: 409 })
-    }
+    const body = await request.json()
+    const { email, firstName, lastName, company, plan, password } = body
 
     // Create new user
     const newUser = await sql`
       INSERT INTO users (email, first_name, last_name, company, plan_type, password_hash)
-      VALUES (${email}, ${firstName}, ${lastName}, ${company || ""}, ${plan || "free"}, 'temp_password')
+      VALUES (${email}, ${firstName}, ${lastName}, ${company}, ${plan}, ${password})
       RETURNING id, email, first_name, last_name, company, plan_type as plan, created_at
     `
 

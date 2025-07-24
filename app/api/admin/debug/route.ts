@@ -6,83 +6,74 @@ const sql = neon(process.env.DATABASE_URL!)
 
 export async function GET(request: Request) {
   try {
-    console.log("🔍 [ADMIN DEBUG] Starting debug info fetch...")
+    console.log("🐛 [ADMIN DEBUG] Starting debug info fetch...")
 
     // Verify admin authentication
     const authResult = await verifyAuth(request)
-    if (!authResult.success || !authResult.isAdmin) {
-      console.log("🔍 [ADMIN DEBUG] Access denied - not admin")
-      return NextResponse.json({ error: "Access denied" }, { status: 403 })
+    if (!authResult.success) {
+      console.log("🐛 [ADMIN DEBUG] Authentication failed")
+      return NextResponse.json({ error: "Authentication required" }, { status: 401 })
     }
 
-    console.log("🔍 [ADMIN DEBUG] Admin verified, fetching debug info...")
+    if (!authResult.isAdmin) {
+      console.log("🐛 [ADMIN DEBUG] User is not admin:", authResult.userId)
+      return NextResponse.json({ error: "Admin access required" }, { status: 403 })
+    }
 
-    // Get system statistics
-    const userCount = await sql`SELECT COUNT(*) as count FROM users`
-    const adminCount = await sql`SELECT COUNT(*) as count FROM admin_users`
-    const mediaCount = await sql`SELECT COUNT(*) as count FROM media`
-    const playlistCount = await sql`SELECT COUNT(*) as count FROM playlists`
-    const deviceCount = await sql`SELECT COUNT(*) as count FROM devices`
+    console.log("🐛 [ADMIN DEBUG] Admin verified:", authResult.userId)
 
-    // Get recent activity
-    const recentUsers = await sql`
-      SELECT id, email, first_name, last_name, created_at
-      FROM users 
-      ORDER BY created_at DESC 
-      LIMIT 5
-    `
+    // Get system debug information
+    const debugInfo = {
+      timestamp: new Date().toISOString(),
+      requestingUser: {
+        id: authResult.userId,
+        email: authResult.email,
+        isAdmin: authResult.isAdmin,
+        adminRole: authResult.adminRole,
+      },
+    }
 
-    // Get admin users
-    const adminUsers = await sql`
-      SELECT 
-        u.id,
-        u.email,
-        u.first_name,
-        u.last_name,
-        au.role,
-        au.created_at as admin_since
-      FROM users u
-      JOIN admin_users au ON u.id = au.user_id
-      ORDER BY au.created_at DESC
-    `
+    // Get table counts
+    try {
+      const userCount = await sql`SELECT COUNT(*) as count FROM users`
+      const adminCount = await sql`SELECT COUNT(*) as count FROM admin_users`
+      const mediaCount = await sql`SELECT COUNT(*) as count FROM media`
+      const playlistCount = await sql`SELECT COUNT(*) as count FROM playlists`
+      const deviceCount = await sql`SELECT COUNT(*) as count FROM devices`
 
-    // Get table information
-    const tables = await sql`
-      SELECT table_name, table_type
-      FROM information_schema.tables 
-      WHERE table_schema = 'public'
-      ORDER BY table_name
-    `
+      debugInfo.tableCounts = {
+        users: userCount[0].count,
+        admins: adminCount[0].count,
+        media: mediaCount[0].count,
+        playlists: playlistCount[0].count,
+        devices: deviceCount[0].count,
+      }
+    } catch (error) {
+      debugInfo.tableCounts = { error: error instanceof Error ? error.message : "Unknown error" }
+    }
 
-    console.log("🔍 [ADMIN DEBUG] Debug info compiled successfully")
+    // Get recent admin users
+    try {
+      const recentAdmins = await sql`
+        SELECT 
+          u.email,
+          au.role,
+          au.created_at
+        FROM admin_users au
+        JOIN users u ON au.user_id = u.id
+        ORDER BY au.created_at DESC
+        LIMIT 5
+      `
+      debugInfo.recentAdmins = recentAdmins
+    } catch (error) {
+      debugInfo.recentAdmins = { error: error instanceof Error ? error.message : "Unknown error" }
+    }
+
+    console.log("🐛 [ADMIN DEBUG] Debug info compiled")
 
     return NextResponse.json({
       success: true,
-      statistics: {
-        users: Number.parseInt(userCount[0].count),
-        admins: Number.parseInt(adminCount[0].count),
-        media: Number.parseInt(mediaCount[0].count),
-        playlists: Number.parseInt(playlistCount[0].count),
-        devices: Number.parseInt(deviceCount[0].count),
-      },
-      recentUsers: recentUsers.map((user) => ({
-        id: user.id,
-        email: user.email,
-        name: `${user.first_name} ${user.last_name}`,
-        createdAt: user.created_at,
-      })),
-      adminUsers: adminUsers.map((admin) => ({
-        id: admin.id,
-        email: admin.email,
-        name: `${admin.first_name} ${admin.last_name}`,
-        role: admin.role,
-        adminSince: admin.admin_since,
-      })),
-      tables: tables.map((table) => ({
-        name: table.table_name,
-        type: table.table_type,
-      })),
-      timestamp: new Date().toISOString(),
+      debug: debugInfo,
     })
   } catch (error) {
     console.error("❌ [ADMIN DEBUG] Error:", error)
