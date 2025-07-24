@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server"
-import { getDb } from "@/lib/db"
+import { neon } from "@neondatabase/serverless"
 
 export async function PUT(request: Request, { params }: { params: { id: string } }) {
   try {
@@ -14,9 +14,9 @@ export async function PUT(request: Request, { params }: { params: { id: string }
       return NextResponse.json({ error: "Invalid ID" }, { status: 400 })
     }
 
-    const sql = getDb()
+    const sql = neon(process.env.DATABASE_URL!)
 
-    // Update record
+    // Update the record
     const result = await sql`
       UPDATE test_records 
       SET name = ${name}, email = ${email}
@@ -53,9 +53,9 @@ export async function DELETE(request: Request, { params }: { params: { id: strin
       return NextResponse.json({ error: "Invalid ID" }, { status: 400 })
     }
 
-    const sql = getDb()
+    const sql = neon(process.env.DATABASE_URL!)
 
-    // Delete record
+    // Delete the record
     const result = await sql`
       DELETE FROM test_records 
       WHERE id = ${id}

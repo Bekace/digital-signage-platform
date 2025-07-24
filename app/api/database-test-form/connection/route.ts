@@ -1,26 +1,21 @@
 import { NextResponse } from "next/server"
-import { getDb } from "@/lib/db"
+import { neon } from "@neondatabase/serverless"
 
 export async function GET() {
   try {
-    const sql = getDb()
+    const sql = neon(process.env.DATABASE_URL!)
 
-    // Test the connection
-    const result = await sql`
-      SELECT 
-        current_database() as database,
-        inet_server_addr() as host,
-        NOW() as timestamp
-    `
+    // Test the connection with a simple query
+    const result = await sql`SELECT 1 as test, NOW() as timestamp, current_database() as database`
 
-    const connectionInfo = result[0]
+    const testResult = result[0]
 
     return NextResponse.json({
       connected: true,
-      database: connectionInfo.database,
-      host: connectionInfo.host || "localhost",
-      timestamp: connectionInfo.timestamp,
-      message: "Database connection successful",
+      database: testResult.database,
+      host: process.env.DATABASE_URL?.split("@")[1]?.split("/")[0] || "Unknown",
+      timestamp: testResult.timestamp,
+      test: testResult.test,
     })
   } catch (error) {
     console.error("❌ Database connection test failed:", error)

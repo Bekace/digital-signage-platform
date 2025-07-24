@@ -1,9 +1,10 @@
 import { NextResponse } from "next/server"
-import { getDb } from "@/lib/db"
+import { neon } from "@neondatabase/serverless"
 
 export async function POST() {
   try {
-    const sql = getDb()
+    // Use the same connection logic as database-test-form
+    const sql = neon(process.env.DATABASE_URL!)
     const email = "bekace.multimedia@gmail.com"
 
     console.log(`🔍 Looking for user: ${email}`)
