@@ -40,7 +40,7 @@ export async function GET() {
         companyPhone: userData.company_phone,
         plan: userData.plan,
         createdAt: userData.created_at,
-        isAdmin: userData.is_admin || false,
+        isAdmin: userData.admin_users || false,
       },
     })
   } catch (error) {
