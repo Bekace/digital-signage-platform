@@ -1,4 +1,4 @@
-import { type NextRequest, NextResponse } from "next/server"
+import { NextResponse, type NextRequest } from "next/server"
 import { getCurrentUser } from "@/lib/auth"
 import { getDb } from "@/lib/db"
 
@@ -36,6 +36,7 @@ export async function GET(request: NextRequest) {
         firstName: userData.first_name,
         lastName: userData.last_name,
         company: userData.company,
+        companyName: userData.company, // Add this for the header component
         companyAddress: userData.company_address,
         companyPhone: userData.company_phone,
         plan: userData.plan,

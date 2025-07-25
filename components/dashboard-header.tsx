@@ -14,7 +14,6 @@ import {
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
-import { getAuthHeaders } from "@/lib/auth-utils"
 
 interface UserProfile {
   id: number
@@ -33,41 +32,65 @@ export function DashboardHeader() {
   useEffect(() => {
     const fetchUser = async () => {
       try {
-        // Get auth headers from auth-utils
-        const authHeaders = getAuthHeaders()
-        if (!authHeaders) {
-          console.log("No auth headers available")
+        // Get auth token from localStorage
+        const token = localStorage.getItem("token")
+        if (!token) {
+          router.push("/login")
           return
         }
 
         const response = await fetch("/api/user/profile", {
-          headers: authHeaders,
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
         })
+
         if (response.ok) {
           const data = await response.json()
           setUser(data.user)
+        } else if (response.status === 401) {
+          // Token is invalid, redirect to login
+          localStorage.removeItem("token")
+          localStorage.removeItem("user")
+          router.push("/login")
         }
       } catch (error) {
         console.error("Error fetching user:", error)
+        // On error, also redirect to login
+        router.push("/login")
       } finally {
         setLoading(false)
       }
     }
 
     fetchUser()
-  }, [])
+  }, [router])
 
   const handleLogout = async () => {
     try {
+      const token = localStorage.getItem("token")
+
       const response = await fetch("/api/auth/logout", {
         method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
       })
 
       if (response.ok) {
+        // Clear local storage
+        localStorage.removeItem("token")
+        localStorage.removeItem("user")
         router.push("/login")
       }
     } catch (error) {
       console.error("Logout error:", error)
+      // Even if logout fails, clear local storage and redirect
+      localStorage.removeItem("token")
+      localStorage.removeItem("user")
+      router.push("/login")
     }
   }
 

@@ -35,7 +35,7 @@ export async function GET(request: NextRequest) {
     // Get current user with detailed error handling
     let user
     try {
-      user = await getCurrentUser(request)
+      user = await getCurrentUser()
       console.log("🔍 [PLAN API] Current user:", user ? { id: user.id, email: user.email } : "NO USER")
     } catch (authError) {
       console.error("❌ [PLAN API] Authentication error:", authError)
