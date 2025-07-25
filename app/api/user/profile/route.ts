@@ -16,7 +16,7 @@ export async function GET() {
     const users = await sql`
       SELECT 
         id, email, first_name, last_name, company, 
-        company_address, company_phone, plan, created_at, admin_users
+        company_address, company_phone, plan, created_at, role
       FROM users 
       WHERE id = ${user.id}
       LIMIT 1
@@ -40,7 +40,7 @@ export async function GET() {
         companyPhone: userData.company_phone,
         plan: userData.plan,
         createdAt: userData.created_at,
-        isAdmin: userData.admin_users || false,
+        isAdmin: userData.role === "admin",
       },
     })
   } catch (error) {
