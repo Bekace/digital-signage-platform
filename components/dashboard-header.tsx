@@ -14,6 +14,7 @@ import {
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
+import { getAuthHeaders } from "@/lib/auth-utils"
 
 interface UserProfile {
   id: number
@@ -32,7 +33,16 @@ export function DashboardHeader() {
   useEffect(() => {
     const fetchUser = async () => {
       try {
-        const response = await fetch("/api/user/profile")
+        // Get auth headers from auth-utils
+        const authHeaders = getAuthHeaders()
+        if (!authHeaders) {
+          console.log("No auth headers available")
+          return
+        }
+
+        const response = await fetch("/api/user/profile", {
+          headers: authHeaders,
+        })
         if (response.ok) {
           const data = await response.json()
           setUser(data.user)

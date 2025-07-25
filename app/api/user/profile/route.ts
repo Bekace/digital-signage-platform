@@ -1,10 +1,10 @@
-import { NextResponse } from "next/server"
+import { type NextRequest, NextResponse } from "next/server"
 import { getCurrentUser } from "@/lib/auth"
 import { getDb } from "@/lib/db"
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
-    const user = await getCurrentUser()
+    const user = await getCurrentUser(request)
 
     if (!user) {
       return NextResponse.json({ success: false, message: "Not authenticated" }, { status: 401 })
