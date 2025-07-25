@@ -16,7 +16,7 @@ export async function GET() {
     const users = await sql`
       SELECT 
         id, email, first_name, last_name, company, 
-        company_address, company_phone, plan, created_at, is_admin
+        company_address, company_phone, plan, created_at, admin_users
       FROM users 
       WHERE id = ${user.id}
       LIMIT 1
