@@ -36,7 +36,7 @@ export async function GET(request: NextRequest) {
         firstName: userData.first_name,
         lastName: userData.last_name,
         company: userData.company,
-        companyName: userData.company, // Add this for the header component
+        companyName: userData.company, // Add this for header compatibility
         companyAddress: userData.company_address,
         companyPhone: userData.company_phone,
         plan: userData.plan,

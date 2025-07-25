@@ -32,10 +32,11 @@ export function DashboardHeader() {
   useEffect(() => {
     const fetchUser = async () => {
       try {
-        // Get auth token from localStorage
+        // Get token from localStorage (matching login.tsx pattern)
         const token = localStorage.getItem("token")
+
         if (!token) {
-          router.push("/login")
+          console.log("No auth token found")
           return
         }
 
@@ -57,40 +58,25 @@ export function DashboardHeader() {
         }
       } catch (error) {
         console.error("Error fetching user:", error)
-        // On error, also redirect to login
-        router.push("/login")
       } finally {
         setLoading(false)
       }
     }
 
     fetchUser()
-  }, [router])
+  }, [])
 
   const handleLogout = async () => {
     try {
-      const token = localStorage.getItem("token")
-
       const response = await fetch("/api/auth/logout", {
         method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
       })
 
       if (response.ok) {
-        // Clear local storage
-        localStorage.removeItem("token")
-        localStorage.removeItem("user")
         router.push("/login")
       }
     } catch (error) {
       console.error("Logout error:", error)
-      // Even if logout fails, clear local storage and redirect
-      localStorage.removeItem("token")
-      localStorage.removeItem("user")
-      router.push("/login")
     }
   }
 
