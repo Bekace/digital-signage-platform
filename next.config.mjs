@@ -8,11 +8,19 @@ const nextConfig = {
   },
   images: {
     unoptimized: true,
-    domains: ['blob.vercel-storage.com'],
+    domains: ['blob.vercel-storage.com', 'localhost'],
+    remotePatterns: [
+      {
+        protocol: 'https',
+        hostname: '**',
+      },
+    ],
   },
   experimental: {
     serverComponentsExternalPackages: ['sharp'],
   },
+  // Add this to handle dynamic server usage
+  output: 'standalone',
 }
 
 export default nextConfig

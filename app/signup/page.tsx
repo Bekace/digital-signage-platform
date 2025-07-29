@@ -3,18 +3,18 @@
 import type React from "react"
 
 import { useState } from "react"
-import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { Monitor, Eye, EyeOff, CheckCircle, XCircle } from "lucide-react"
+import Link from "next/link"
+import Image from "next/image"
+import { Eye, EyeOff, Loader2, AlertCircle } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 
-export default function SignUpPage() {
+export default function SignupPage() {
   const [formData, setFormData] = useState({
     firstName: "",
     lastName: "",
@@ -22,34 +22,35 @@ export default function SignUpPage() {
     company: "",
     password: "",
     confirmPassword: "",
-    plan: "monthly",
   })
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState("")
   const [showPassword, setShowPassword] = useState(false)
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState("")
   const router = useRouter()
 
-  // Password validation
-  const passwordValidation = {
-    length: formData.password.length >= 6,
-    match: formData.password === formData.confirmPassword && formData.confirmPassword.length > 0,
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setFormData({
+      ...formData,
+      [e.target.name]: e.target.value,
+    })
   }
-
-  const isFormValid =
-    formData.firstName.trim() &&
-    formData.lastName.trim() &&
-    formData.email.trim() &&
-    passwordValidation.length &&
-    passwordValidation.match
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoading(true)
     setError("")
 
-    if (!isFormValid) {
-      setError("Please fill in all required fields correctly")
+    // Validate passwords match
+    if (formData.password !== formData.confirmPassword) {
+      setError("Passwords do not match")
+      setLoading(false)
+      return
+    }
+
+    // Validate password length
+    if (formData.password.length < 6) {
+      setError("Password must be at least 6 characters long")
       setLoading(false)
       return
     }
@@ -66,23 +67,18 @@ export default function SignUpPage() {
           email: formData.email,
           company: formData.company,
           password: formData.password,
-          plan: formData.plan,
         }),
       })
 
       const data = await response.json()
 
-      if (data.success) {
-        // Store token in localStorage
-        localStorage.setItem("token", data.token)
-        localStorage.setItem("user", JSON.stringify(data.user))
-
-        // Redirect to dashboard
+      if (response.ok && data.success) {
+        // Registration successful
         router.push("/dashboard")
       } else {
         setError(data.message || "Registration failed")
       }
-    } catch (error) {
+    } catch (err) {
       setError("Network error. Please try again.")
     } finally {
       setLoading(false)
@@ -90,84 +86,98 @@ export default function SignUpPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900 py-12 px-4 sm:px-6 lg:px-8">
+    <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
       <div className="max-w-md w-full space-y-8">
         <div className="text-center">
-          <Link href="/" className="flex items-center justify-center mb-6">
-            <Image src="/images/xkreen-logo.png" alt="xkreen" width={120} height={32} className="h-8 w-auto" />
-          </Link>
-          <h2 className="text-3xl font-bold">Create your account</h2>
-          <p className="mt-2 text-gray-600">Start your digital signage journey today</p>
+          <Image src="/images/xkreen-logo.png" alt="Xkreen Logo" width={120} height={40} className="mx-auto" />
+          <h2 className="mt-6 text-3xl font-extrabold text-gray-900">Create your account</h2>
+          <p className="mt-2 text-sm text-gray-600">
+            Or{" "}
+            <Link href="/login" className="font-medium text-blue-600 hover:text-blue-500">
+              sign in to your existing account
+            </Link>
+          </p>
         </div>
 
         <Card>
           <CardHeader>
-            <CardTitle>Sign Up</CardTitle>
-            <CardDescription>Enter your information to create an account</CardDescription>
+            <CardTitle>Get started</CardTitle>
+            <CardDescription>Create your account to start managing your digital signage</CardDescription>
           </CardHeader>
           <CardContent>
-            {error && (
-              <Alert className="mb-4" variant="destructive">
-                <XCircle className="h-4 w-4" />
-                <AlertDescription>{error}</AlertDescription>
-              </Alert>
-            )}
+            <form onSubmit={handleSubmit} className="space-y-6">
+              {error && (
+                <Alert variant="destructive">
+                  <AlertCircle className="h-4 w-4" />
+                  <AlertDescription>{error}</AlertDescription>
+                </Alert>
+              )}
 
-            <form onSubmit={handleSubmit} className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="firstName">First name *</Label>
+                <div>
+                  <Label htmlFor="firstName">First name</Label>
                   <Input
                     id="firstName"
-                    value={formData.firstName}
-                    onChange={(e) => setFormData((prev) => ({ ...prev, firstName: e.target.value }))}
-                    placeholder="John"
+                    name="firstName"
+                    type="text"
                     required
+                    value={formData.firstName}
+                    onChange={handleChange}
+                    placeholder="John"
                   />
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="lastName">Last name *</Label>
+                <div>
+                  <Label htmlFor="lastName">Last name</Label>
                   <Input
                     id="lastName"
-                    value={formData.lastName}
-                    onChange={(e) => setFormData((prev) => ({ ...prev, lastName: e.target.value }))}
-                    placeholder="Doe"
+                    name="lastName"
+                    type="text"
                     required
+                    value={formData.lastName}
+                    onChange={handleChange}
+                    placeholder="Doe"
                   />
                 </div>
               </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="email">Email *</Label>
+              <div>
+                <Label htmlFor="email">Email address</Label>
                 <Input
                   id="email"
+                  name="email"
                   type="email"
-                  value={formData.email}
-                  onChange={(e) => setFormData((prev) => ({ ...prev, email: e.target.value }))}
-                  placeholder="john@example.com"
+                  autoComplete="email"
                   required
+                  value={formData.email}
+                  onChange={handleChange}
+                  placeholder="john@example.com"
                 />
               </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="company">Company name</Label>
+              <div>
+                <Label htmlFor="company">Company (optional)</Label>
                 <Input
                   id="company"
+                  name="company"
+                  type="text"
                   value={formData.company}
-                  onChange={(e) => setFormData((prev) => ({ ...prev, company: e.target.value }))}
-                  placeholder="Acme Inc."
+                  onChange={handleChange}
+                  placeholder="Your company name"
                 />
               </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="password">Password *</Label>
+              <div>
+                <Label htmlFor="password">Password</Label>
                 <div className="relative">
                   <Input
                     id="password"
+                    name="password"
                     type={showPassword ? "text" : "password"}
-                    value={formData.password}
-                    onChange={(e) => setFormData((prev) => ({ ...prev, password: e.target.value }))}
+                    autoComplete="new-password"
                     required
+                    value={formData.password}
+                    onChange={handleChange}
+                    placeholder="Create a password"
                   />
                   <Button
                     type="button"
@@ -179,27 +189,20 @@ export default function SignUpPage() {
                     {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                   </Button>
                 </div>
-                <div className="flex items-center space-x-2 text-sm">
-                  {passwordValidation.length ? (
-                    <CheckCircle className="h-4 w-4 text-green-500" />
-                  ) : (
-                    <XCircle className="h-4 w-4 text-gray-400" />
-                  )}
-                  <span className={passwordValidation.length ? "text-green-600" : "text-gray-500"}>
-                    At least 6 characters
-                  </span>
-                </div>
               </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="confirmPassword">Confirm password *</Label>
+              <div>
+                <Label htmlFor="confirmPassword">Confirm password</Label>
                 <div className="relative">
                   <Input
                     id="confirmPassword"
+                    name="confirmPassword"
                     type={showConfirmPassword ? "text" : "password"}
-                    value={formData.confirmPassword}
-                    onChange={(e) => setFormData((prev) => ({ ...prev, confirmPassword: e.target.value }))}
+                    autoComplete="new-password"
                     required
+                    value={formData.confirmPassword}
+                    onChange={handleChange}
+                    placeholder="Confirm your password"
                   />
                   <Button
                     type="button"
@@ -211,54 +214,13 @@ export default function SignUpPage() {
                     {showConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                   </Button>
                 </div>
-                {formData.confirmPassword && (
-                  <div className="flex items-center space-x-2 text-sm">
-                    {passwordValidation.match ? (
-                      <CheckCircle className="h-4 w-4 text-green-500" />
-                    ) : (
-                      <XCircle className="h-4 w-4 text-red-500" />
-                    )}
-                    <span className={passwordValidation.match ? "text-green-600" : "text-red-600"}>
-                      Passwords match
-                    </span>
-                  </div>
-                )}
               </div>
 
-              <div className="space-y-3">
-                <Label>Choose your plan</Label>
-                <RadioGroup
-                  value={formData.plan}
-                  onValueChange={(value) => setFormData((prev) => ({ ...prev, plan: value }))}
-                >
-                  <div className="flex items-center space-x-2 p-3 border rounded-lg">
-                    <RadioGroupItem value="monthly" id="monthly" />
-                    <Label htmlFor="monthly" className="flex-1 cursor-pointer">
-                      <div className="font-medium">Monthly - $15/screen/month</div>
-                      <div className="text-sm text-gray-500">Perfect for getting started</div>
-                    </Label>
-                  </div>
-                  <div className="flex items-center space-x-2 p-3 border rounded-lg">
-                    <RadioGroupItem value="annual" id="annual" />
-                    <Label htmlFor="annual" className="flex-1 cursor-pointer">
-                      <div className="font-medium">Annual - $144/screen/year</div>
-                      <div className="text-sm text-gray-500">Save 20% with annual billing</div>
-                    </Label>
-                  </div>
-                </RadioGroup>
-              </div>
-
-              <Button type="submit" className="w-full" size="lg" disabled={loading || !isFormValid}>
-                {loading ? "Creating Account..." : "Create Account & Start Free Trial"}
+              <Button type="submit" className="w-full" disabled={loading}>
+                {loading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+                Create account
               </Button>
             </form>
-
-            <div className="text-center text-sm mt-4">
-              Already have an account?{" "}
-              <Link href="/login" className="font-medium text-primary hover:underline">
-                Sign in
-              </Link>
-            </div>
           </CardContent>
         </Card>
       </div>

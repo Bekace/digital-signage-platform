@@ -1,5 +1,5 @@
 import { type NextRequest, NextResponse } from "next/server"
-import { getTokenInfo, getCurrentUser } from "./utils" // Assuming these functions are declared in a utils file
+import { getTokenInfo, getCurrentUser } from "./utils"
 
 export async function GET(request: NextRequest) {
   try {

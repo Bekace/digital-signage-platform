@@ -2,11 +2,42 @@
 
 import { useState, useEffect } from "react"
 import Image from "next/image"
-import { Upload, Search, Video, FileText, ExternalLink } from "lucide-react"
+import {
+  Upload,
+  Search,
+  MoreHorizontal,
+  Download,
+  Trash2,
+  Eye,
+  Video,
+  FileText,
+  Loader2,
+  ExternalLink,
+  AlertTriangle,
+} from "lucide-react"
 
 import { Button } from "@/components/ui/button"
+import { Card, CardContent } from "@/components/ui/card"
+import { Input } from "@/components/ui/input"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
+import { Badge } from "@/components/ui/badge"
+import { Alert, AlertDescription } from "@/components/ui/alert"
 import { DashboardLayout } from "@/components/dashboard-layout"
+import { UploadMediaDialog } from "@/components/upload-media-dialog"
+import { UsageDashboard } from "@/components/usage-dashboard"
+import { MediaPreviewModal } from "@/components/media-preview-modal"
+import { MediaThumbnail } from "@/components/media-thumbnail"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
+import { GoogleSlidesDialog } from "@/components/google-slides-dialog"
 
 interface MediaFile {
   id: number
@@ -266,4 +297,147 @@ export default function MediaPage() {
         <div className="flex space-x-4">
           <div className="relative flex-1">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
-            <\
+            <Input
+              placeholder="Search media files..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="pl-10"
+            />
+          </div>
+        </div>
+
+        {/* Usage Dashboard */}
+        <UsageDashboard refreshTrigger={refreshTrigger} />
+
+        {error && (
+          <Alert variant="destructive">
+            <AlertTriangle className="h-4 w-4" />
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
+        )}
+
+        {/* Media Grid */}
+        {loading ? (
+          <div className="flex items-center justify-center py-12">
+            <Loader2 className="h-8 w-8 animate-spin" />
+            <span className="ml-2">Loading media files...</span>
+          </div>
+        ) : filteredFiles.length === 0 ? (
+          <div className="text-center py-12">
+            <Upload className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+            <h3 className="text-lg font-medium text-gray-900 mb-2">No media files</h3>
+            <p className="text-gray-500 mb-4">
+              {searchTerm ? "No files match your search." : "Get started by uploading your first media file."}
+            </p>
+            {!searchTerm && (
+              <Button onClick={() => setShowUploadDialog(true)}>
+                <Upload className="h-4 w-4 mr-2" />
+                Upload Media
+              </Button>
+            )}
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+            {filteredFiles.map((file) => (
+              <Card key={file.id} className="group hover:shadow-md transition-shadow">
+                <CardContent className="p-4">
+                  <div className="aspect-video bg-gray-100 rounded-lg mb-3 overflow-hidden relative">
+                    <MediaThumbnail file={file} />
+                    <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-20 transition-all flex items-center justify-center">
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        className="opacity-0 group-hover:opacity-100 transition-opacity"
+                        onClick={() => handlePreview(file)}
+                      >
+                        <Eye className="h-4 w-4 mr-2" />
+                        Preview
+                      </Button>
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <div className="flex items-start justify-between">
+                      <h3 className="font-medium text-sm truncate flex-1" title={file.original_name}>
+                        {file.original_name}
+                      </h3>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
+                            <MoreHorizontal className="h-4 w-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem onClick={() => handlePreview(file)}>
+                            <Eye className="h-4 w-4 mr-2" />
+                            Preview
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => handleDownload(file)}>
+                            <Download className="h-4 w-4 mr-2" />
+                            {file.file_type === "presentation" && file.media_source === "google_slides"
+                              ? "Open Link"
+                              : "Download"}
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => handleDelete(file)} className="text-red-600">
+                            <Trash2 className="h-4 w-4 mr-2" />
+                            Delete
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </div>
+
+                    <div className="flex items-center justify-between text-xs text-gray-500">
+                      <Badge variant="secondary" className={getFileTypeColor(file)}>
+                        {getFileIcon(file)}
+                        <span className="ml-1">{getFileTypeLabel(file)}</span>
+                      </Badge>
+                      <span>{formatFileSize(file.file_size)}</span>
+                    </div>
+
+                    <div className="text-xs text-gray-400">{formatDate(file.created_at)}</div>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        )}
+
+        {/* Upload Dialog */}
+        <UploadMediaDialog
+          open={showUploadDialog}
+          onOpenChange={setShowUploadDialog}
+          onUploadComplete={handleUploadComplete}
+        />
+
+        {/* Google Slides Dialog */}
+        <GoogleSlidesDialog
+          open={showGoogleSlidesDialog}
+          onOpenChange={setShowGoogleSlidesDialog}
+          onSlidesAdded={handleGoogleSlidesAdded}
+        />
+
+        {/* Preview Modal */}
+        <MediaPreviewModal file={previewFile} open={showPreview} onOpenChange={setShowPreview} />
+
+        {/* Delete Confirmation Dialog */}
+        <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Delete Media File</AlertDialogTitle>
+              <AlertDialogDescription>
+                Are you sure you want to delete "{deleteFile?.original_name}"? This action cannot be undone.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogAction onClick={confirmDelete} disabled={deleting} className="bg-red-600 hover:bg-red-700">
+                {deleting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+                Delete
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      </div>
+    </DashboardLayout>
+  )
+}
